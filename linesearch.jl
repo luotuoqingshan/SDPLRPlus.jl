@@ -9,54 +9,62 @@ Exact line search for minimizing the augmented Lagrangian
 function linesearch!(
     pdata::ProblemData,
     algdata::AlgorithmData,
-    R::Matrix{Float64},
     D::Matrix{Float64};
-    alpha_max = 1.0,
-    update = 1,
+    α_max = 1.0,
+    update = true,
+    large = false,
 )
     # evaluate \\cal{A}(RD^T + DR^T)
-    calA_RD = Aoper(pdata, R, D, same=0, obj=1, large=large)
+    C_RD, calA_RD = Aoper(pdata, algdata.R, D, same=false, calcobj=true, large=large)
     # remember we divide it by 2 in Aoper, now scale back
     calA_RD .*= 2.0
+    C_RD *= 2.0
     # evaluate \\cal{A}(DD^T)
-    calA_DD = Aoper(pdata, D, D, same=1, obj=1, large=large)
+    C_DD, calA_DD = Aoper(pdata, D, D, same=true, calcobj=true, large=large)
 
     biquadratic = zeros(5)
     cubic = zeros(4)
 
-    # p0 = C \dot (RR^T)           = algdata.vio[end]
-    # p1 = C \dot (RD^T + DR^T)    = calA_RD[end]
-    # p2 = C \dot (DD^T)           = calA_DD[end]
-    # (-q0) = \calA(RR^T) - b      = algdata.vio[1:m]
-    # q1 = \calA(RD^T + DR^T)      = calA_RD[1:m]
-    # q2 = \calA(DD^T)             = calA_DD[1:m]
+    # p0 = C \dot (RR^T)           = algdata.obj 
+    # p1 = C \dot (RD^T + DR^T)    = c_RD
+    # p2 = C \dot (DD^T)           = c_DD
+    # (-q0) = \calA(RR^T) - b      = algdata.vio
+    # q1 = \calA(RD^T + DR^T)      = calA_RD
+    # q2 = \calA(DD^T)             = calA_DD
 
     # f(x) = a x^4 + b x^3 + c x^2 + d x + e 
-    # a = sigma / 2 * ||q2||^2
-    # b = sigma * q1' * q2
-    # c = p2 - lambda' * q2 + sigma (-q0)' * q2 + sigma/2 ||q1||^2
-    # d = p1 - lambda' * q1 + sigma (-q0)' * q1
-    # e = p0 - lambda * (-q0) + sigma / 2 * ||-q0||^2
+    # a = σ / 2 * ||q2||^2
+    # b = σ * q1' * q2
+    # c = p2 - λ' * q2 + σ (-q0)' * q2 + σ /2 ||q1||^2
+    # d = p1 - λ' * q1 + σ (-q0)' * q1
+    # e = p0 - λ' * (-q0) + σ / 2 * ||-q0||^2
 
-    biquadratic[1] = algdata.vio[end] - algdata.lambda' * algdata.vio[1:pdata.m] + 
-        0.5 * algdata.sigma * algdata.vio[1:pdata.m]' * vio_RR[1:pdata.m]
+    m = pdata.m
+    biquadratic[1] = algdata.obj - algdata.λ' * algdata.vio + 
+        0.5 * algdata.σ * algdata.vio' * algdata.vio
     
-    biquadratic[2] = calA_RD[end] - algdata.lambda' * calA_RD[1:pdata.m] + 
-        algdata.sigma * algdata.vio[1:pdata.m]' * calA_RD[1:pdata.m]  
+    # in principle biquadratic[2] should equal to 
+    # the inner product between direction and gradient
+    # thus is should be negative
+    biquadratic[2] = C_RD - algdata.λ' * calA_RD + 
+        algdata.σ * algdata.vio' * calA_RD  
 
-    biquadratic[3] = calA_DD[end] - algdata.lambda' * calA_DD[1:pdata.m] + 
-        algdata.sigma * algdata.vio[1:pdata.m]' * calA_DD[1:pdata.m] + 
-        0.5 * algdata.sigma * calA_RD[1:pdata.m]' * calA_RD[1:pdata.m]
+    @show biquadratic[2]
+    @show sum(D .* algdata.G)
 
-    biquadratic[4] = algdata.sigma * calA_DD[1:pdata.m]' * calA_RD[1:pdata.m]
+    biquadratic[3] = C_DD - algdata.λ' * calA_DD + 
+        algdata.σ * algdata.vio' * calA_DD + 
+        0.5 * algdata.σ * calA_RD' * calA_RD
 
-    biquadratic[5] = 0.5 * algdata.sigma * calA_DD[1:pdata.m]' * calA_DD[1:pdata.m]
+    biquadratic[4] = algdata.σ * calA_DD' * calA_RD
+
+    biquadratic[5] = 0.5 * algdata.σ * calA_DD' * calA_DD
 
     cubic[1] = 1.0 * biquadratic[2]
 
     if cubic[1] > eps()
         println("Warning: cubic[1] = $(cubic[1]) should be less than 0.")
-        exit(0)
+        return 0
     end
 
     cubic[2] = 2.0 * biquadratic[3]
@@ -67,38 +75,43 @@ function linesearch!(
 
     if abs(cubic[4]) < eps()
         println("Warning: cubic[4] is zero, got a quadratic function")
-        exit(0)
+        return 0
     end
 
     cubic ./= cubic[4]
     f = Polynomial(biquadratic)
     df = Polynomial(cubic)
 
-    f0 = biquadratic[0] # f(alpha=0) 
-    alpha_star = 0 # optimal alpha
+    f0 = biquadratic[1] # f(alpha=0) 
+    α_star = 0.0 # optimal alpha
     f_star = f0 # optimal f(alpha)
 
-    Roots = roots(df)
-    push!(Roots, alpha_max)
+    Roots = PolynomialRoots.roots(cubic)
+    push!(Roots, α_max)
 
     for i = eachindex(Roots)
         # only examine real roots in [0, alpha_max]
-        if (Roots[i] < 0) || (Roots[i] > alpha_max) || (abs(imag(Roots[i])) >= eps()) 
+        if (abs(imag(Roots[i])) >= eps())    
             continue
         end
-        f_alpha = f(Roots[i])
-        if f_alpha < f_star
-            f_star = f_alpha
-            alpha_star = Roots[i]
+        root = real(Roots[i])
+        if (root < 0) || (root > α_max)
+            continue
+        end
+        f_α = f(root)
+        if f_α < f_star
+            f_star = f_α
+            α_star = root 
         end
     end
 
-    if update
+    if update == true 
         # notice that 
         # \calA((R + alpha D)(R + alpha D)^T) = 
         # \calA(RR^T) + alpha \calA(RD^T + DR^T) + alpha^2 \calA(DD^T)
-        algdata.vio += alpha_star * (alpha_star * calA_DD + calA_RD)
+        algdata.vio += α_star * (α_star * calA_DD + calA_RD)
+        algdata.obj += α_star * (α_star * C_DD + C_RD)
     end
 
-    return alpha_star, f_star 
+    return α_star, f_star 
 end

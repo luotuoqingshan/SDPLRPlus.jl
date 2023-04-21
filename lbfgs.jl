@@ -1,30 +1,57 @@
-include("structures.jl")
+"""
+Vector of L-BFGS
+"""
+mutable struct lbfgsvec
+    # notice that we use matrix instead 
+    # of vector to store s and y because our
+    # decision variables are matrices
+    # s = xₖ₊₁ - xₖ 
+    s::Matrix{Float64}
+    # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
+    y::Matrix{Float64}
+    # ρ = 1/(Tr(yᵀs))
+    ρ::Float64
+    # temporary variable
+    a::Float64
+end
+
+"""
+History of l-bfgs vectors
+"""
+mutable struct lbfgshistory
+    # number of l-bfgs vectors
+    m::Int
+    vecs::Vector{lbfgsvec}
+    # the index of the latest l-bfgs vector
+    # we use a cyclic array to store l-bfgs vectors
+    latest::Int
+end
 
 
 """
 L-BFGS two-loop recursion
 to compute the direction
 
-q = nabla f_k
+q = ∇ fₖ
 for i = k - 1, k - 2, ... k - m
-    alpha_i = rho_i * s_i^T q 
-    q = q - alpha_i * y_i
+    αᵢ = ρᵢ * sᵢᵀ q 
+    q = q - αᵢ * yᵢ 
 end
-r = H_k * q # we don't do this step
+r = Hₖ * q # we don't do this step
 
 for i = k - m, k - m + 1, ... k - 1
-    beta_i = rho_i * y_i^T r
-    r = r + s_i * (alpha_i - beta_i)
+    βᵢ = ρᵢ * yᵢᵀ r
+    r = r + sᵢ * (αᵢ - βᵢ)
 end
 
-Notice here if we initialize all s_i, y_i to be zero
+Notice here if we initialize all sᵢ, yᵢ to be zero
 then we don't need to record how many
-s_i, y_i pairs we have already computed 
+sᵢ, yᵢ pairs we have already computed 
 """
 function dirlbfgs(
     algdata::AlgorithmData,
     lbfgshis::lbfgshistory;
-    negate::Int=1,
+    negate::Bool=true,
 )
     # we store l-bfgs vectors as a cyclic array
     dir = algdata.G
@@ -33,21 +60,23 @@ function dirlbfgs(
     # pay attention here, dir, s and y are all matrices
     for i = 1:m
         j = mod(lst - i + m, m) + 1 # j = (lst - (i-1)) 
-        alpha = lbfgshis.vecs[j].rho * (lbfgshis.vecs[j].s .* dir)
-        dir -= lbfgshis.vecs[j].y * alpha 
-        lbfghis.vecs[j].a = alpha
+        α = sum(lbfgshis.vecs[j].ρ * (lbfgshis.vecs[j].s .* dir))
+        dir -= lbfgshis.vecs[j].y * α 
+        lbfgshis.vecs[j].a = α
     end
 
     for i = m:1
         j = mod(lst - i + m, m) + 1 
-        beta = lbfgshis.vecs[j].rho * (lbfgshis.vecs[j].y .* dir)
-        dir += lbfgshis.vecs[j].s * (lbfghis.vec[i].a - beta) 
+        β = lbfgshis.vecs[j].ρ * (lbfgshis.vecs[j].y .* dir)
+        dir += lbfgshis.vecs[j].s * (lbfghis.vec[i].a - β) 
     end
 
     # we need to pick -dir as search direction
     if negate 
         dir .*= -1
     end
+
+    # partial update of lbfgs history 
     j = (lbfgshis.latest) % lbfgshis.m + 1
     lbfgshis.vecs[j].y = -algdata.G
     return dir
@@ -64,7 +93,7 @@ function lbfgs_postprocess!(
     j = (lbfgshis.latest) % lbfgshis.m + 1
     lbfgshis.vecs[j].s = stepsize * dir
     lbfgshis.vecs[j].y += algdata.G
-    lbfgshis.vecs[j].rho = 1 / (lbfgshis.vecs[j].y' * lbfgshis.vecs[j].s)
+    lbfgshis.vecs[j].ρ = 1 / sum(lbfgshis.vecs[j].y .* lbfgshis.vecs[j].s)
     lbfgshis.latest = j
 end
 
