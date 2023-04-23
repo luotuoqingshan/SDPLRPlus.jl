@@ -7,15 +7,17 @@ struct Config
     ρ_c::Float64
     σ_fac::Float64
     #rankreduce::Int
-    timelimit::Int
+    timelim::Int
     printlevel::Int
+    printfreq::Float64
     numlbfgsvecs::Int
     σ_strategy::Int
     λ_updatect::Int
     #rankredtol::Float64
     #gaptol::Float64
-    maxmajiter::Int
-    maxiter::Int
+    majoriterlim::Int
+    iterlim::Int
+    checkdual::Bool
 end
 
 
@@ -64,4 +66,7 @@ mutable struct AlgorithmData
     G::Matrix{Float64}
     # time
     starttime::Float64
+    endtime::Float64
+    dualcalctime::Float64
+    primaltime::Float64
 end

@@ -2,7 +2,8 @@ include("structures.jl")
 
 
 """
-This function computes the augmented Lagrangian value
+This function computes the augmented Lagrangian value, 
+    𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2
 """
 function lagrangval!(
     pdata::ProblemData, 
@@ -25,8 +26,6 @@ i.e. it computes 𝓐((UVᵀ + VUᵀ)/2)
 same : 1 if U and V are the same matrix
      : 0 if U and V are different matrices
 obj  : whether to compute the objective function value
-large : 1 if the size of UVᵀ is large such that we cannot directly compute UVᵀ 
-      : 0 if the size of UVᵀ is small, we simply compute UVᵀ
 """
 function Aoper(
     pdata::ProblemData,
@@ -34,92 +33,75 @@ function Aoper(
     V::Matrix{Float64};
     same::Bool=true,
     calcobj::Bool=true,
-    large::Bool=false,
 )
     # deal with sparse and diagonal constraints first
     base = 0
     # store results of 𝓐(UVᵀ + VUᵀ)/2
     calA = zeros(pdata.m)
-    if large 
-        # when the size of UVᵀ is large, we cannot afford to compute UVᵀ
-        if same  
-            # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
-            for i = 1:pdata.m_sp
-                calA[i + base] = sum((pdata.A_sp[i] * U) .* U)
-            end
-            base += pdata.m_sp
-            # diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
-            for i = 1:pdata.m_diag
-                calA[i + base] = sum((pdata.A_diag[i] * U) .* U)
-            end
-
-            base += pdata.m_diag
-        else
-            for i = 1:pdata.m_sp
-                calA[i + base] = sum(((pdata.A_sp[i] * U) .* V) + 
-                    ((pdata.A_sp[i] * V) .* U)) / 2.0
-            end
-            base += pdata.m_sp
-            for i = 1:pdata.m_diag
-                calA[i + base] = sum(((pdata.A_diag[i] * U) .* V) + 
-                    ((pdata.A_diag[i] * V) .* U)) / 2.0
-            end
-            base += pdata.m_diag
-        end
-    else
-        # when the size of UVᵀ is small, we can directly compute UVᵀ,
-        # which saves a lot of computation especially when the number of
-        # constraints is large 
-        if same 
-            UVt = U * U'
-        else
-            UVt = (U * V' + V * U') / 2.0
-        end
+    if same  
+        # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
         for i = 1:pdata.m_sp
-            calA[i + base] = sum(pdata.A_sp[i] * UVt)
-        end 
+            calA[i + base] = sum((pdata.A_sp[i] * U) .* U)
+        end
         base += pdata.m_sp
+
+        # diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
         for i = 1:pdata.m_diag
-            calA[i + base] = sum(pdata.A_diag[i] * UVt)
+            calA[i + base] = sum((pdata.A_diag[i] * U) .* U)
         end
         base += pdata.m_diag
-    end
 
-    # deal with low-rank constraints second
-    for i = 1:pdata.m_lr
-        if same 
+        # low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
+        for i = 1:pdata.m_lr
             M = pdata.A_lr[i].B' * U
-            calA[i] = sum((pdata.A_lr[i].D * M) .* M)
-        else
+            calA[i + base] = sum((pdata.A_lr[i].D * M) .* M)
+        end
+        base += pdata.m_lr
+
+        # dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
+        for i = 1:pdata.m_dense
+            calA[i + base] = sum((pdata.A_dense[i] * U) .* U)
+        end
+    else
+        for i = 1:pdata.m_sp
+            calA[i + base] = sum(((pdata.A_sp[i] * U) .* V) + 
+                ((pdata.A_sp[i] * V) .* U)) / 2.0
+        end
+        base += pdata.m_sp
+
+        for i = 1:pdata.m_diag
+            calA[i + base] = sum(((pdata.A_diag[i] * U) .* V) + 
+                ((pdata.A_diag[i] * V) .* U)) / 2.0
+        end
+        base += pdata.m_diag
+
+        for i = 1:pdata.m_lr
+            # 0.5Tr(BDBᵀ(UVᵀ+VUᵀ)) = 0.5sum((BᵀV)ᵀ * D * (BᵀU) + (BᵀU)ᵀ * D * (BᵀV))
             M = pdata.A_lr[i].B' * U
             N = pdata.A_lr[i].B' * V
             calA[i] = sum(((pdata.A_lr[i].D * M) .* N) + 
                 ((pdata.A_lr[i].D * N) .* M)) / 2.0
         end
-    end
+        base += pdata.m_lr
 
-    #deal with dense constraints last
-    for i = 1:pdata.m_dense
-        if same
+        for i = 1:pdata.m_dense
+            calA[i + base] = sum(((pdata.A_dense[i] * U) .* V) + 
+                ((pdata.A_dense[i] * V) .* U)) / 2.0
         end
     end
+
     # if calcobj = true, deal with objective function value
     obj = 0.0
     if calcobj 
         if same
-            if typeof(pdata.C) <: Diagonal
-                obj = sum((pdata.C * U) .* U) 
-            elseif typeof(pdata.C) <: LowRankMatrix
+            if typeof(pdata.C) <: LowRankMatrix
                 M = pdata.C.B' * U 
                 obj = sum((pdata.C.D * M) .* M)
-            else
+            else # same of Matrix SparseMatrixCSC and Diagonal
                 obj = sum((pdata.C * U) .* U)
             end
         else
-            if typeof(pdata.C) <: Diagonal
-                obj = sum(((pdata.C * U) .* V) +
-                    ((pdata.C * V) .* U)) / 2.0 
-            elseif typeof(pdata.C) <: LowRankMatrix
+            if typeof(pdata.C) <: LowRankMatrix
                 M = pdata.C.B' * U 
                 N = pdata.C.B' * V
                 obj = sum((pdata.C.D * M) .* N + 
@@ -149,14 +131,17 @@ function gradient!(
     for i = 1:m
         if i <= pdata.m_sp
             algdata.G += y[i] * pdata.A_sp[i] * algdata.R
-        elseif i <= pdata.m_sp + pdata.m_d
+        elseif i <= pdata.m_sp + pdata.m_diag
             j = i - pdata.m_sp
-            algdata.G += y[i] * pdata.A_d[j] * algdata.R
-        else
-            j = i - pdata.m_sp - pdata.m_d 
+            algdata.G += y[i] * pdata.A_diag[j] * algdata.R
+        elseif i <= pdata.m_sp + pdata.m_diag + pdata.m_lr
+            j = i - pdata.m_sp - pdata.m_diag 
             algdata.G += y[i] * pdata.A_lr[j].B * 
                 (pdata.A_lr[j].D * 
                 (pdata.A_lr[j].B' * algdata.R))
+        else
+            j = i - pdata.m_sp - pdata.m_diag - pdata.m_lr
+            algdata.G += y[i] * pdata.A_dense[j] * algdata.R
         end
     end
     algdata.G .*= 2.0
@@ -181,6 +166,8 @@ function C_normdatamat(
             Cnorm = max(Cnorm, norm(U[i, :] * pdata.C.B', Inf))
         end
     elseif typeof(pdata.C) <: SparseMatrixCSC
+        Cnorm = maximum(abs.(pdata.C))
+    elseif typeof(pdata.C) <: Matrix
         Cnorm = maximum(abs.(pdata.C))
     end
     return Cnorm
@@ -216,16 +203,18 @@ function normdatamat(
             return norm(pdata.C.diag, 2)
         elseif typeof(pdata.C) <: LowRankMatrix
             return fro_norm_lr(pdata.C)
-        elseif typeof(pdata.C) <: SparseMatrixCSC
+        elseif (typeof(pdata.C) <: SparseMatrixCSC) || (typeof(pdata.C) <: Matrix)
             return norm(pdata.C, 2)
         end
     else
         if matnum <= pdata.m_sp
             return norm(pdata.A_sp[matnum], 2) 
-        elseif matnum <= pdata.m_sp + pdata.m_d
-            return norm(pdata.A_d[matnum - pdata.m_sp], 2)
+        elseif matnum <= pdata.m_sp + pdata.m_diag
+            return norm(pdata.A_diag[matnum - pdata.m_sp], 2)
+        elseif matnum <= pdata.m_sp + pdata.m_diag + pdata.m_lr
+            return fro_norm_lr(pdata.A_lr[matnum - pdata.m_sp - pdata.m_diag])
         else
-            return fro_norm_lr(pdata.A_lr[matnum - pdata.m_sp - pdata.m_d])
+            return norm(pdata.A_dense[matnum - pdata.m_sp - pdata.m_diag - pdata.m_lr], 2)
         end
     end
 end

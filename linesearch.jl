@@ -15,12 +15,12 @@ function linesearch!(
     large = false,
 )
     # evaluate \\cal{A}(RD^T + DR^T)
-    C_RD, calA_RD = Aoper(pdata, algdata.R, D, same=false, calcobj=true, large=large)
+    C_RD, calA_RD = Aoper(pdata, algdata.R, D, same=false, calcobj=true)
     # remember we divide it by 2 in Aoper, now scale back
     calA_RD .*= 2.0
     C_RD *= 2.0
     # evaluate \\cal{A}(DD^T)
-    C_DD, calA_DD = Aoper(pdata, D, D, same=true, calcobj=true, large=large)
+    C_DD, calA_DD = Aoper(pdata, D, D, same=true, calcobj=true)
 
     biquadratic = zeros(5)
     cubic = zeros(4)
@@ -45,12 +45,10 @@ function linesearch!(
     
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
-    # thus is should be negative
+    # thus it should be negative
     biquadratic[2] = C_RD - algdata.λ' * calA_RD + 
         algdata.σ * algdata.vio' * calA_RD  
 
-    @show biquadratic[2]
-    @show sum(D .* algdata.G)
 
     biquadratic[3] = C_DD - algdata.λ' * calA_DD + 
         algdata.σ * algdata.vio' * calA_DD + 

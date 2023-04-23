@@ -1,3 +1,4 @@
+using GenericArpack
 include("structures.jl")
 include("dataoper.jl")
 include("lbfgs.jl")
@@ -20,21 +21,24 @@ function sdplr(
     ρ_f = 1e-5,
     ρ_c = 1e-1,
     σ_fac = 2.0,
-    timelimit = 3600.0,
+    timelim = 3600.0, # seconds
     printlevel = 1,
+    printfreq = 60.0, # seconds
     numblbfgsvec = 3, 
     σ_strategy = 1,
     λ_updatect = 1,
-    maxmajiter = 10^5,
-    maxiter = 10^7,
+    majoriterlim = 10^5,
+    iterlim = 10^7,
+    checkdual = true,
 )
     m = length(As)
     @assert (typeof(C) <: SparseMatrixCSC 
          || typeof(C) <: Diagonal
          || typeof(C) <: LowRankMatrix) "Wrong matrix type of cost matrix."
     A_sp = SparseMatrixCSC[]
-    A_d = Diagonal[]
+    A_diag = Diagonal[]
     A_lr = LowRankMatrix[]
+    A_dense = Matrix[]
     for i = 1:m
         if typeof(As[i]) <: SparseMatrixCSC
             push!(A_sp, As[i])
@@ -42,12 +46,14 @@ function sdplr(
             push!(A_d, As[i])
         elseif typeof(As[i]) <: LowRankMatrix
             push!(A_lr, As[i])
+        elseif typeof(As[i]) <: Matrix
+            push!(A_dense, As[i])
         else
             error("Wrong matrix type of constraint matrix.")
         end
     end
-    pdata = ProblemData(m, length(A_sp), length(A_d), length(A_lr),
-                        A_sp, A_d, A_lr, C, bs)
+    pdata = ProblemData(m, length(A_sp), length(A_diag), length(A_lr),
+                        length(A_dense), A_sp, A_diag, A_lr, A_dense, C, bs)
     n = size(C, 1)
     R_0 = 2 .* rand(n, r) .- 1
     algdata = AlgorithmData(
@@ -58,9 +64,13 @@ function sdplr(
         R_0,              #R
         zeros(size(R_0)), #G, will be initialized later
         time(),           #starttime
+        0,                #endtime 
+        0,                #time spent on computing dual bound
+        0,                #time spend on primal computation
     )
-    config = Config(ρ_f, ρ_c, σ_fac, timelimit, printlevel, 
-                    numblbfgsvec, σ_strategy, λ_updatect, maxmajiter, maxiter)
+    config = Config(ρ_f, ρ_c, σ_fac, timelim, printlevel, printfreq, 
+                    numblbfgsvec, σ_strategy, λ_updatect, majoriterlim,
+                    iterlim, checkdual)
     res = _sdplr(pdata, algdata, config)
     return res 
 end
@@ -71,15 +81,13 @@ function _sdplr(
     algdata::AlgorithmData,
     config::Config,
 )
-    # TODO create all data structures
-
-    # TODO double check scaling 
-
     # misc declarations
     recalcfreq = 5 
     recalc_cnt = 5 
     difficulty = 3 
     bestinfeas = 1.0e10
+    algdata.starttime = time()
+    lastprint = algdata.starttime # timestamp of last print
 
     # TODO setup printing
     if config.printlevel > 0
@@ -108,7 +116,7 @@ function _sdplr(
     ρ_c_tol = config.ρ_c / algdata.σ 
     val, ρ_c_val , ρ_f_val = 
         essential_calcs!(pdata, algdata, normC, normb)
-    majiter = 0 
+    majoriter = 0 
     iter = 0 # total number of iterations
 
     # save initial function value, notice that
@@ -118,7 +126,7 @@ function _sdplr(
 
     majoriter_end = false
 
-    while majiter < config.maxmajiter 
+    while majoriter < config.majoriterlim 
         #avoid goto in C
         current_majoriter_end = false
         λ_update = 0
@@ -144,24 +152,18 @@ function _sdplr(
                 iter += 1
                 localiter += 1
                 # direction has been negated
-                @show algdata.R
-                @show algdata.G
                 dir = dirlbfgs(algdata, lbfgshis, negate=true)
 
-                @show sum(dir .* algdata.G)
                 descent = sum(dir .* algdata.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
                     dir = -algdata.G # reverse back to gradient direction
                 end
 
-                @show dir
                 lastval = val
                 α, val = linesearch!(pdata, algdata, 
                                          dir, α_max=1.0, update=true) 
 
                 algdata.R += α * dir
-                @show algdata.R
-                @show α
                 if recalc_cnt == 0
                     val, ρ_c_val, ρ_f_val = 
                         essential_calcs!(pdata, algdata, normC, normb)
@@ -172,18 +174,23 @@ function _sdplr(
                     ρ_f_val = norm(algdata.vio, 2) / (1.0 + normb)
                     recalc_cnt -= 1
                 end
-                @show ρ_c_val
-                @show ρ_f_val
-                @show algdata.vio
 
                 if config.numlbfgsvecs > 0 
-                    @show dir, α
                     lbfgs_postprocess!(algdata, lbfgshis, dir, α)
                 end
 
+                current_time = time() 
+                if current_time - lastprint >= config.printfreq
+                    lastprint = current_time
+                    if config.printlevel > 0
+                        printintermediate(majoriter, localiter, iter, val, 
+                                  algdata.obj, ρ_c_val, ρ_f_val, best_dualbd)
+                    end
+                end   
+
                 totaltime = time() - algdata.starttime
 
-                if (totaltime >= config.timelimit 
+                if (totaltime >= config.timelim 
                     || ρ_f_val <= config.ρ_f
                     ||  iter >= 10^7)
                     algdata.λ -= algdata.σ * algdata.vio
@@ -213,8 +220,9 @@ function _sdplr(
                     difficulty = 3 # HARD
                 end
             end
-            # TODO check dual bounds
         end # end one major iteration
+
+        # TODO check dual bounds
 
         # cannot further improve infeasibility,
         # in other words to make the solution feasible, 
@@ -247,17 +255,69 @@ function _sdplr(
             end
         end
         # refresh some parameters
+        λ_update = 0
         if config.σ_strategy == 1
             difficulty = 3
         end
 
-        majiter += 1
+        majoriter += 1
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
             lbfgshis.vecs[i] = lbfgsvec(zeros(size(algdata.R)), zeros(size(algdata.R)), 0.0, 0.0)
         end
     end
+    val, ρ_c_val, ρ_f_val = essential_calcs!(pdata, algdata, normC, normb)
+
+    if config.checkdual
+        algdata.dualcalctime = @elapsed best_dualbd = dualbound(pdata, algdata)
+    end
+    algdata.endtime = time()
+    totaltime = algdata.endtime - algdata.starttime
+    algdata.primaltime = totaltime - algdata.dualcalctime
+    return Dict([
+        "R" => algdata.R,
+        "λ" => algdata.λ,
+        "ρ_c_val" => ρ_c_val,
+        "ρ_f_val" => ρ_f_val,
+        "obj" => algdata.obj,
+        "dualbd" => best_dualbd,
+        "totattime" => totaltime,
+        "dualtime" => algdata.dualcalctime,
+        "primaltime" => algdata.primaltime,
+    ])
+end
+
+
+function dualbound(
+    pdata::ProblemData, 
+    algdata::AlgorithmData
+)
+    n = size(algdata.R, 1)
+    op = ArpackSimpleFunctionOp(
+        (y, x) -> begin
+                mul!(y, pdata.C, x)
+                for i = 1:pdata.m
+                    if i <= pdata.m_sp
+                        y .-= algdata.λ[i] * (pdata.A_sp[i] * x)
+                    elseif i <= pdata.m_sp + pdata.m_diag
+                        j = i - pdata.m_sp
+                        y .-= algdata.λ[i] * (pdata.A_diag[j] * x)
+                    elseif i <= pdata.m_sp + pdata.m_diag + pdata.m_lr
+                        j = i - pdata.m_sp - pdata.m_diag
+                        # BDBᵀ x
+                        y .-= algdata.λ[i] * pdata.A_lr[i].B * 
+                            (pdata.A_lr[j].D * (pdata.A_lr[j].B' * x))
+                    else 
+                        j = i - pdata.m_sp - pdata.m_diag - pdata.m_lr
+                        y .-= algdata.λ[i] * (pdata.A_dense[j] * x)
+                    end
+                end
+                return y
+        end, n)
+    eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(100, n), maxiter=1000000)
+    dualbound = real.(eigenvals[1]) 
+    return dualbound 
 end
 
 using Test
@@ -278,5 +338,5 @@ for i in eachindex(d)
     push!(bs, 1.0)
 end
 r = 1
-optval, optx = sdplr(-Float64.(L), As, bs, r)
-optval == -4.0
+res = sdplr(-Float64.(L), As, bs, r)
+@show res
