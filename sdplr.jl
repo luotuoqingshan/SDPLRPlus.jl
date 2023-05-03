@@ -1,9 +1,10 @@
 using GenericArpack
-include("structures.jl")
+include("structs.jl")
 include("dataoper.jl")
 include("lbfgs.jl")
 include("myprint.jl")
 include("linesearch.jl")
+include("options.jl")
 
 """
 Interface for SDPLR 
@@ -14,80 +15,83 @@ Problem formulation:
             Y in R^{n x r}
 """
 function sdplr(
-    C::AbstractMatrix,
-    As::Vector{AbstractMatrix},
-    b::Vector,
-    r::Int;
-    ρ_f = 1e-5,
-    ρ_c = 1e-1,
-    σ_fac = 2.0,
-    timelim = 3600.0, # seconds
-    printlevel = 1,
-    printfreq = 60.0, # seconds
-    numblbfgsvec = 3, 
-    σ_strategy = 1,
-    λ_updatect = 1,
-    majoriterlim = 10^5,
-    iterlim = 10^7,
-    checkdual = true,
-)
+    C::AbstractMatrix{Tv},
+    As::Vector{Any},
+    b::Vector{Tv},
+    r::Ti;
+    config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
+) where{Ti <: Integer, Tv <: AbstractFloat}
     m = length(As)
-    @assert (typeof(C) <: SparseMatrixCSC 
-         || typeof(C) <: Diagonal
-         || typeof(C) <: LowRankMatrix) "Wrong matrix type of cost matrix."
-    A_sp = SparseMatrixCSC[]
-    A_diag = Diagonal[]
-    A_lr = LowRankMatrix[]
-    A_dense = Matrix[]
-    for i = 1:m
-        if typeof(As[i]) <: SparseMatrixCSC
-            push!(A_sp, As[i])
-        elseif typeof(As[i]) <: Diagonal
-            push!(A_d, As[i])
-        elseif typeof(As[i]) <: LowRankMatrix
-            push!(A_lr, As[i])
-        elseif typeof(As[i]) <: Matrix
-            push!(A_dense, As[i])
-        else
-            error("Wrong matrix type of constraint matrix.")
-        end
-    end
-    pdata = ProblemData(m, length(A_sp), length(A_diag), length(A_lr),
-                        length(A_dense), A_sp, A_diag, A_lr, A_dense, C, bs)
+    #@assert (typeof(C) <: SparseMatrixCSC 
+    #     || typeof(C) <: Diagonal
+    #     || typeof(C) <: LowRankMatrix) "Wrong matrix type of cost matrix."
+    #sparse_cons = SparseMatrixCSC{Tv, Ti}[]
+    #dense_cons = Matrix{Tv}[]
+    #diag_cons = Diagonal{Tv}[]
+    #lowrank_cons = LowRankMatrix{Tv}[]
+    #unitlowrank_cons = UnitLowRankMatrix{Tv}[]
+
+    #sparse_bs = Tv[]
+    #dense_bs = Tv[]
+    #diag_bs = Tv[]
+    #lowrank_bs = Tv[]
+    #unitlowrank_bs = Tv[]
+    #for i = 1:m
+    #    if isa(As[i], SparseMatrixCSC)
+    #        push!(sparse_cons, As[i])
+    #        push!(sparse_bs, b[i])
+    #    elseif isa(As[i], Diagonal) 
+    #        push!(diag_cons, As[i])
+    #        push!(diag_bs, b[i])
+    #    elseif isa(As[i], Matrix) 
+    #        push!(dense_cons, As[i])
+    #        push!(dense_bs, b[i])
+    #    elseif isa(As[i], LowRankMatrix) 
+    #        push!(lowrank_cons, As[i])
+    #        @show typeof(lowrank_bs)
+    #        push!(lowrank_bs, b[i])
+    #    elseif isa(As[i], UnitLowRankMatrix) 
+    #        push!(unitlowrank_cons, As[i])
+    #        push!(unitlowrank_bs, b[i])
+    #    else
+    #        error("Wrong matrix type of constraint matrix.")
+    #    end
+    #end
+    #bs = [sparse_bs; dense_bs; diag_bs; lowrank_bs; unitlowrank_bs]
+    #SDP = SDPProblem(m, sparse_cons, dense_cons, diag_cons, lowrank_cons,
+    #                 unitlowrank_cons, C, bs)
+    SDP = SDPProblem(m, As, C, b)
     n = size(C, 1)
     R_0 = 2 .* rand(n, r) .- 1
-    algdata = AlgorithmData(
-        randn(m),         #λ
-        1.0 / n,          #σ
-        0,                #obj, will be initialized later
-        zeros(m),         #vio(violation + obj), will be initialized later
+    BM = BurerMonteiro(
         R_0,              #R
         zeros(size(R_0)), #G, will be initialized later
+        randn(m),         #λ
+        zeros(m),         #vio(violation + obj), will be initialized later
+        one(Tv) / n,          #σ
+        zero(Tv),                #obj, will be initialized later
         time(),           #starttime
-        0,                #endtime 
-        0,                #time spent on computing dual bound
-        0,                #time spend on primal computation
+        zero(Tv),                #endtime 
+        zero(Tv),                #time spent on computing dual bound
+        zero(Tv),                #time spend on primal computation
     )
-    config = Config(ρ_f, ρ_c, σ_fac, timelim, printlevel, printfreq, 
-                    numblbfgsvec, σ_strategy, λ_updatect, majoriterlim,
-                    iterlim, checkdual)
-    res = _sdplr(pdata, algdata, config)
+    res = _sdplr(BM, SDP, config)
     return res 
 end
 
 
 function _sdplr(
-    pdata::ProblemData,
-    algdata::AlgorithmData,
-    config::Config,
-)
+    BM::BurerMonteiro{Tv},
+    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    config::BurerMonteiroConfig{Ti, Tv},
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # misc declarations
     recalcfreq = 5 
     recalc_cnt = 5 
     difficulty = 3 
     bestinfeas = 1.0e10
-    algdata.starttime = time()
-    lastprint = algdata.starttime # timestamp of last print
+    BM.starttime = time()
+    lastprint = BM.starttime # timestamp of last print
 
     # TODO setup printing
     if config.printlevel > 0
@@ -96,37 +100,39 @@ function _sdplr(
 
 
     # set up algorithm parameters
-    normb = norm(pdata.b, Inf)
-    normC = C_normdatamat(pdata)
+    normb = norm(SDP.b, Inf)
+    normC = norm(SDP.C, Inf)
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
-    lbfgshis = lbfgshistory(
+    lbfgshis = LBFGSHistory{Ti, Tv}(
         config.numlbfgsvecs,
-        lbfgsvec[],
-        0)
+        LBFGSVector{Tv}[],
+        config.numlbfgsvecs::Ti)
 
     for i = 1:config.numlbfgsvecs
         push!(lbfgshis.vecs, 
-            lbfgsvec(zeros(size(algdata.R)), zeros(size(algdata.R)), 0.0, 0.0))
+            LBFGSVector(zeros(Tv, size(BM.R)),
+                     zeros(Tv, size(BM.R)),
+                     zero(Tv), zero(Tv)))
     end
 
 
     # TODO essential_calc
-    ρ_c_tol = config.ρ_c / algdata.σ 
-    val, ρ_c_val , ρ_f_val = 
-        essential_calcs!(pdata, algdata, normC, normb)
+    tol_primal_vio = config.tol_primal_vio / BM.σ 
+    𝓛_val, stationarity , primal_vio = 
+        essential_calcs!(BM, SDP, normC, normb)
     majoriter = 0 
     iter = 0 # total number of iterations
 
     # save initial function value, notice that
     # here the constraints may not be satisfied,
     # which means the value may be smaller than the optimum
-    origval = val 
+    origval = 𝓛_val 
 
     majoriter_end = false
 
-    while majoriter < config.majoriterlim 
+    while majoriter < config.maxmajoriter 
         #avoid goto in C
         current_majoriter_end = false
         λ_update = 0
@@ -140,65 +146,64 @@ function _sdplr(
 
             # check stopping criteria: rho_c_val = norm of gradient
             # once stationarity condition is satisfied, then break
-            if ρ_c_val <= ρ_c_tol
+            if stationarity <= config.tol_stationarity 
                 break
             end
 
             # in the local iteration, we keep optimizing
             # the subproblem using lbfgsb and return a solution
             # satisfying stationarity condition
-            while (ρ_c_val > ρ_c_tol) 
+            while (stationarity > config.tol_stationarity) 
                 #increase both iter and localiter counters
                 iter += 1
                 localiter += 1
                 # direction has been negated
-                dir = dirlbfgs(algdata, lbfgshis, negate=true)
+                dir = dirlbfgs(BM, lbfgshis, negate=true)
 
-                descent = sum(dir .* algdata.G)
+                descent = dot(dir, BM.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
-                    dir = -algdata.G # reverse back to gradient direction
+                    dir = -BM.G # reverse back to gradient direction
                 end
 
-                lastval = val
-                α, val = linesearch!(pdata, algdata, 
-                                         dir, α_max=1.0, update=true) 
+                lastval = 𝓛_val
+                α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
 
-                algdata.R += α * dir
+                BM.R += α * dir
                 if recalc_cnt == 0
-                    val, ρ_c_val, ρ_f_val = 
-                        essential_calcs!(pdata, algdata, normC, normb)
+                    𝓛_val, stationarity, primal_vio = 
+                        essential_calcs!(BM, SDP, normC, normb)
                     recalc_cnt = recalcfreq
                 else
-                    gradient!(pdata, algdata)
-                    ρ_c_val = norm(algdata.G, 2) / (1.0 + normC)
-                    ρ_f_val = norm(algdata.vio, 2) / (1.0 + normb)
+                    gradient!(BM, SDP)
+                    stationarity = norm(BM.G, 2) / (1.0 + normC)
+                    primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
                     recalc_cnt -= 1
                 end
 
                 if config.numlbfgsvecs > 0 
-                    lbfgs_postprocess!(algdata, lbfgshis, dir, α)
+                    lbfgs_postprocess!(BM, lbfgshis, dir, α)
                 end
 
                 current_time = time() 
                 if current_time - lastprint >= config.printfreq
                     lastprint = current_time
                     if config.printlevel > 0
-                        printintermediate(majoriter, localiter, iter, val, 
-                                  algdata.obj, ρ_c_val, ρ_f_val, best_dualbd)
+                        printintermediate(majoriter, localiter, iter, 𝓛_val, 
+                                  BM.obj, stationarity, primal_vio, best_dualbd)
                     end
                 end   
 
-                totaltime = time() - algdata.starttime
+                totaltime = time() - BM.starttime
 
                 if (totaltime >= config.timelim 
-                    || ρ_f_val <= config.ρ_f
+                    || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    algdata.λ -= algdata.σ * algdata.vio
+                    BM.λ -= BM.σ * BM.primal_vio
                     current_majoriter_end = true
                     break
                 end
 
-                bestinfeas = min(ρ_f_val, bestinfeas)
+                bestinfeas = min(primal_vio, bestinfeas)
             end
 
             if current_majoriter_end
@@ -207,9 +212,9 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            algdata.λ = -algdata.σ * algdata.vio
-            val, ρ_c_val, ρ_f_val = 
-                essential_calcs!(pdata, algdata, normC, normb)
+            BM.λ = -BM.σ * BM.primal_vio
+            𝓛_val, stationarity, primal_vio = 
+                essential_calcs!(BM, SDP, normC, normb)
 
             if config.σ_strategy == 1
                 if localiter <= 10
@@ -227,7 +232,7 @@ function _sdplr(
         # cannot further improve infeasibility,
         # in other words to make the solution feasible, 
         # we get a ridiculously large value
-        if val > 1.0e10 * abs(origval) 
+        if 𝓛_val > 1.0e10 * abs(origval) 
             majoriter_end = true
             printf("Cannot reduce infeasibility any further.\n")
             break
@@ -246,11 +251,11 @@ function _sdplr(
 
         # update sigma
         while true
-            algdata.σ *= config.σ_fac
-            val, ρ_c_val, ρ_f_val = 
-                essential_calcs!(pdata, algdata, normC, normb)
-            ρ_c_tol = config.ρ_c / algdata.σ
-            if ρ_c_tol < ρ_c_val
+            BM.σ *= config.σ_fac
+            𝓛_val, stationarity, primal_vio = 
+                essential_calcs!(BM, SDP, normC, normb)
+            tol_stationarity = config.tol_stationarity / BM.σ
+            if tol_stationarity < stationarity 
                 break
             end
         end
@@ -264,54 +269,44 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = lbfgsvec(zeros(size(algdata.R)), zeros(size(algdata.R)), 0.0, 0.0)
+            lbfgshis.vecs[i] = lbfgsvec(zeros(size(BM.R)), zeros(size(BM.R)), 0.0, 0.0)
         end
     end
-    val, ρ_c_val, ρ_f_val = essential_calcs!(pdata, algdata, normC, normb)
+    𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)
 
     if config.checkdual
-        algdata.dualcalctime = @elapsed best_dualbd = dualbound(pdata, algdata)
+        BM.dualcalctime = @elapsed best_dualbd = dualbound(BM, SDP)
     end
-    algdata.endtime = time()
-    totaltime = algdata.endtime - algdata.starttime
-    algdata.primaltime = totaltime - algdata.dualcalctime
+    BM.endtime = time()
+    totaltime = BM.endtime - BM.starttime
+    BM.primaltime = totaltime - BM.dualcalctime
     return Dict([
-        "R" => algdata.R,
-        "λ" => algdata.λ,
-        "ρ_c_val" => ρ_c_val,
-        "ρ_f_val" => ρ_f_val,
-        "obj" => algdata.obj,
+        "R" => BM.R,
+        "λ" => BM.λ,
+        "stationarity" => stationarity,
+        "primal_vio" => primal_vio,
+        "obj" => BM.obj,
         "dualbd" => best_dualbd,
         "totattime" => totaltime,
-        "dualtime" => algdata.dualcalctime,
-        "primaltime" => algdata.primaltime,
+        "dualtime" => BM.dualcalctime,
+        "primaltime" => BM.primaltime,
     ])
 end
 
 
 function dualbound(
-    pdata::ProblemData, 
-    algdata::AlgorithmData
+    BM::BurerMonteiro,
+    SDP::SDPProblem, 
 )
-    n = size(algdata.R, 1)
+    n = size(BM.R, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
-                mul!(y, pdata.C, x)
-                for i = 1:pdata.m
-                    if i <= pdata.m_sp
-                        y .-= algdata.λ[i] * (pdata.A_sp[i] * x)
-                    elseif i <= pdata.m_sp + pdata.m_diag
-                        j = i - pdata.m_sp
-                        y .-= algdata.λ[i] * (pdata.A_diag[j] * x)
-                    elseif i <= pdata.m_sp + pdata.m_diag + pdata.m_lr
-                        j = i - pdata.m_sp - pdata.m_diag
-                        # BDBᵀ x
-                        y .-= algdata.λ[i] * pdata.A_lr[i].B * 
-                            (pdata.A_lr[j].D * (pdata.A_lr[j].B' * x))
-                    else 
-                        j = i - pdata.m_sp - pdata.m_diag - pdata.m_lr
-                        y .-= algdata.λ[i] * (pdata.A_dense[j] * x)
-                    end
+                mul!(y, SDP.C, x)
+                #for i in eachindex(SDP)
+                #    y .-= BM.λ[i] * (SDP[i] * x)
+                #end
+                for (i, A) in enumerate(SDP)
+                    y .-= BM.λ[i] .* (SDP[i] * x) 
                 end
                 return y
         end, n)
@@ -329,7 +324,7 @@ A = [0 1;
 n = size(A, 1)
 d = sum(A, dims=2)[:, 1]
 L = sparse(Diagonal(d) - A)
-As = AbstractMatrix[]
+As = []
 bs = Float64[]
 for i in eachindex(d)
     ei = zeros(n, 1)
@@ -340,3 +335,56 @@ end
 r = 1
 res = sdplr(-Float64.(L), As, bs, r)
 @show res
+
+
+#struct Squares
+#    count::Int
+#end
+#
+#Base.iterate(S::Squares, state=1) = state > S.count ? nothing : (state*state, state+1)
+#
+#
+#for (i, item) in enumerate(Squares(7))
+#    @show i
+#    println(item) 
+#end
+#
+#
+#using SparseArrays, LinearAlgebra, BenchmarkTools
+#using Random
+#Random.seed!(0) 
+#n = 10
+#ns = 100
+#nd = 50
+#nfull = 25
+#
+#
+#As = map(_->sprand(n,n,2/n), 1:ns)
+#Bs = map(_->Diagonal(randn(n)), 1:nd)
+#Cs = map(_->randn(n,n), 1:nfull) 
+#cons = [As;Bs;Cs]
+#function myfunc1(cons)
+#  x = randn(n) 
+#  y = zeros(n) 
+#  for C in cons
+#    y .+= C*x + C'*x
+#  end
+#  y 
+#end
+#
+#function handle!(y, A, x)
+#  y .+= A*x + A'*x
+#end 
+#
+#function myfunc2(cons)
+#  x = randn(n) 
+#  y = zeros(n) 
+#  for c in cons
+#    handle!(y, c, x)
+#  end
+#  y 
+#end
+#
+#@btime myfunc1($cons)
+#@btime myfunc2($cons)
+#

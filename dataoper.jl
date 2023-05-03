@@ -1,4 +1,4 @@
-include("structures.jl")
+include("structs.jl")
 
 
 """
@@ -6,16 +6,15 @@ This function computes the augmented Lagrangian value,
     𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2
 """
 function lagrangval!(
-    pdata::ProblemData, 
-    algdata::AlgorithmData, 
-    )
+    BM::BurerMonteiro{Tv}, 
+    SDP::SDPProblem{Ti, Tv, TC, TCons}, 
+    ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # apply the operator 𝓐 to RRᵀ and 
     # potentially compute the objective function value
-    obj, calA = Aoper(pdata, algdata.R, algdata.R; same=true, calcobj=true)
-    algdata.vio = calA - pdata.b 
-    algdata.obj = obj
-    return algdata.obj - algdata.λ' * algdata.vio
-           + 0.5 * algdata.σ * norm(algdata.vio, 2)^2
+    Aoper!(BM.primal_vio, BM.obj, SDP, BM.R, BM.R; same=true, calcobj=true)
+    BM.primal_vio .-= SDP.b 
+    return BM.obj - dot(BM.λ, BM.primal_vio)
+           + BM.σ * dot(BM.primal_vio, BM.primal_vio) / 2 
 end
 
 
@@ -27,208 +26,201 @@ same : 1 if U and V are the same matrix
      : 0 if U and V are different matrices
 obj  : whether to compute the objective function value
 """
-function Aoper(
-    pdata::ProblemData,
-    U::Matrix{Float64},
-    V::Matrix{Float64};
+function Aoper!(
+    𝓐_UV::Vector{Tv},
+    obj::Tv,
+    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    U::Matrix{Tv},
+    V::Matrix{Tv};
     same::Bool=true,
     calcobj::Bool=true,
-)
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+    fill!(𝓐_UV, zero(eltype(𝓐_UV)))
+    obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
     base = 0
     # store results of 𝓐(UVᵀ + VUᵀ)/2
-    calA = zeros(pdata.m)
-    if same  
-        # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        for i = 1:pdata.m_sp
-            calA[i + base] = sum((pdata.A_sp[i] * U) .* U)
+    if same   
+        #for (i, A) in enumerate(SDP) 
+        #    @show i
+        #    @show typeof(A)
+        #    @inbounds 𝓐_UV[i] = dot_xTAx(A, U)
+        #end
+        for (i, A) in enumerate(SDP) 
+            @inbounds 𝓐_UV[i] = constraint_eval_UTAU(A, U)
         end
-        base += pdata.m_sp
+        ## sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
+        #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
+        #@simd for i = eachindex(SDP.sparse_cons) 
+        #    @inbounds sparse_vio[i] = dot(U, SDP.sparse_cons[i], U)  
+        #end
+        #base += length(SDP.sparse_cons)
 
-        # diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
-        for i = 1:pdata.m_diag
-            calA[i + base] = sum((pdata.A_diag[i] * U) .* U)
-        end
-        base += pdata.m_diag
+        ## dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
+        #dense_vio = @view(vio[base + 1:base + length(SDP.dense_cons)])
+        #@simd for i = eachindex(SDP.dense_cons)
+        #    @inbounds dense_vio[i] = dot(U, SDP.dense_cons[i], U) 
+        #end
+        #base += length(SDP.dense_cons)
 
-        # low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
-        for i = 1:pdata.m_lr
-            M = pdata.A_lr[i].B' * U
-            calA[i + base] = sum((pdata.A_lr[i].D * M) .* M)
-        end
-        base += pdata.m_lr
+        ## diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
+        #diag_vio = @view(vio[base + 1:base + length(SDP.diag_cons)])
+        #@simd for i = eachindex(SDP.diag_cons) 
+        #    @inbounds diag_vio[i] = dot(U, SDP.diag_cons[i], U)
+        #end
+        #base += length(SDP.diag_cons)
 
-        # dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        for i = 1:pdata.m_dense
-            calA[i + base] = sum((pdata.A_dense[i] * U) .* U)
-        end
+        ## low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
+        #lowrank_vio = @view(vio[base + 1:base + length(SDP.lowrank_cons)])
+        #@simd for i = eachindex(SDP.lowrank_cons)
+        #    @inbounds lowrank_vio[i] = dot_xTAx(SDP.lowrank_cons[i], U)
+        #end
+        #base += length(SDP.lowrank_cons)
+
+        #unitlowrank_vio = @view(vio[base + 1:base + length(SDP.unitlowrank_cons)])
+        #@simd for i = eachindex(SDP.unitlowrank_cons) 
+        #    @inbounds unitlowrank_vio[i] = dot_xTAx(SDP.unitlowrank_cons[i], U)
+        #end
+        #base += length(SDP.unitlowrank_cons)
     else
-        for i = 1:pdata.m_sp
-            calA[i + base] = sum(((pdata.A_sp[i] * U) .* V) + 
-                ((pdata.A_sp[i] * V) .* U)) / 2.0
+        for (i, A) in enumerate(SDP) 
+            @inbounds 𝓐_UV[i] = constraint_eval_UTAV(A, U, V) 
         end
-        base += pdata.m_sp
+        # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
+        #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
+        #@simd for i = eachindex(SDP.sparse_cons) 
+        #    @inbounds sparse_vio[i] = (dot(U, SDP.sparse_cons[i], V) + 
+        #                               dot(V, SDP.sparse_cons[i], U)) / 2  
+        #end
+        #base += length(SDP.sparse_cons)
 
-        for i = 1:pdata.m_diag
-            calA[i + base] = sum(((pdata.A_diag[i] * U) .* V) + 
-                ((pdata.A_diag[i] * V) .* U)) / 2.0
-        end
-        base += pdata.m_diag
+        ## dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
+        #dense_vio = @view(vio[base + 1:base + length(SDP.dense_cons)])
+        #@simd for i = eachindex(SDP.dense_cons)
+        #    @inbounds dense_vio[i] = (dot(U, SDP.dense_cons[i], V) + 
+        #                              dot(V, SDP.dense_cons[i], U)) / 2 
+        #end
+        #base += length(SDP.dense_cons)
 
-        for i = 1:pdata.m_lr
-            # 0.5Tr(BDBᵀ(UVᵀ+VUᵀ)) = 0.5sum((BᵀV)ᵀ * D * (BᵀU) + (BᵀU)ᵀ * D * (BᵀV))
-            M = pdata.A_lr[i].B' * U
-            N = pdata.A_lr[i].B' * V
-            calA[i] = sum(((pdata.A_lr[i].D * M) .* N) + 
-                ((pdata.A_lr[i].D * N) .* M)) / 2.0
-        end
-        base += pdata.m_lr
+        ## diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
+        #diag_vio = @view(vio[base + 1:base + length(SDP.diag_cons)])
+        #@simd for i = eachindex(SDP.diag_cons) 
+        #    @inbounds diag_vio[i] = (dot(U, SDP.diag_cons[i], V) + 
+        #                             dot(V, SDP.diag_cons[i], U)) / 2
+        #end
+        #base += length(SDP.diag_cons)
 
-        for i = 1:pdata.m_dense
-            calA[i + base] = sum(((pdata.A_dense[i] * U) .* V) + 
-                ((pdata.A_dense[i] * V) .* U)) / 2.0
-        end
+        ## low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
+        #lowrank_vio = @view(vio[base + 1:base + length(SDP.lowrank_cons)])
+        #@simd for i = eachindex(SDP.lowrank_cons)
+        #    @inbounds lowrank_vio[i] = (dot(U, SDP.lowrank_cons[i], V) + 
+        #                                dot(V, SDP.lowrank_cons[i], U)) / 2
+        #end
+        #base += length(SDP.lowrank_cons)
+
+        #unitlowrank_vio = @view(vio[base + 1:base + length(SDP.unitlowrank_cons)])
+        #@simd for i = eachindex(SDP.unitlowrank_cons) 
+        #    @inbounds unitlowrank_vio[i] = (dot(U, SDP.unitlowrank_cons[i], V) +
+        #                                    dot(V, SDP.unitlowrank_cons[i], V)) / 2
+        #end
+        #base += length(SDP.unitlowrank_cons)
     end
 
     # if calcobj = true, deal with objective function value
-    obj = 0.0
     if calcobj 
         if same
-            if typeof(pdata.C) <: LowRankMatrix
-                M = pdata.C.B' * U 
-                obj = sum((pdata.C.D * M) .* M)
-            else # same of Matrix SparseMatrixCSC and Diagonal
-                obj = sum((pdata.C * U) .* U)
-            end
+            obj = constraint_eval_UTAU(SDP.C, U) 
         else
-            if typeof(pdata.C) <: LowRankMatrix
-                M = pdata.C.B' * U 
-                N = pdata.C.B' * V
-                obj = sum((pdata.C.D * M) .* N + 
-                    (pdata.C.D * N) .* M) / 2.0 
-            else
-                obj = sum(((pdata.C * U) .* V) +
-                    ((pdata.C * V) .* U)) / 2.0
-            end
+            obj = constraint_eval_UTAV(SDP.C, U, V)
         end
     end
-    return (obj, calA)
+    return (obj, 𝓐_UV)
 end
 
+
+function Aoper(
+    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    U::Matrix{Tv},
+    V::Matrix{Tv};
+    same::Bool=true,
+    calcobj::Bool=true,
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+    obj = zero(eltype(SDP.C))
+    𝓐_UV = zeros(eltype(SDP.C), length(SDP))
+    Aoper!(𝓐_UV, obj, SDP, U, V, same=same, calcobj=calcobj)
+    return (obj, 𝓐_UV)
+end
 
 """
 This function computes the gradient of the augmented Lagrangian
 """
 function gradient!(
-    pdata::ProblemData,
-    algdata::AlgorithmData,
-)
-    m = pdata.m
-    y = -(algdata.λ - algdata.σ * algdata.vio)
+    BM::BurerMonteiro{Tv},
+    SDP::SDPProblem{Ti, Tv, TC, TCons},
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+    m = SDP.m
+    y = similar(BM.λ)
+    @. y = -(BM.λ - BM.σ * BM.primal_vio)
 
-    algdata.G = pdata.C * algdata.R 
-
-    for i = 1:m
-        if i <= pdata.m_sp
-            algdata.G += y[i] * pdata.A_sp[i] * algdata.R
-        elseif i <= pdata.m_sp + pdata.m_diag
-            j = i - pdata.m_sp
-            algdata.G += y[i] * pdata.A_diag[j] * algdata.R
-        elseif i <= pdata.m_sp + pdata.m_diag + pdata.m_lr
-            j = i - pdata.m_sp - pdata.m_diag 
-            algdata.G += y[i] * pdata.A_lr[j].B * 
-                (pdata.A_lr[j].D * 
-                (pdata.A_lr[j].B' * algdata.R))
-        else
-            j = i - pdata.m_sp - pdata.m_diag - pdata.m_lr
-            algdata.G += y[i] * pdata.A_dense[j] * algdata.R
-        end
+    mul!(BM.G, SDP.C, BM.R)
+    for (i, A) in enumerate(SDP) 
+        @inbounds BM.G .+= y[i] .* constraint_grad(A, BM.R)
     end
-    algdata.G .*= 2.0
+    #base = 0
+    #λ_sparse = @view(BM.λ[base + 1: base + length(SDP.sparse_cons)]) 
+    #@simd for i = eachindex(SDP.sparse_cons)
+    #    @inbounds mul!(BM.G, SDP.sparse_cons[i], BM.R, λ_sparse[i], one(eltype(BM.G)))
+    #end
+    #base += length(SDP.sparse_cons)
+    #for i = eachindex(SDP.dense_cons)
+
+    #end
+    #base += length(SDP.dense_cons)
+    #for i = eachindex(SDP.diag_cons) 
+    #end
+    #base += length(SDP.diag_cons)
+    #for i = eachindex(SDP.lowrank_cons)
+    #end
+    #base += length(SDP.lowrank_cons)
+    #for i = eachindex(SDP.unitlowrank_cons)
+    #end
+    #for i = 1:m
+    #    if i <= SDP.m_sp
+    #        BM.G += y[i] * SDP.A_sp[i] * BM.R
+    #    elseif i <= SDP.m_sp + SDP.m_diag
+    #        j = i - SDP.m_sp
+    #        BM.G += y[i] * SDP.A_diag[j] * BM.R
+    #    elseif i <= SDP.m_sp + SDP.m_diag + SDP.m_lr
+    #        j = i - SDP.m_sp - SDP.m_diag 
+    #        BM.G += y[i] * SDP.A_lr[j].B * 
+    #            (SDP.A_lr[j].D * 
+    #            (SDP.A_lr[j].B' * BM.R))
+    #    else
+    #        j = i - SDP.m_sp - SDP.m_diag - SDP.m_lr
+    #        BM.G += y[i] * SDP.A_dense[j] * BM.R
+    #    end
+    #end
+    BM.G .*= 2 
     return 0
 end
 
 
 """
-Compute the maximum magnitude of
-elements in the objective matrix C
+Function for computing Lagrangian value, stationary condition and 
+    primal feasibility
+val : Lagrangian value
+ρ_c_val : stationary condition
+ρ_f_val : primal feasibility
 """
-function C_normdatamat(
-    pdata::ProblemData
-)
-    Cnorm = 0.0
-    if typeof(pdata.C) <: Diagonal
-        Cnorm = norm(pdata.C.diag, Inf) 
-    elseif typeof(pdata.C) <: LowRankMatrix
-        # C = BDB^T
-        U = pdata.C.B * pdata.C.D
-        for i = axes(U, 1) 
-            Cnorm = max(Cnorm, norm(U[i, :] * pdata.C.B', Inf))
-        end
-    elseif typeof(pdata.C) <: SparseMatrixCSC
-        Cnorm = maximum(abs.(pdata.C))
-    elseif typeof(pdata.C) <: Matrix
-        Cnorm = maximum(abs.(pdata.C))
-    end
-    return Cnorm
-end
-
-
-"""
-Compute Frobenius norm for low-rank matrix A = B * D * B^T
-where B is tall rectangular matrix.
-"""
-function fro_norm_lr(
-    A::LowRankMatrix,
-)
-    # A = BDB^T
-    # ||A||_F^2 = Tr(A^T A) = Tr(B D B^TB DB^T) = Tr((B^T B)D (B^T B)D)
-    C = (A.B' * A.B) * A.D
-    return sqrt(tr(C * C))
-end
-
-
-"""
-Compute Frobenius norm of the data matrix A or objective matrix C
-"""
-function normdatamat(
-    pdata::ProblemData,
-    matnum::Int,
-)
-    # matnum = 0 : objective matrix
-    # matnum > 0 : constraint matrix
-    @assert matnum <= pdata.m && matnum >= 0
-    if matnum == 0 # objective matrix
-        if typeof(pdata.C) <: Diagonal
-            return norm(pdata.C.diag, 2)
-        elseif typeof(pdata.C) <: LowRankMatrix
-            return fro_norm_lr(pdata.C)
-        elseif (typeof(pdata.C) <: SparseMatrixCSC) || (typeof(pdata.C) <: Matrix)
-            return norm(pdata.C, 2)
-        end
-    else
-        if matnum <= pdata.m_sp
-            return norm(pdata.A_sp[matnum], 2) 
-        elseif matnum <= pdata.m_sp + pdata.m_diag
-            return norm(pdata.A_diag[matnum - pdata.m_sp], 2)
-        elseif matnum <= pdata.m_sp + pdata.m_diag + pdata.m_lr
-            return fro_norm_lr(pdata.A_lr[matnum - pdata.m_sp - pdata.m_diag])
-        else
-            return norm(pdata.A_dense[matnum - pdata.m_sp - pdata.m_diag - pdata.m_lr], 2)
-        end
-    end
-end
-
-
 function essential_calcs!(
-    pdata::ProblemData,
-    algdata::AlgorithmData,
-    normC::Float64,
-    normb::Float64,
-)
-    val = lagrangval!(pdata, algdata)
-    gradient!(pdata, algdata)
-    ρ_c_val = norm(algdata.G, 2) / (1.0 + normC)
-    ρ_f_val = norm(algdata.vio, 2) / (1.0 + normb)
-    return (val, ρ_c_val, ρ_f_val)
+    BM::BurerMonteiro{Tv},
+    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    normC::Tv,
+    normb::Tv,
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+    𝓛_val = lagrangval!(BM, SDP)
+    gradient!(BM, SDP)
+    stationarity = norm(BM.G, 2) / (1.0 + normC)
+    primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
+    return (𝓛_val, stationarity, primal_vio)
 end
