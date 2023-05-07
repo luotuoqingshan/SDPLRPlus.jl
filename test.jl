@@ -58,5 +58,13 @@ using Test
         res = sdplr(-Float64.(L), As, bs, r)
         @test abs(res["obj"] - (-4)) < 1e-4
     end
+
+    include("readdata.jl")
+    @testset "readdata test" begin
+        filepath = "/homes/huan1754/SDPLR-1.03-beta 3/SDPLR-jl/data/Gset/G1"
+        A = load_gset(filepath)
+        @test size(A, 1) == 800
+        @test sum(A) == 19176 * 2
+    end
 end
 

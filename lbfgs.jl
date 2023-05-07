@@ -9,7 +9,7 @@ mutable struct LBFGSVector{T <: AbstractFloat}
     s::Matrix{T}
     # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
     y::Matrix{T}
-    # ρ = 1/(Tr(yᵀs))
+    # ρ = 1/(⟨y, s⟩)
     ρ::T
     # temporary variable
     a::T
