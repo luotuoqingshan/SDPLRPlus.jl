@@ -96,8 +96,8 @@ function _sdplr(
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # misc declarations
-    recalcfreq = 1 
-    recalc_cnt = 1 
+    recalcfreq = 5 
+    recalc_cnt = 5 
     difficulty = 3 
     bestinfeas = 1.0e10
     BM.starttime = time()
@@ -172,13 +172,13 @@ function _sdplr(
 
                 descent = dot(dir, BM.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
-                    dir = -BM.G # reverse back to gradient direction
+                    dir .= -BM.G # reverse back to gradient direction
                 end
 
                 lastval = 𝓛_val
                 α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
 
-                BM.R += α * dir
+                BM.R .+= α * dir
                 if recalc_cnt == 0
                     𝓛_val, stationarity, primal_vio = 
                         essential_calcs!(BM, SDP, normC, normb)
@@ -208,7 +208,7 @@ function _sdplr(
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    BM.λ .-= BM.σ * BM.primal_vio
+                    @. BM.λ -= BM.σ * BM.primal_vio
                     current_majoriter_end = true
                     break
                 end
@@ -222,7 +222,7 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            BM.λ .-= BM.σ * BM.primal_vio
+            @. BM.λ -= BM.σ * BM.primal_vio
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(BM, SDP, normC, normb)
 
@@ -322,28 +322,4 @@ function dualbound(
     return dualbound 
 end
 
-using Test
-using LinearAlgebra
-using SparseArrays
-
-A = [0 1;
-     1 0]
-n = size(A, 1)
-d = sum(A, dims=2)[:, 1]
-L = sparse(Diagonal(d) - A)
-As = []
-bs = Float64[]
-for i in eachindex(d)
-    ei = zeros(n, 1)
-    ei[i, 1] = 1
-    push!(As, LowRankMatrix(Diagonal([1.0]), ei))
-    push!(bs, 1.0)
-end
-#push!(As, sparse([1.0 0.0;0.0 0.0]))
-#push!(bs, 1.0)
-#push!(As, sparse([0.0 0.0;0.0 1.0]))
-#push!(bs, 1.0)
-r = 1
-res = sdplr(-Float64.(L), As, bs, r)
-@show res
 

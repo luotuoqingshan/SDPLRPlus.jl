@@ -245,4 +245,3 @@ mutable struct BurerMonteiro{Tv<:AbstractFloat}
     primal_time::Tv
 end
 
-

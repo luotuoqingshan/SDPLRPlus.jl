@@ -107,7 +107,7 @@ function linesearch!(
         # notice that 
         # \calA((R + alpha D)(R + alpha D)^T) = 
         # \calA(RR^T) + alpha \calA(RD^T + DR^T) + alpha^2 \calA(DD^T)
-        BM.primal_vio += α_star * (α_star * 𝓐_DD + 𝓐_RD)
+        @. BM.primal_vio += α_star * (α_star * 𝓐_DD + 𝓐_RD)
         BM.obj += α_star * (α_star * C_DD + C_RD)
     end
 

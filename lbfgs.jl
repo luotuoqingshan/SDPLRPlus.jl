@@ -63,7 +63,7 @@ function dirlbfgs(
     j = lst
     for i = 1:m 
         α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
-        dir .-= lbfgshis.vecs[j].y .* α 
+        @. dir -= lbfgshis.vecs[j].y * α 
         lbfgshis.vecs[j].a = α
         j -= 1
         if j == 0
@@ -74,7 +74,7 @@ function dirlbfgs(
     j = mod(lst, m) + 1
     for i = m:1
         β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
-        dir .+= lbfgshis.vecs[j].s .* (lbfghis.vec[i].a - β) 
+        @. dir += lbfgshis.vecs[j].s * (lbfghis.vec[i].a - β) 
     end
 
     # we need to pick -dir as search direction
@@ -97,8 +97,8 @@ function lbfgs_postprocess!(
 )where T
     # update lbfgs history
     j = mod(lbfgshis.latest, lbfgshis.m) + 1
-    lbfgshis.vecs[j].s = stepsize * dir
-    lbfgshis.vecs[j].y += BM.G
+    @. lbfgshis.vecs[j].s = stepsize * dir
+    lbfgshis.vecs[j].y .+= BM.G
     lbfgshis.vecs[j].ρ = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
     lbfgshis.latest = j
 end
