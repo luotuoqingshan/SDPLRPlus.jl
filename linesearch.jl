@@ -48,7 +48,7 @@ function linesearch!(
     # thus it should be negative
     biquadratic[2] = C_RD - dot(BM.λ, 𝓐_RD) + 
         BM.σ * dot(BM.primal_vio, 𝓐_RD)  
-
+    
 
     biquadratic[3] = C_DD - dot(BM.λ, 𝓐_DD) + 
         BM.σ * dot(BM.primal_vio, 𝓐_DD) + 

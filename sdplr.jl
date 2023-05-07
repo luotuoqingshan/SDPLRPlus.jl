@@ -208,7 +208,7 @@ function _sdplr(
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    BM.λ -= BM.σ * BM.primal_vio
+                    BM.λ .-= BM.σ * BM.primal_vio
                     current_majoriter_end = true
                     break
                 end
