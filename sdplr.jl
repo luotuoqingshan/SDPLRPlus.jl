@@ -60,7 +60,17 @@ function sdplr(
     #bs = [sparse_bs; dense_bs; diag_bs; lowrank_bs; unitlowrank_bs]
     #SDP = SDPProblem(m, sparse_cons, dense_cons, diag_cons, lowrank_cons,
     #                 unitlowrank_cons, C, bs)
-    SDP = SDPProblem(m, As, C, b)
+    Constraints = Any[]
+    for A in As
+        if isa(A, LowRankMatrix)
+            push!(Constraints, LowRankMatrix(A.D, A.B, r))
+        elseif isa(A, UnitLowRankMatrix)
+            push!(Constraints, LowRankMatrix(A.B, r))
+        else
+            push!(Constraints, A)
+        end
+    end
+    SDP = SDPProblem(m, Constraints, C, b)
     n = size(C, 1)
     R_0 = 2 .* rand(n, r) .- 1
     BM = BurerMonteiro(
@@ -86,8 +96,8 @@ function _sdplr(
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # misc declarations
-    recalcfreq = 5 
-    recalc_cnt = 5 
+    recalcfreq = 1 
+    recalc_cnt = 1 
     difficulty = 3 
     bestinfeas = 1.0e10
     BM.starttime = time()
@@ -212,7 +222,7 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            BM.λ = -BM.σ * BM.primal_vio
+            BM.λ .-= BM.σ * BM.primal_vio
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(BM, SDP, normC, normb)
 
@@ -238,7 +248,7 @@ function _sdplr(
             break
         end
 
-        if isnan(val)
+        if isnan(𝓛_val)
             println("Error(sdplrlib): Got NaN.")
             return 0
         end
@@ -269,17 +279,17 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = lbfgsvec(zeros(size(BM.R)), zeros(size(BM.R)), 0.0, 0.0)
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(BM.R)), zeros(size(BM.R)), 0.0, 0.0)
         end
     end
     𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)
 
     if config.checkdual
-        BM.dualcalctime = @elapsed best_dualbd = dualbound(BM, SDP)
+        BM.dual_time = @elapsed best_dualbd = dualbound(BM, SDP)
     end
     BM.endtime = time()
     totaltime = BM.endtime - BM.starttime
-    BM.primaltime = totaltime - BM.dualcalctime
+    BM.primal_time = totaltime - BM.dual_time
     return Dict([
         "R" => BM.R,
         "λ" => BM.λ,
@@ -288,8 +298,8 @@ function _sdplr(
         "obj" => BM.obj,
         "dualbd" => best_dualbd,
         "totattime" => totaltime,
-        "dualtime" => BM.dualcalctime,
-        "primaltime" => BM.primaltime,
+        "dualtime" => BM.dual_time,
+        "primaltime" => BM.primal_time,
     ])
 end
 
@@ -302,11 +312,8 @@ function dualbound(
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
                 mul!(y, SDP.C, x)
-                #for i in eachindex(SDP)
-                #    y .-= BM.λ[i] * (SDP[i] * x)
-                #end
-                for (i, A) in enumerate(SDP)
-                    y .-= BM.λ[i] .* (SDP[i] * x) 
+                for i = 1:SDP.m
+                     y .-= BM.λ[i] * (SDP.constraints[i] * x) 
                 end
                 return y
         end, n)
@@ -332,59 +339,11 @@ for i in eachindex(d)
     push!(As, LowRankMatrix(Diagonal([1.0]), ei))
     push!(bs, 1.0)
 end
+#push!(As, sparse([1.0 0.0;0.0 0.0]))
+#push!(bs, 1.0)
+#push!(As, sparse([0.0 0.0;0.0 1.0]))
+#push!(bs, 1.0)
 r = 1
 res = sdplr(-Float64.(L), As, bs, r)
 @show res
 
-
-#struct Squares
-#    count::Int
-#end
-#
-#Base.iterate(S::Squares, state=1) = state > S.count ? nothing : (state*state, state+1)
-#
-#
-#for (i, item) in enumerate(Squares(7))
-#    @show i
-#    println(item) 
-#end
-#
-#
-#using SparseArrays, LinearAlgebra, BenchmarkTools
-#using Random
-#Random.seed!(0) 
-#n = 10
-#ns = 100
-#nd = 50
-#nfull = 25
-#
-#
-#As = map(_->sprand(n,n,2/n), 1:ns)
-#Bs = map(_->Diagonal(randn(n)), 1:nd)
-#Cs = map(_->randn(n,n), 1:nfull) 
-#cons = [As;Bs;Cs]
-#function myfunc1(cons)
-#  x = randn(n) 
-#  y = zeros(n) 
-#  for C in cons
-#    y .+= C*x + C'*x
-#  end
-#  y 
-#end
-#
-#function handle!(y, A, x)
-#  y .+= A*x + A'*x
-#end 
-#
-#function myfunc2(cons)
-#  x = randn(n) 
-#  y = zeros(n) 
-#  for c in cons
-#    handle!(y, c, x)
-#  end
-#  y 
-#end
-#
-#@btime myfunc1($cons)
-#@btime myfunc2($cons)
-#

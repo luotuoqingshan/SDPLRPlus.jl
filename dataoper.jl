@@ -11,7 +11,7 @@ function lagrangval!(
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # apply the operator 𝓐 to RRᵀ and 
     # potentially compute the objective function value
-    Aoper!(BM.primal_vio, BM.obj, SDP, BM.R, BM.R; same=true, calcobj=true)
+    BM.obj, _ = Aoper!(BM.primal_vio, SDP, BM.R, BM.R; same=true, calcobj=true)
     BM.primal_vio .-= SDP.b 
     return BM.obj - dot(BM.λ, BM.primal_vio)
            + BM.σ * dot(BM.primal_vio, BM.primal_vio) / 2 
@@ -28,7 +28,6 @@ obj  : whether to compute the objective function value
 """
 function Aoper!(
     𝓐_UV::Vector{Tv},
-    obj::Tv,
     SDP::SDPProblem{Ti, Tv, TC, TCons},
     U::Matrix{Tv},
     V::Matrix{Tv};
@@ -46,8 +45,8 @@ function Aoper!(
         #    @show typeof(A)
         #    @inbounds 𝓐_UV[i] = dot_xTAx(A, U)
         #end
-        for (i, A) in enumerate(SDP) 
-            @inbounds 𝓐_UV[i] = constraint_eval_UTAU(A, U)
+        @inbounds for (i, A) in enumerate(SDP) 
+            𝓐_UV[i] = constraint_eval_UTAU(A, U)
         end
         ## sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
         #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
@@ -83,8 +82,8 @@ function Aoper!(
         #end
         #base += length(SDP.unitlowrank_cons)
     else
-        for (i, A) in enumerate(SDP) 
-            @inbounds 𝓐_UV[i] = constraint_eval_UTAV(A, U, V) 
+        @inbounds for (i, A) in enumerate(SDP) 
+            𝓐_UV[i] = constraint_eval_UTAV(A, U, V) 
         end
         # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
         #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
@@ -145,9 +144,8 @@ function Aoper(
     same::Bool=true,
     calcobj::Bool=true,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
-    obj = zero(eltype(SDP.C))
     𝓐_UV = zeros(eltype(SDP.C), length(SDP))
-    Aoper!(𝓐_UV, obj, SDP, U, V, same=same, calcobj=calcobj)
+    obj, _ = Aoper!(𝓐_UV, SDP, U, V, same=same, calcobj=calcobj)
     return (obj, 𝓐_UV)
 end
 
@@ -163,8 +161,9 @@ function gradient!(
     @. y = -(BM.λ - BM.σ * BM.primal_vio)
 
     mul!(BM.G, SDP.C, BM.R)
-    for (i, A) in enumerate(SDP) 
-        @inbounds BM.G .+= y[i] .* constraint_grad(A, BM.R)
+    @inbounds for (i, A) in enumerate(SDP) 
+        mul!(BM.G, A, BM.R, y[i], one(eltype(BM.G)))
+        #BM.G .+= y[i] .* constraint_grad(A, BM.R)
     end
     #base = 0
     #λ_sparse = @view(BM.λ[base + 1: base + length(SDP.sparse_cons)]) 
@@ -200,7 +199,7 @@ function gradient!(
     #        BM.G += y[i] * SDP.A_dense[j] * BM.R
     #    end
     #end
-    BM.G .*= 2 
+    lmul!(Tv(2), BM.G)
     return 0
 end
 

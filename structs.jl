@@ -1,24 +1,52 @@
+using Random
+using Test
 using SparseArrays
 using LinearAlgebra
 import LinearAlgebra: dot, size, show, norm
 
 """
 Low rank representation of constraint matrices
-written as BDB^T
+written as BDBᵀ, since usually B is really thin,
+so storing Bᵀ as well doesn't cost too much more storage.
 """
 struct LowRankMatrix{T} <: AbstractMatrix{T}
     D::Diagonal{T}
     B::Matrix{T}
+    Bt::Matrix{T}
+    extra::Matrix{T}
 end
 
 
 struct UnitLowRankMatrix{T} <: AbstractMatrix{T}
     B::Matrix{T}
+    Bt::Matrix{T}
+    extra::Matrix{T}
 end
 
 
+LowRankMatrix(D::Diagonal{T}, B::Matrix{T}) where T = LowRankMatrix(D, B, Matrix(B'), zeros(0,0))
+function LowRankMatrix(
+    D::Diagonal{Tv}, 
+    B::Matrix{Tv}, 
+    r::Ti,
+) where {Ti <: Integer, Tv <: AbstractFloat} 
+    n, s = size(B)
+    return LowRankMatrix(D, B, Matrix(B'), zeros(s,r)) 
+end
+
+UnitLowRankMatrix(B::Matrix{T}) where T = UnitLowRankMatrix(B, Matrix(B'), zeros(0,0))
+function UnitLowRankMatrix(
+    B::Matrix{Tv},
+    r::Ti,
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    n, s = size(B)
+    return UnitLowRankMatrix(B, Matrix(B'), zeros(s,r)) 
+end
+
 size(A::LowRankMatrix) = (n = size(A.B, 1); (n, n))
 size(A::UnitLowRankMatrix) = (n = size(A.B, 1); (n, n))
+Base.getindex(A::LowRankMatrix, i::Int, j::Int) = @view(A.Bt[:, i])' * A.D * @view(A.Bt[:, j])
+Base.getindex(A::UnitLowRankMatrix, i::Int, j::Int) = @view(A.Bt[:, i])' * @view(A.Bt[:, j])
 
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, A::LowRankMatrix)
@@ -41,96 +69,124 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, A::UnitLowRankMatrix)
 end
 
 
-function norm(A::LowRankMatrix, p::Real) 
-    if p == Inf
+function norm(
+    A::LowRankMatrix{Tv},
+    p::Real,
+) where {Tv <: AbstractFloat}
+    # norm is usually not performance critical
+    # so we don't do too much preallocation
+    n = size(A.B, 1)
+    tmpv = zeros(n)
+    if p in [2, Inf]
         # BDBᵀ 
-        U = A.D * A.B'
-        s = zero(eltype(U)) 
-        @simd for i in axes(U, 2)
-            @inbounds s = max(s, norm(A.B * U[:, i], p))
+        U = A.B * A.D
+        res = zero(Tv) 
+        @inbounds for i in axes(A.Bt, 2)
+            mul!(tmpv, U, @view(A.Bt[:, i]))
+            if p == Inf 
+                res = max(res, norm(tmpv, p))
+            else
+                res += norm(tmpv, p)^2
+            end
         end
-        return s
-    elseif p == 2
-        U = A.D * A.B'
-        s = zero(eltype(U)) 
-        @simd for i in axes(U, 2)
-            @inbounds s += norm(A.B * U[:, i], p)^2
-        end
-        return sqrt(s)
+        return p == Inf ? res : sqrt(res)
     else
-        error("undefined norm for LowRankMatrix")
+        error("undefined norm for Constraint")
     end
 end
 
 
-function norm(A::UnitLowRankMatrix, p::Real) 
-    if p == Inf
-        # BDBᵀ 
-        U = A.B'
-        s = zero(eltype(U)) 
-        @simd for i in axes(U, 2)
-            @inbounds s = max(s, norm(A.B * U[:, i], p))
+
+function LinearAlgebra.mul!(
+    Y::AbstractMatrix{Tv},
+    A::LowRankMatrix{Tv},
+    X::AbstractMatrix{Tv},
+    ) where {Tv <: AbstractFloat}
+    n, _ = size(A.B)
+    if size(Y, 1) != n || size(X, 1) != n || size(Y, 2) != size(X, 2) 
+        throw(DimensionMismatch("dimension mismatch"))
+    end
+    # A.Bt: s x n , X: n x r, A.extra: s x r
+    mul!(A.extra, A.Bt, X)
+    lmul!(A.D, A.extra)
+    mul!(Y, A.B, A.extra)
+end
+
+
+function dot_xTAx(
+    A::LowRankMatrix{Tv},
+    X::AbstractMatrix{Tv},
+    ) where {Tv <: AbstractFloat}
+    mul!(A.extra, A.Bt, X)
+    return dot(A.extra, A.D, A.extra)
+end
+
+
+function dot(
+    X::AbstractMatrix{Tv},
+    A::LowRankMatrix{Tv},
+    Y::AbstractMatrix{Tv},
+    ) where {Tv <: AbstractFloat}
+    return dot(X, A * Y)
+end
+
+
+function norm(A::UnitLowRankMatrix{Tv}, p::Real) where {Tv <: AbstractFloat}
+    n, _ = size(A.B)
+    tmpv = zeros(n)
+    if p in [2, Inf]
+        # BBᵀ 
+        res = zero(Tv) 
+        @inbounds for i in axes(A.Bt, 2)
+            mul!(tmpv, A.B, @view(A.Bt[:, i]))
+            if p == Inf 
+                res = max(res, norm(tmpv, p))
+            else
+                res += norm(tmpv, p)^2
+            end
         end
-        return s
-    elseif p == 2
-        U = A.B'
-        s = zero(eltype(U)) 
-        @simd for i in axes(U, 2)
-            @inbounds s += norm(A.B * U[:, i], p)^2
-        end
-        return sqrt(s)
+        return p == Inf ? res : sqrt(res)
     else
-        error("undefined norm for UnitLowRankMatrix")
+        error("undefined norm for Constraint")
     end
 end
 
 
-function dot(A::AbstractMatrix{T}, B::LowRankMatrix{T}, C::AbstractMatrix{T}) where T
-    if (size(A, 1) != size(B.B, 1) || size(C, 1) != size(B.B, 1)  
-        || size(A, 2) != size(C, 2))
+function LinearAlgebra.mul!(
+    Y::AbstractMatrix{Tv}, 
+    A::UnitLowRankMatrix{Tv}, 
+    X::AbstractMatrix{Tv},
+    ) where {Tv <: AbstractFloat}
+    n = size(A.B, 1)
+    if size(Y, 1) != n || size(X, 1) != n || size(Y, 2) != size(X, 2) 
         throw(DimensionMismatch("dimension mismatch"))
     end
-    U = B.B' * C
-    V = B.B' * A
-    return dot(V, B.D, U)    
+    mul!(A.extra, A.Bt, X)
+    mul!(Y, A.B, A.extra)
 end
 
 
-function dot(A::AbstractMatrix{T}, B::UnitLowRankMatrix{T}, C::AbstractMatrix{T}) where T
-    if (size(A, 1) != size(B.B, 1) || size(C, 1) != size(B.B, 1)  
-        || size(A, 2) != size(C, 2))
-        throw(DimensionMismatch("dimension mismatch"))
-    end
-    U = B.B' * C
-    V = B.B' * A
-    return dot(V, U)    
+function dot_xTAx(
+    A::UnitLowRankMatrix{Tv},
+    X::AbstractMatrix{Tv}
+    ) where {Tv <: AbstractFloat}
+    mul!(A.extra, A.Bt, X)
+    return dot(A.extra, A.extra)
 end
 
 
-function dot_xTAx(A::LowRankMatrix{T}, X::AbstractMatrix{T}) where T
-    if size(X, 1) != size(A.B, 1)
-        throw(DimensionMismatch("dimension mismatch"))
-    end
-    U = A.B' * X
-    return dot(U, A.D, U)
+function dot(
+    X::AbstractMatrix{Tv},
+    A::UnitLowRankMatrix{Tv},
+    Y::AbstractMatrix{Tv}
+    ) where {Tv <: AbstractFloat}
+    return dot(X, A * Y)
 end
 
-
-function dot_xTAx(A::UnitLowRankMatrix{T}, X::AbstractMatrix{T}) where T
-    if size(X, 1) != size(A.B, 1)
-        throw(DimensionMismatch("dimension mismatch"))
-    end
-    U = A.B' * X
-    return dot(U, U)
-end
 
 # fall back function for other matrices
 dot_xTAx(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot(X, A, X)
 
-Base.:*(A::AbstractMatrix{T}, B::LowRankMatrix{T}) where {T} = (((A * B.B) * B.D) * B.B')
-Base.:*(A::LowRankMatrix{T}, B::AbstractMatrix{T}) where {T} = (A.B * (A.D * (A.B' * B)))
-Base.:*(A::AbstractMatrix{T}, B::UnitLowRankMatrix{T}) where {T} = ((A * B.B) * B.B')
-Base.:*(A::UnitLowRankMatrix{T}, B::AbstractMatrix{T}) where {T} = (A.B * (A.B' * B))
 
 constraint_eval_UTAU(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot_xTAx(A, X)
 constraint_eval_UTAU(A::LowRankMatrix{T}, X::AbstractMatrix{T}) where {T} = dot_xTAx(A, X) 
@@ -140,7 +196,6 @@ constraint_eval_UTAV(A::AbstractMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatr
 constraint_eval_UTAV(A::LowRankMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatrix{T}) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
 constraint_eval_UTAV(A::UnitLowRankMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatrix{T}) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
 
-constraint_grad(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = A * X
 
 #TODO: support block-wise data
 struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons} 
@@ -148,11 +203,6 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, 
     m::Ti       
     # list of matrices which are sparse/dense/low-rank/diagonal
     constraints::TCons
-    #sparse_cons::Vector{SparseMatrixCSC{Tv, Ti}}
-    #dense_cons::Vector{Matrix{Tv}}
-    #diag_cons::Vector{Diagonal{Tv}}
-    #lowrank_cons::Vector{LowRankMatrix{Tv}}
-    #unitlowrank_cons::Vector{UnitLowRankMatrix{Tv}}
     # cost matrix
     C::TC
     # right-hand side b
@@ -161,30 +211,14 @@ end
 
 
 function Base.:iterate(SDP::SDPProblem, state=1)
-    #base = 0
-    #if state <= base + length(SDP.sparse_cons)
-    #    return (SDP.sparse_cons[state], state + 1)
-    #end
-    #base += length(SDP.sparse_cons)
-    #if state <= base + length(SDP.dense_cons) 
-    #    return (SDP.dense_cons[state - base], state + 1)
-    #end
-    #base += length(SDP.dense_cons)
-    #if state <= base + length(SDP.diag_cons) 
-    #    return (SDP.diag_cons[state - base], state + 1)
-    #end
-    #base += length(SDP.diag_cons)
-    #if state <= base + length(SDP.lowrank_cons)
-    #    return (SDP.lowrank_cons[state - base], state + 1)
-    #end
-    #base += length(SDP.lowrank_cons)
-    #if state <= base + length(SDP.unitlowrank_cons)
-    #    return (SDP.lowrank_cons[state - base], state + 1)
-    #end
-    #return (nothing, state + 1)
     return state > SDP.m ? nothing : (SDP.constraints[state], state + 1)
 end
 
+
+function Base.:getindex(SDP::SDPProblem, i::Int)
+    1 <= i <= SDP.m || throw(BoundsError(SDP, i))
+    return SDP.constraints[i]
+end
 
 function Base.:length(SDP::SDPProblem)
     return SDP.m
