@@ -13,8 +13,8 @@ function lagrangval!(
     # potentially compute the objective function value
     BM.obj, _ = Aoper!(BM.primal_vio, SDP, BM.R, BM.R; same=true, calcobj=true)
     BM.primal_vio .-= SDP.b 
-    return BM.obj - dot(BM.λ, BM.primal_vio)
-           + BM.σ * dot(BM.primal_vio, BM.primal_vio) / 2 
+    return (BM.obj - dot(BM.λ, BM.primal_vio)
+           + BM.σ * dot(BM.primal_vio, BM.primal_vio) / 2) 
 end
 
 

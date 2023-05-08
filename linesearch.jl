@@ -40,19 +40,19 @@ function linesearch!(
     # e = p0 - λᵀ * (-q0) + σ / 2 * ||-q0||²
 
     m = SDP.m
-    biquadratic[1] = BM.obj - dot(BM.λ, BM.primal_vio) + 
-        0.5 * BM.σ * dot(BM.primal_vio, BM.primal_vio)
+    biquadratic[1] = (BM.obj - dot(BM.λ, BM.primal_vio) + 
+        0.5 * BM.σ * dot(BM.primal_vio, BM.primal_vio))
     
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
-    biquadratic[2] = C_RD - dot(BM.λ, 𝓐_RD) + 
-        BM.σ * dot(BM.primal_vio, 𝓐_RD)  
+    biquadratic[2] = (C_RD - dot(BM.λ, 𝓐_RD) + 
+        BM.σ * dot(BM.primal_vio, 𝓐_RD))  
     
 
-    biquadratic[3] = C_DD - dot(BM.λ, 𝓐_DD) + 
+    biquadratic[3] = (C_DD - dot(BM.λ, 𝓐_DD) + 
         BM.σ * dot(BM.primal_vio, 𝓐_DD) + 
-        0.5 * BM.σ * dot(𝓐_RD, 𝓐_RD)
+        0.5 * BM.σ * dot(𝓐_RD, 𝓐_RD))
 
     biquadratic[4] = BM.σ * dot(𝓐_DD, 𝓐_RD)
 
@@ -89,6 +89,7 @@ function linesearch!(
 
     for i = eachindex(Roots)
         # only examine real roots in [0, α_max]
+        @show real(Roots[i])
         if (abs(imag(Roots[i])) >= eps())    
             continue
         end
@@ -102,6 +103,8 @@ function linesearch!(
             α_star = root 
         end
     end
+
+    @show α_star, f_star
 
     if update == true 
         # notice that 
