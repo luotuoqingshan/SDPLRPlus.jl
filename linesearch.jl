@@ -89,7 +89,6 @@ function linesearch!(
 
     for i = eachindex(Roots)
         # only examine real roots in [0, α_max]
-        @show real(Roots[i])
         if (abs(imag(Roots[i])) >= eps())    
             continue
         end
@@ -103,8 +102,6 @@ function linesearch!(
             α_star = root 
         end
     end
-
-    @show α_star, f_star
 
     if update == true 
         # notice that 

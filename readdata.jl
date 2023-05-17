@@ -30,8 +30,3 @@ function load_gset(filepath)::SparseMatrixCSC
     dropzeros!(A)
     return A
 end
-
-filepath = pwd()*"/SDPLR-jl/data/Gset/G1"
-@show filepath
-
-A = load_gset(filepath)

@@ -40,89 +40,13 @@ function Aoper!(
     base = 0
     # store results of 𝓐(UVᵀ + VUᵀ)/2
     if same   
-        #for (i, A) in enumerate(SDP) 
-        #    @show i
-        #    @show typeof(A)
-        #    @inbounds 𝓐_UV[i] = dot_xTAx(A, U)
-        #end
         @inbounds for (i, A) in enumerate(SDP) 
             𝓐_UV[i] = constraint_eval_UTAU(A, U)
         end
-        ## sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
-        #@simd for i = eachindex(SDP.sparse_cons) 
-        #    @inbounds sparse_vio[i] = dot(U, SDP.sparse_cons[i], U)  
-        #end
-        #base += length(SDP.sparse_cons)
-
-        ## dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        #dense_vio = @view(vio[base + 1:base + length(SDP.dense_cons)])
-        #@simd for i = eachindex(SDP.dense_cons)
-        #    @inbounds dense_vio[i] = dot(U, SDP.dense_cons[i], U) 
-        #end
-        #base += length(SDP.dense_cons)
-
-        ## diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
-        #diag_vio = @view(vio[base + 1:base + length(SDP.diag_cons)])
-        #@simd for i = eachindex(SDP.diag_cons) 
-        #    @inbounds diag_vio[i] = dot(U, SDP.diag_cons[i], U)
-        #end
-        #base += length(SDP.diag_cons)
-
-        ## low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
-        #lowrank_vio = @view(vio[base + 1:base + length(SDP.lowrank_cons)])
-        #@simd for i = eachindex(SDP.lowrank_cons)
-        #    @inbounds lowrank_vio[i] = dot_xTAx(SDP.lowrank_cons[i], U)
-        #end
-        #base += length(SDP.lowrank_cons)
-
-        #unitlowrank_vio = @view(vio[base + 1:base + length(SDP.unitlowrank_cons)])
-        #@simd for i = eachindex(SDP.unitlowrank_cons) 
-        #    @inbounds unitlowrank_vio[i] = dot_xTAx(SDP.unitlowrank_cons[i], U)
-        #end
-        #base += length(SDP.unitlowrank_cons)
     else
         @inbounds for (i, A) in enumerate(SDP) 
             𝓐_UV[i] = constraint_eval_UTAV(A, U, V) 
         end
-        # sparse constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        #sparse_vio = @view(vio[base + 1:base + length(SDP.sparse_cons)]) 
-        #@simd for i = eachindex(SDP.sparse_cons) 
-        #    @inbounds sparse_vio[i] = (dot(U, SDP.sparse_cons[i], V) + 
-        #                               dot(V, SDP.sparse_cons[i], U)) / 2  
-        #end
-        #base += length(SDP.sparse_cons)
-
-        ## dense constraints, Tr(AUUᵀ) = sum(U .* (AU))
-        #dense_vio = @view(vio[base + 1:base + length(SDP.dense_cons)])
-        #@simd for i = eachindex(SDP.dense_cons)
-        #    @inbounds dense_vio[i] = (dot(U, SDP.dense_cons[i], V) + 
-        #                              dot(V, SDP.dense_cons[i], U)) / 2 
-        #end
-        #base += length(SDP.dense_cons)
-
-        ## diagonal constraints, Tr(DUUᵀ) = sum(U .* (D * U))
-        #diag_vio = @view(vio[base + 1:base + length(SDP.diag_cons)])
-        #@simd for i = eachindex(SDP.diag_cons) 
-        #    @inbounds diag_vio[i] = (dot(U, SDP.diag_cons[i], V) + 
-        #                             dot(V, SDP.diag_cons[i], U)) / 2
-        #end
-        #base += length(SDP.diag_cons)
-
-        ## low-rank constraints, Tr(BDBᵀUUᵀ) = sum((BᵀU) .* (D * (BᵀU)))
-        #lowrank_vio = @view(vio[base + 1:base + length(SDP.lowrank_cons)])
-        #@simd for i = eachindex(SDP.lowrank_cons)
-        #    @inbounds lowrank_vio[i] = (dot(U, SDP.lowrank_cons[i], V) + 
-        #                                dot(V, SDP.lowrank_cons[i], U)) / 2
-        #end
-        #base += length(SDP.lowrank_cons)
-
-        #unitlowrank_vio = @view(vio[base + 1:base + length(SDP.unitlowrank_cons)])
-        #@simd for i = eachindex(SDP.unitlowrank_cons) 
-        #    @inbounds unitlowrank_vio[i] = (dot(U, SDP.unitlowrank_cons[i], V) +
-        #                                    dot(V, SDP.unitlowrank_cons[i], V)) / 2
-        #end
-        #base += length(SDP.unitlowrank_cons)
     end
 
     # if calcobj = true, deal with objective function value
@@ -163,42 +87,7 @@ function gradient!(
     mul!(BM.G, SDP.C, BM.R)
     @inbounds for (i, A) in enumerate(SDP) 
         mul!(BM.G, A, BM.R, y[i], one(eltype(BM.G)))
-        #BM.G .+= y[i] .* constraint_grad(A, BM.R)
     end
-    #base = 0
-    #λ_sparse = @view(BM.λ[base + 1: base + length(SDP.sparse_cons)]) 
-    #@simd for i = eachindex(SDP.sparse_cons)
-    #    @inbounds mul!(BM.G, SDP.sparse_cons[i], BM.R, λ_sparse[i], one(eltype(BM.G)))
-    #end
-    #base += length(SDP.sparse_cons)
-    #for i = eachindex(SDP.dense_cons)
-
-    #end
-    #base += length(SDP.dense_cons)
-    #for i = eachindex(SDP.diag_cons) 
-    #end
-    #base += length(SDP.diag_cons)
-    #for i = eachindex(SDP.lowrank_cons)
-    #end
-    #base += length(SDP.lowrank_cons)
-    #for i = eachindex(SDP.unitlowrank_cons)
-    #end
-    #for i = 1:m
-    #    if i <= SDP.m_sp
-    #        BM.G += y[i] * SDP.A_sp[i] * BM.R
-    #    elseif i <= SDP.m_sp + SDP.m_diag
-    #        j = i - SDP.m_sp
-    #        BM.G += y[i] * SDP.A_diag[j] * BM.R
-    #    elseif i <= SDP.m_sp + SDP.m_diag + SDP.m_lr
-    #        j = i - SDP.m_sp - SDP.m_diag 
-    #        BM.G += y[i] * SDP.A_lr[j].B * 
-    #            (SDP.A_lr[j].D * 
-    #            (SDP.A_lr[j].B' * BM.R))
-    #    else
-    #        j = i - SDP.m_sp - SDP.m_diag - SDP.m_lr
-    #        BM.G += y[i] * SDP.A_dense[j] * BM.R
-    #    end
-    #end
     lmul!(Tv(2), BM.G)
     return 0
 end

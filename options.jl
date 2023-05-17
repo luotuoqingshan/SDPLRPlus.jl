@@ -8,7 +8,7 @@ using Parameters
     timelim::Tv = 3600.0
     printlevel::Ti = 1
     printfreq::Tv = 60.0
-    numlbfgsvecs::Ti = 3 
+    numlbfgsvecs::Ti = 4 
     σ_strategy::Ti = 1
     λ_updatect::Ti = 1
     #rankredtol::Float64

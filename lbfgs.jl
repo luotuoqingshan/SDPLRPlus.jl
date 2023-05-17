@@ -56,7 +56,7 @@ function dirlbfgs(
     negate::Bool=true,
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     # we store l-bfgs vectors as a cyclic array
-    dir = copy(BM.G)
+    dir = deepcopy(BM.G)
     m = lbfgshis.m
     lst = lbfgshis.latest
     # pay attention here, dir, s and y are all matrices
@@ -65,6 +65,7 @@ function dirlbfgs(
         α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
         @. dir -= lbfgshis.vecs[j].y * α 
         lbfgshis.vecs[j].a = α
+        #@show lbfgshis.vecs[j].a, norm(dir)
         j -= 1
         if j == 0
             j = m
@@ -72,9 +73,14 @@ function dirlbfgs(
     end
 
     j = mod(lst, m) + 1
-    for i = m:1
+    for i = 1:m 
         β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
-        @. dir += lbfgshis.vecs[j].s * (lbfghis.vec[i].a - β) 
+        @. dir += lbfgshis.vecs[j].s * (lbfgshis.vecs[j].a - β) 
+        #@show β, norm(dir)
+        j += 1
+        if j == m + 1
+            j = 1
+        end
     end
 
     # we need to pick -dir as search direction
@@ -101,6 +107,9 @@ function lbfgs_postprocess!(
     lbfgshis.vecs[j].y .+= BM.G
     lbfgshis.vecs[j].ρ = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
     lbfgshis.latest = j
+    #@show norm(lbfgshis.vecs[j].y)
+    #@show norm(lbfgshis.vecs[j].s)
+    #@show lbfgshis.vecs[j].a
+    #@show lbfgshis.vecs[j].ρ
 end
-
 

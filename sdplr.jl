@@ -1,4 +1,5 @@
 using GenericArpack
+using Random
 include("structs.jl")
 include("dataoper.jl")
 include("lbfgs.jl")
@@ -73,10 +74,14 @@ function sdplr(
     SDP = SDPProblem(m, Constraints, C, b)
     n = size(C, 1)
     R_0 = 2 .* rand(n, r) .- 1
+    λ_0 = randn(m)
+    @show norm(R_0)
+    @show norm(λ_0)
+    maxcut_write_sol_in(R_0, λ_0, pwd()*"/data/G11.solin") 
     BM = BurerMonteiro(
         R_0,              #R
         zeros(size(R_0)), #G, will be initialized later
-        randn(m),         #λ
+        λ_0,         #λ
         zeros(m),         #vio(violation + obj), will be initialized later
         one(Tv) / n,          #σ
         zero(Tv),                #obj, will be initialized later
@@ -97,7 +102,7 @@ function _sdplr(
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # misc declarations
     recalcfreq = 5 
-    recalc_cnt = 5 
+    recalc_cnt = 10^7 
     difficulty = 3 
     bestinfeas = 1.0e10
     BM.starttime = time()
@@ -129,7 +134,8 @@ function _sdplr(
 
 
     # TODO essential_calc
-    tol_primal_vio = config.tol_primal_vio / BM.σ 
+    tol_stationarity = config.tol_stationarity / BM.σ 
+    @show tol_stationarity
     𝓛_val, stationarity , primal_vio = 
         essential_calcs!(BM, SDP, normC, normb)
     majoriter = 0 
@@ -141,6 +147,13 @@ function _sdplr(
     origval = 𝓛_val 
 
     majoriter_end = false
+    @show 𝓛_val
+    @show BM.obj 
+    @show normb
+    @show normC
+    @show norm(BM.R, 2)
+    @show norm(BM.λ, 2)
+    @show norm(BM.primal_vio, 2)
 
     while majoriter < config.maxmajoriter 
         #avoid goto in C
@@ -156,19 +169,21 @@ function _sdplr(
 
             # check stopping criteria: rho_c_val = norm of gradient
             # once stationarity condition is satisfied, then break
-            if stationarity <= config.tol_stationarity 
+            if stationarity <= tol_stationarity 
                 break
             end
 
             # in the local iteration, we keep optimizing
             # the subproblem using lbfgsb and return a solution
             # satisfying stationarity condition
-            while (stationarity > config.tol_stationarity) 
+            while (stationarity > tol_stationarity) 
+                #@show tol_stationarity
                 #increase both iter and localiter counters
                 iter += 1
                 localiter += 1
                 # direction has been negated
                 dir = dirlbfgs(BM, lbfgshis, negate=true)
+                #@show norm(dir)
 
                 descent = dot(dir, BM.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
@@ -177,18 +192,23 @@ function _sdplr(
 
                 lastval = 𝓛_val
                 α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                #@show α, 𝓛_val
+                @show iter, 𝓛_val
 
                 BM.R .+= α * dir
                 if recalc_cnt == 0
                     𝓛_val, stationarity, primal_vio = 
                         essential_calcs!(BM, SDP, normC, normb)
                     recalc_cnt = recalcfreq
+                    #@show 𝓛_val, stationarity, primal_vio
                 else
                     gradient!(BM, SDP)
                     stationarity = norm(BM.G, 2) / (1.0 + normC)
                     primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
                     recalc_cnt -= 1
                 end
+                #@show BM.obj, BM.σ 
+                #@show stationarity, primal_vio
 
                 if config.numlbfgsvecs > 0 
                     lbfgs_postprocess!(BM, lbfgshis, dir, α)
@@ -321,5 +341,4 @@ function dualbound(
     dualbound = real.(eigenvals[1]) 
     return dualbound 
 end
-
 
