@@ -188,13 +188,37 @@ end
 dot_xTAx(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot(X, A, X)
 
 
-constraint_eval_UTAU(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot_xTAx(A, X)
-constraint_eval_UTAU(A::LowRankMatrix{T}, X::AbstractMatrix{T}) where {T} = dot_xTAx(A, X) 
-constraint_eval_UTAU(A::UnitLowRankMatrix{T}, X::AbstractMatrix{T}) where {T} = dot_xTAx(A, X)
+constraint_eval_UTAU(A::AbstractMatrix{T}, X::AbstractMatrix{T}, Xt::Adjoint{T}) where {T} = dot_xTAx(A, X)
+constraint_eval_UTAV(
+    A::AbstractMatrix{T}, 
+    U::AbstractMatrix{T},
+    Ut::Adjoint{T}, 
+    V::AbstractMatrix{T},
+    Vt::Adjoint{T},
+    ) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
 
-constraint_eval_UTAV(A::AbstractMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatrix{T}) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
-constraint_eval_UTAV(A::LowRankMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatrix{T}) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
-constraint_eval_UTAV(A::UnitLowRankMatrix{T}, U::AbstractMatrix{T}, V::AbstractMatrix{T}) where {T} = (dot(U, A, V) + dot(V, A, U)) / 2
+
+function constraint_eval_UTAU(A::SparseMatrixCSC{T}, X::AbstractMatrix{T}, Xt::Adjoint{T}) where{T}
+    res = zero(T)
+    @inbounds for(x, y, v) in zip(findnz(A)...)
+        res += v * dot(@view(Xt[:, x]), @view(Xt[:, y]))
+    end
+    return res
+end
+
+
+function constraint_eval_UTAV(
+    A::SparseMatrixCSC{T}, 
+    U::AbstractMatrix{T}, 
+    Ut::Adjoint{T}, 
+    V::AbstractMatrix{T}, 
+    Vt::Adjoint{T}) where{T}
+    res = zero(T)
+    @inbounds for(x, y, v) in zip(findnz(A)...)
+        res += v * (dot(@view(Ut[:, x]), @view(Vt[:, y])) + dot(@view(Vt[:, x]), @view(Ut[:, y])))
+    end
+    return res / 2
+end
 
 
 #TODO: support block-wise data

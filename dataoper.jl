@@ -39,22 +39,24 @@ function Aoper!(
     # deal with sparse and diagonal constraints first
     base = 0
     # store results of 𝓐(UVᵀ + VUᵀ)/2
+    Ut = U'
     if same   
         @inbounds for (i, A) in enumerate(SDP) 
-            𝓐_UV[i] = constraint_eval_UTAU(A, U)
+            𝓐_UV[i] = constraint_eval_UTAU(A, U, Ut)
         end
     else
+        Vt = V'
         @inbounds for (i, A) in enumerate(SDP) 
-            𝓐_UV[i] = constraint_eval_UTAV(A, U, V) 
+            𝓐_UV[i] = constraint_eval_UTAV(A, U, Ut, V, Vt) 
         end
     end
-
     # if calcobj = true, deal with objective function value
     if calcobj 
         if same
-            obj = constraint_eval_UTAU(SDP.C, U) 
+            obj = constraint_eval_UTAU(SDP.C, U, Ut) 
         else
-            obj = constraint_eval_UTAV(SDP.C, U, V)
+            Vt = V'
+            obj = constraint_eval_UTAV(SDP.C, U, Ut, V, Vt)
         end
     end
     return (obj, 𝓐_UV)

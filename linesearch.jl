@@ -14,13 +14,15 @@ function linesearch!(
     update = true,
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # evaluate 𝓐(RDᵀ + DRᵀ)
-
-    C_RD, 𝓐_RD = Aoper(SDP, BM.R, D, same=false, calcobj=true)
-    # remember we divide it by 2 in Aoper, now scale back
-    𝓐_RD .*= 2.0
-    C_RD *= 2.0
-    # evaluate 𝓐(DDᵀ)
-    C_DD, 𝓐_DD = Aoper(SDP, D, D, same=true, calcobj=true)
+    critical_compute_dt = @elapsed begin 
+        C_RD, 𝓐_RD = Aoper(SDP, BM.R, D, same=false, calcobj=true)
+        # remember we divide it by 2 in Aoper, now scale back
+        𝓐_RD .*= 2.0
+        C_RD *= 2.0
+        # evaluate 𝓐(DDᵀ)
+        C_DD, 𝓐_DD = Aoper(SDP, D, D, same=true, calcobj=true)
+    end
+    @show critical_compute_dt
 
     biquadratic = zeros(5)
     cubic = zeros(4)

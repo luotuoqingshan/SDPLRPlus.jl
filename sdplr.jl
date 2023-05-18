@@ -23,44 +23,6 @@ function sdplr(
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     m = length(As)
-    #@assert (typeof(C) <: SparseMatrixCSC 
-    #     || typeof(C) <: Diagonal
-    #     || typeof(C) <: LowRankMatrix) "Wrong matrix type of cost matrix."
-    #sparse_cons = SparseMatrixCSC{Tv, Ti}[]
-    #dense_cons = Matrix{Tv}[]
-    #diag_cons = Diagonal{Tv}[]
-    #lowrank_cons = LowRankMatrix{Tv}[]
-    #unitlowrank_cons = UnitLowRankMatrix{Tv}[]
-
-    #sparse_bs = Tv[]
-    #dense_bs = Tv[]
-    #diag_bs = Tv[]
-    #lowrank_bs = Tv[]
-    #unitlowrank_bs = Tv[]
-    #for i = 1:m
-    #    if isa(As[i], SparseMatrixCSC)
-    #        push!(sparse_cons, As[i])
-    #        push!(sparse_bs, b[i])
-    #    elseif isa(As[i], Diagonal) 
-    #        push!(diag_cons, As[i])
-    #        push!(diag_bs, b[i])
-    #    elseif isa(As[i], Matrix) 
-    #        push!(dense_cons, As[i])
-    #        push!(dense_bs, b[i])
-    #    elseif isa(As[i], LowRankMatrix) 
-    #        push!(lowrank_cons, As[i])
-    #        @show typeof(lowrank_bs)
-    #        push!(lowrank_bs, b[i])
-    #    elseif isa(As[i], UnitLowRankMatrix) 
-    #        push!(unitlowrank_cons, As[i])
-    #        push!(unitlowrank_bs, b[i])
-    #    else
-    #        error("Wrong matrix type of constraint matrix.")
-    #    end
-    #end
-    #bs = [sparse_bs; dense_bs; diag_bs; lowrank_bs; unitlowrank_bs]
-    #SDP = SDPProblem(m, sparse_cons, dense_cons, diag_cons, lowrank_cons,
-    #                 unitlowrank_cons, C, bs)
     Constraints = Any[]
     for A in As
         if isa(A, LowRankMatrix)
@@ -75,9 +37,6 @@ function sdplr(
     n = size(C, 1)
     R_0 = 2 .* rand(n, r) .- 1
     λ_0 = randn(m)
-    @show norm(R_0)
-    @show norm(λ_0)
-    maxcut_write_sol_in(R_0, λ_0, pwd()*"/data/G11.solin") 
     BM = BurerMonteiro(
         R_0,              #R
         zeros(size(R_0)), #G, will be initialized later
@@ -147,13 +106,6 @@ function _sdplr(
     origval = 𝓛_val 
 
     majoriter_end = false
-    @show 𝓛_val
-    @show BM.obj 
-    @show normb
-    @show normC
-    @show norm(BM.R, 2)
-    @show norm(BM.λ, 2)
-    @show norm(BM.primal_vio, 2)
 
     while majoriter < config.maxmajoriter 
         #avoid goto in C
@@ -232,7 +184,6 @@ function _sdplr(
                     current_majoriter_end = true
                     break
                 end
-
                 bestinfeas = min(primal_vio, bestinfeas)
             end
 
