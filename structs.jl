@@ -96,7 +96,6 @@ function norm(
 end
 
 
-
 function LinearAlgebra.mul!(
     Y::AbstractMatrix{Tv},
     A::LowRankMatrix{Tv},
@@ -110,6 +109,26 @@ function LinearAlgebra.mul!(
     mul!(A.extra, A.Bt, X)
     lmul!(A.D, A.extra)
     mul!(Y, A.B, A.extra)
+end
+
+
+using LinearAlgebra, SparseArrays, BenchmarkTools
+function mymul!(
+    Y::AbstractMatrix{Tv},
+    A::SparseMatrixCSC{Tv},
+    X::AbstractMatrix{Tv},
+    α::Tv,
+    β::Tv,
+    ) where {Tv <: AbstractFloat}
+    lmul!(β, Y)
+    Yt = Y'
+    Xt = X'
+    if (size(Y, 1) != size(A, 1) || size(X, 1) != size(A, 2) || size(Y, 2) != size(X, 2))
+        throw(DimensionMismatch("dimension mismatch"))
+    end
+    for (x, y, v) in zip(findnz(A)...)
+        @view(Yt[:, x]) .+= α * v * @view(Xt[:, y]) 
+    end
 end
 
 
@@ -218,6 +237,35 @@ function constraint_eval_UTAV(
         res += v * (dot(@view(Ut[:, x]), @view(Vt[:, y])) + dot(@view(Vt[:, x]), @view(Ut[:, y])))
     end
     return res / 2
+end
+
+
+function constraint_grad!(
+    G::AbstractMatrix{T},
+    Gt::AbstractMatrix{T},
+    A::AbstractMatrix{T},
+    R::AbstractMatrix{T},
+    Rt::Adjoint{T},
+    α::T,
+    ) where {T}
+    mul!(G, A, R, α, one(T))
+end
+
+
+function constraint_grad!(
+    G::AbstractMatrix{T},
+    Gt::AbstractMatrix{T},
+    A::SparseMatrixCSC{T},
+    R::AbstractMatrix{T},
+    Rt::Adjoint{T},
+    α::T,
+    ) where {T}
+    if (size(G, 1) != size(A, 1) || size(G, 2) != size(R, 2) || size(A, 2) != size(R, 1))
+        throw(DimensionMismatch("dimension mismatch"))
+    end
+    @inbounds for (x, y, v) in zip(findnz(A)...)
+        @view(Gt[:, x]) .+= α * v * @view(Rt[:, y])
+    end
 end
 
 

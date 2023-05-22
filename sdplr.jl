@@ -134,7 +134,9 @@ function _sdplr(
                 iter += 1
                 localiter += 1
                 # direction has been negated
-                dir = dirlbfgs(BM, lbfgshis, negate=true)
+                dir_dt = @elapsed begin
+                    dir = dirlbfgs(BM, lbfgshis, negate=true)
+                end
                 #@show norm(dir)
 
                 descent = dot(dir, BM.G)
@@ -143,27 +145,33 @@ function _sdplr(
                 end
 
                 lastval = 𝓛_val
-                α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                linesearch_dt = @elapsed begin
+                    α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                end
                 #@show α, 𝓛_val
                 @show iter, 𝓛_val
 
                 BM.R .+= α * dir
-                if recalc_cnt == 0
-                    𝓛_val, stationarity, primal_vio = 
-                        essential_calcs!(BM, SDP, normC, normb)
-                    recalc_cnt = recalcfreq
-                    #@show 𝓛_val, stationarity, primal_vio
-                else
-                    gradient!(BM, SDP)
-                    stationarity = norm(BM.G, 2) / (1.0 + normC)
-                    primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
-                    recalc_cnt -= 1
+                essential_calc_dt = @elapsed begin
+                    if recalc_cnt == 0
+                        𝓛_val, stationarity, primal_vio = 
+                            essential_calcs!(BM, SDP, normC, normb)
+                        recalc_cnt = recalcfreq
+                        #@show 𝓛_val, stationarity, primal_vio
+                    else
+                        gradient!(BM, SDP)
+                        stationarity = norm(BM.G, 2) / (1.0 + normC)
+                        primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
+                        recalc_cnt -= 1
+                    end
                 end
                 #@show BM.obj, BM.σ 
                 #@show stationarity, primal_vio
 
-                if config.numlbfgsvecs > 0 
-                    lbfgs_postprocess!(BM, lbfgshis, dir, α)
+                lbfgs_dt = @elapsed begin
+                    if config.numlbfgsvecs > 0 
+                        lbfgs_postprocess!(BM, lbfgshis, dir, α)
+                    end
                 end
 
                 current_time = time() 
@@ -184,6 +192,7 @@ function _sdplr(
                     current_majoriter_end = true
                     break
                 end
+                @show dir_dt, linesearch_dt, essential_calc_dt, lbfgs_dt
                 bestinfeas = min(primal_vio, bestinfeas)
             end
 

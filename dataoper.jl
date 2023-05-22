@@ -85,11 +85,15 @@ function gradient!(
     m = SDP.m
     y = similar(BM.λ)
     @. y = -(BM.λ - BM.σ * BM.primal_vio)
-
-    mul!(BM.G, SDP.C, BM.R)
+    fill!(BM.G, zero(Tv))
+    n, r = size(BM.R)
+    Gt = zeros(r, n) 
+    Rt = BM.R'
+    constraint_grad!(BM.G, Gt, SDP.C, BM.R, Rt, one(Tv))
     @inbounds for (i, A) in enumerate(SDP) 
-        mul!(BM.G, A, BM.R, y[i], one(eltype(BM.G)))
+        constraint_grad!(BM.G, Gt, SDP[i], BM.R, Rt, y[i])
     end
+    BM.G .+= Gt'
     lmul!(Tv(2), BM.G)
     return 0
 end
@@ -108,8 +112,13 @@ function essential_calcs!(
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
-    𝓛_val = lagrangval!(BM, SDP)
-    gradient!(BM, SDP)
+    L_val_dt = @elapsed begin
+        𝓛_val = lagrangval!(BM, SDP)
+    end
+    grad_dt = @elapsed begin
+        gradient!(BM, SDP)
+    end
+    @show L_val_dt, grad_dt
     stationarity = norm(BM.G, 2) / (1.0 + normC)
     primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, stationarity, primal_vio)

@@ -20,6 +20,17 @@ using Test
         end
     end
 
+    using LinearAlgebra, SparseArrays
+    @testset "sparsematrix mul" begin
+        n = 100
+        A = sprand(n, n, 0.001)
+        R = rand(n, 5)
+        X = similar(R)
+        Y = X + A * R
+        X1 = deepcopy(X)
+        @show norm(Y - X)
+    end
+
     @testset "UnitLowRankMatrix tests" begin
         ntests = 100
         for i = 1:ntests
