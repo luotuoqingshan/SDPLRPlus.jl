@@ -1,11 +1,49 @@
 using GenericArpack
+using MKLSparse
 using Random
+using SparseArrays
 include("structs.jl")
 include("dataoper.jl")
 include("lbfgs.jl")
 include("myprint.jl")
 include("linesearch.jl")
 include("options.jl")
+
+
+function preprocess_sparsecons(As::Vector{SparseMatrixCSC{Tv, Ti}}) where {Tv <: AbstractFloat, Ti <: Integer}
+    I, J, V = Int[], Int[], Tv[]
+    n = size(As[1], 1)
+    for (i, A) in enumerate(As)
+        AI, AJ, AV = findnz(A)
+        append!(I, AI)
+        append!(J, AJ)
+        append!(V, AV)
+    end
+    S = sparse(I, J, V, n, n)
+    newI, newJ, newV = findnz(S)
+    inds = Vector{Int64}[]
+    for (i, A) in enumerate(As)
+        ind = zeros(Int64, nnz(A))
+        for (j, (x, y, v)) in enumerate(zip(findnz(A)...))
+            low = S.colptr[y]
+            high = S.colptr[y+1]-1
+            while low <= high
+                mid = (low + high) ÷ 2
+                if S.rowval[mid] == x
+                    ind[j] = mid 
+                    break
+                elseif S.rowval[mid] < x
+                    low = mid + 1
+                else
+                    high = mid - 1
+                end
+            end
+        end
+        push!(inds, ind)
+    end
+    return S, inds
+end
+
 
 """
 Interface for SDPLR 
@@ -24,23 +62,62 @@ function sdplr(
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     m = length(As)
     Constraints = Any[]
+    sparsecons = SparseMatrixCSC{Tv, Ti}[]
+
+    if isa(C, SparseMatrixCSC)
+        push!(sparsecons, C)
+    elseif isa(C, Diagonal)
+        push!(sparsecons, sparse(C))
+    end
+
+    for A in As
+        if isa(A, SparseMatrixCSC)
+            push!(sparsecons, A)
+        elseif isa(A, Diagonal)
+            push!(sparsecons, sparse(A))
+        end
+    end
+
+    S, inds = preprocess_sparsecons(sparsecons)
+    cnt = 0
+
+    fill!(S.nzval, zero(Tv))
+    if isa(C, SparseMatrixCSC)
+        cnt += 1
+        obj = SparseMatrix(C, inds[cnt])    
+    elseif isa(C, Diagonal)
+        cnt += 1
+        obj = DiagonalMatrix(C, inds[cnt])
+    elseif isa(C, LowRankMatrix)
+        obj = LowRankMatrix(C.D, C.B, r) 
+    elseif isa(C, UnitLowRankMatrix)
+        obj = UnitLowRankMatrix(C.B, r)
+    end
+
     for A in As
         if isa(A, LowRankMatrix)
             push!(Constraints, LowRankMatrix(A.D, A.B, r))
         elseif isa(A, UnitLowRankMatrix)
-            push!(Constraints, LowRankMatrix(A.B, r))
+            push!(Constraints, UnitLowRankMatrix(A.B, r))
+        elseif isa(A, SparseMatrixCSC)
+            cnt += 1
+            push!(Constraints, SparseMatrix(A, inds[cnt]))
+        elseif isa(A, Diagonal)
+            cnt += 1
+            push!(Constraints, DiagonalMatrix(A, inds[cnt]))
         else
             push!(Constraints, A)
         end
     end
-    SDP = SDPProblem(m, Constraints, C, b)
+
+    SDP = SDPProblem(m, Constraints, obj, b, S)
     n = size(C, 1)
-    R_0 = 2 .* rand(n, r) .- 1
-    λ_0 = randn(m)
+    R₀ = 2 .* rand(n, r) .- 1
+    λ₀ = randn(m)
     BM = BurerMonteiro(
-        R_0,              #R
-        zeros(size(R_0)), #G, will be initialized later
-        λ_0,         #λ
+        R₀,              #R
+        zeros(size(R₀)), #G, will be initialized later
+        λ₀,         #λ
         zeros(m),         #vio(violation + obj), will be initialized later
         one(Tv) / n,          #σ
         zero(Tv),                #obj, will be initialized later
@@ -66,6 +143,8 @@ function _sdplr(
     bestinfeas = 1.0e10
     BM.starttime = time()
     lastprint = BM.starttime # timestamp of last print
+    R₀ = deepcopy(BM.R) 
+    λ₀ = deepcopy(BM.λ)
 
     # TODO setup printing
     if config.printlevel > 0
@@ -94,7 +173,7 @@ function _sdplr(
 
     # TODO essential_calc
     tol_stationarity = config.tol_stationarity / BM.σ 
-    @show tol_stationarity
+    #@show tol_stationarity
     𝓛_val, stationarity , primal_vio = 
         essential_calcs!(BM, SDP, normC, normb)
     majoriter = 0 
@@ -148,8 +227,8 @@ function _sdplr(
                 linesearch_dt = @elapsed begin
                     α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
                 end
-                #@show α, 𝓛_val
-                @show iter, 𝓛_val
+                @printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
+                #@show iter, 𝓛_val
 
                 BM.R .+= α * dir
                 essential_calc_dt = @elapsed begin
@@ -159,7 +238,8 @@ function _sdplr(
                         recalc_cnt = recalcfreq
                         #@show 𝓛_val, stationarity, primal_vio
                     else
-                        gradient!(BM, SDP)
+                        gradient_dt = @elapsed gradient!(BM, SDP)
+                        @show gradient_dt
                         stationarity = norm(BM.G, 2) / (1.0 + normC)
                         primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
                         recalc_cnt -= 1
@@ -263,7 +343,7 @@ function _sdplr(
         end
     end
     𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)
-
+    println("Done")
     if config.checkdual
         BM.dual_time = @elapsed best_dualbd = dualbound(BM, SDP)
     end
@@ -273,6 +353,8 @@ function _sdplr(
     return Dict([
         "R" => BM.R,
         "λ" => BM.λ,
+        "R₀" => R₀,
+        "λ₀" => λ₀,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
         "obj" => BM.obj,
