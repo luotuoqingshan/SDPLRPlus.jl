@@ -93,9 +93,9 @@ function gradient!(
     #Gt = zeros(r, n) 
     #Rt = BM.R'
     S = deepcopy(SDP.aggsparse)
-    constraint_grad!(BM.G, S, SDP.C, BM.R, one(Tv))
+    constraint_grad!(BM.G, S, SDP.C, SDP.indC, BM.R, one(Tv))
     preprocess_dt = @elapsed for (i, A) in enumerate(SDP)
-        constraint_grad!(BM.G, S, A, BM.R, y[i])
+        constraint_grad!(BM.G, S, A, SDP.indAs[i], BM.R, y[i])
     end
     matmatmul_dt = @elapsed mul!(BM.G, S, BM.R, one(Tv), one(Tv))
     @show preprocess_dt, matmatmul_dt

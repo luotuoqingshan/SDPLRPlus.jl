@@ -39,24 +39,6 @@ struct UnitLowRankMatrix{T} <: AbstractMatrix{T}
 end
 
 
-struct SparseMatrix{T} <: AbstractMatrix{T}
-    A::SparseMatrixCSC{T}
-    ind::Vector{Int}
-    function SparseMatrix(A::SparseMatrixCSC{T}, ind::Vector{Int}) where T
-        return new{T}(A, ind)
-    end
-end
-
-
-struct DiagonalMatrix{T} <: AbstractMatrix{T}
-    D::Diagonal{T}
-    ind::Vector{Int}
-    function DiagonalMatrix(D::Diagonal{T}, ind::Vector{Int}) where T
-        return new{T}(D, ind)
-    end
-end
-
-
 #LowRankMatrix(D::Diagonal{T}, B::Matrix{T}) where T = LowRankMatrix(D, B, Matrix(B'), zeros(0,0))
 #function LowRankMatrix(
 #    D::Diagonal{Tv}, 
@@ -78,11 +60,8 @@ end
 
 size(A::LowRankMatrix) = (n = size(A.B, 1); (n, n))
 size(A::UnitLowRankMatrix) = (n = size(A.B, 1); (n, n))
-size(A::SparseMatrix) = size(A.A)
-size(A::DiagonalMatrix) = size(A.D)
 Base.getindex(A::LowRankMatrix, i::Int, j::Int) = @view(A.Bt[:, i])' * A.D * @view(A.Bt[:, j])
 Base.getindex(A::UnitLowRankMatrix, i::Int, j::Int) = @view(A.Bt[:, i])' * @view(A.Bt[:, j])
-Base.getindex(A::SparseMatrix, i::Int, j::Int) = A.A[i, j]
 
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, A::LowRankMatrix)
@@ -104,25 +83,6 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, A::UnitLowRankMatrix)
     show(io, mime, A.B)
 end
 
-
-function show(io::IO, mime::MIME{Symbol("text/plain")}, A::SparseMatrix)
-    summary(io, A) 
-    println(io)
-    println(io, "SparseMatrixCSC of A.")
-    show(io, mime, A.A)
-    println(io, "Entry indices in the aggregation of all sparse constraints.")
-    show(io, mime, A.ind)
-end
-
-
-function show(io::IO, mime::MIME{Symbol("text/plain")}, A::DiagonalMatrix)
-    summary(io, A) 
-    println(io)
-    println(io, "DiagonalMatrix of D.")
-    show(io, mime, A.D)
-    println(io, "Entry indices in the aggregation of all sparse constraints.")
-    show(io, mime, A.ind)
-end
 
 function norm(
     A::LowRankMatrix{Tv},
@@ -258,37 +218,6 @@ function dot(
 end
 
 
-norm(A::SparseMatrix{Tv}, p::Real) where {Tv <: AbstractFloat} = norm(A.A, p)
-norm(A::DiagonalMatrix{Tv}, p::Real) where {Tv <: AbstractFloat} = norm(A.d, p)
-
-
-function LinearAlgebra.mul!(
-    Y::AbstractMatrix{Tv}, 
-    A::SparseMatrix{Tv}, 
-    X::AbstractMatrix{Tv},
-    ) where {Tv <: AbstractFloat}
-    mul!(Y, A.A, X)
-end
-
-
-function LinearAlgebra.mul!(
-    Y::AbstractMatrix{Tv}, 
-    A::DiagonalMatrix{Tv}, 
-    X::AbstractMatrix{Tv},
-) where {Tv <: AbstractFloat}
-    mul!(Y, A.D, X)
-end
-
-
-function dot(
-    X::AbstractMatrix{Tv},
-    A::DiagonalMatrix{Tv},
-    Y::AbstractMatrix{Tv}
-    ) where {Tv <: AbstractFloat}
-    return dot(X, A.D, Y)
-end
-
-
 # fall back function for other matrices
 dot_xTAx(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot(X, A, X)
 
@@ -309,12 +238,12 @@ constraint_eval_UTAV(
 
 
 function constraint_eval_UTAU(
-    A::SparseMatrix{T}, 
+    A::SparseMatrixCSC{T}, 
     X::AbstractMatrix{T}, 
     Xt::Adjoint{T}
 ) where{T}
     res = zero(T)
-    @inbounds for(x, y, v) in zip(findnz(A.A)...)
+    @inbounds for(x, y, v) in zip(findnz(A)...)
         res += v * dot(@view(Xt[:, x]), @view(Xt[:, y]))
     end
     return res
@@ -322,13 +251,13 @@ end
 
 
 function constraint_eval_UTAV(
-    A::SparseMatrix{T}, 
+    A::SparseMatrixCSC{T}, 
     U::AbstractMatrix{T}, 
     Ut::Adjoint{T}, 
     V::AbstractMatrix{T}, 
     Vt::Adjoint{T}) where{T}
     res = zero(T)
-    @inbounds for(x, y, v) in zip(findnz(A.A)...)
+    @inbounds for(x, y, v) in zip(findnz(A)...)
         res += (v * (dot(@view(Ut[:, x]), @view(Vt[:, y])) 
                 + dot(@view(Vt[:, x]), @view(Ut[:, y]))))
     end
@@ -341,10 +270,11 @@ function constraint_grad!(
     S::SparseMatrixCSC{T},
     #Gt::AbstractMatrix{T},
     A::AbstractMatrix{T},
+    ind::Vector{Ti},
     R::AbstractMatrix{T},
     #Rt::Adjoint{T},
     α::T,
-    ) where {T}
+    ) where {T, Ti}
     mul!(G, A, R, α, one(T))
 end
 
@@ -353,13 +283,14 @@ function constraint_grad!(
     G::AbstractMatrix{T},
     S::SparseMatrixCSC{T},
     #Gt::AbstractMatrix{T},
-    A::SparseMatrix{T},
+    A::SparseMatrixCSC{T},
+    ind::Vector{Ti},
     R::AbstractMatrix{T},
     #Rt::Adjoint{T},
     α::T,
-    ) where {T}
-    @inbounds for i in axes(A.ind)
-        S.nzval[A.ind[i]] += α * A.A.nzval[i]
+    ) where {T, Ti}
+    @inbounds @simd for i in axes(ind)
+        S.nzval[ind[i]] += α * A.nzval[i]
     end
 end
 
@@ -368,13 +299,14 @@ function constraint_grad!(
     G::AbstractMatrix{T},
     S::SparseMatrixCSC{T},
     #Gt::AbstractMatrix{T},
-    A::DiagonalMatrix{T},
+    A::Diagonal{T},
+    ind::Vector{Ti},
     R::AbstractMatrix{T},
     #Rt::Adjoint{T},
     α::T,
-    ) where {T}
-    @inbounds for i in axes(A.ind)
-        S.nzval[A.ind[i]] += α * A.D.diag[i]
+    ) where {T, Ti}
+    @inbounds @simd for i in axes(ind)
+        S.nzval[ind[i]] += α * A.diag[i]
     end
 end
 #
@@ -397,7 +329,7 @@ end
 
 
 #TODO: support block-wise data
-struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons} 
+struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons, Tind} 
     # number of constraints
     m::Ti       
     # list of matrices which are sparse/dense/low-rank/diagonal
@@ -408,6 +340,8 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, 
     b::Vector{Tv}
     # aggregated matrix for sparse constraints
     aggsparse::SparseMatrixCSC{Tv}
+    indC::Tind
+    indAs::Vector{Tind}
 end
 
 

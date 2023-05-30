@@ -84,33 +84,47 @@ function sdplr(
     fill!(S.nzval, zero(Tv))
     if isa(C, SparseMatrixCSC)
         cnt += 1
-        obj = SparseMatrix(C, inds[cnt])    
+        obj = C
+        indC = inds[cnt]
     elseif isa(C, Diagonal)
         cnt += 1
-        obj = DiagonalMatrix(C, inds[cnt])
+        obj = C
+        indC = inds[cnt]
     elseif isa(C, LowRankMatrix)
         obj = LowRankMatrix(C.D, C.B, r) 
+        indC = zeros(0)
     elseif isa(C, UnitLowRankMatrix)
         obj = UnitLowRankMatrix(C.B, r)
+        indC = zeros(0)
+    else
+        obj = C
+        indC = zeros(0)
     end
 
+    indAs = Any[]
     for A in As
         if isa(A, LowRankMatrix)
+            indA = zeros(0)
             push!(Constraints, LowRankMatrix(A.D, A.B, r))
         elseif isa(A, UnitLowRankMatrix)
+            indA = zeros(0)
             push!(Constraints, UnitLowRankMatrix(A.B, r))
         elseif isa(A, SparseMatrixCSC)
             cnt += 1
-            push!(Constraints, SparseMatrix(A, inds[cnt]))
+            indA = inds[cnt]
+            push!(Constraints, A)
         elseif isa(A, Diagonal)
             cnt += 1
-            push!(Constraints, DiagonalMatrix(A, inds[cnt]))
+            indA = inds[cnt]
+            push!(Constraints, A)
         else
+            indA = zeros(0)
             push!(Constraints, A)
         end
+        push!(indAs, indA)
     end
 
-    SDP = SDPProblem(m, Constraints, obj, b, S)
+    SDP = SDPProblem(m, Constraints, obj, b, S, indC, indAs)
     n = size(C, 1)
     R₀ = 2 .* rand(n, r) .- 1
     λ₀ = randn(m)
