@@ -1,7 +1,7 @@
 """
 Vector of L-BFGS
 """
-mutable struct LBFGSVector{T <: AbstractFloat}
+struct LBFGSVector{T <: AbstractFloat}
     # notice that we use matrix instead 
     # of vector to store s and y because our
     # decision variables are matrices
@@ -10,21 +10,21 @@ mutable struct LBFGSVector{T <: AbstractFloat}
     # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
     y::Matrix{T}
     # ρ = 1/(⟨y, s⟩)
-    ρ::T
+    ρ::Base.RefValue{T}
     # temporary variable
-    a::T
+    a::Base.RefValue{T}
 end
 
 """
 History of l-bfgs vectors
 """
-mutable struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
+struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
     # number of l-bfgs vectors
     m::Ti
     vecs::Vector{LBFGSVector{Tv}}
     # the index of the latest l-bfgs vector
     # we use a cyclic array to store l-bfgs vectors
-    latest::Ti
+    latest::Base.RefValue{Ti}
 end
 
 
@@ -50,22 +50,22 @@ Notice here if we initialize all sᵢ, yᵢ to be zero
 then we don't need to record how many
 sᵢ, yᵢ pairs we have already computed 
 """
-function dirlbfgs(
+function dirlbfgs!(
+    dir::Matrix{Tv},
     BM::BurerMonteiro{Tv},
     lbfgshis::LBFGSHistory{Ti, Tv};
     negate::Bool=true,
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     # we store l-bfgs vectors as a cyclic array
-    dir = deepcopy(BM.G)
+    dir .= BM.G
     m = lbfgshis.m
-    lst = lbfgshis.latest
+    lst = lbfgshis.latest[]
     # pay attention here, dir, s and y are all matrices
     j = lst
     for i = 1:m 
-        α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
+        α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
         @. dir -= lbfgshis.vecs[j].y * α 
-        lbfgshis.vecs[j].a = α
-        #@show lbfgshis.vecs[j].a, norm(dir)
+        lbfgshis.vecs[j].a[] = α
         j -= 1
         if j == 0
             j = m
@@ -74,8 +74,8 @@ function dirlbfgs(
 
     j = mod(lst, m) + 1
     for i = 1:m 
-        β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
-        @. dir += lbfgshis.vecs[j].s * (lbfgshis.vecs[j].a - β) 
+        β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
+        @. dir += lbfgshis.vecs[j].s * (lbfgshis.vecs[j].a[] - β) 
         #@show β, norm(dir)
         j += 1
         if j == m + 1
@@ -89,7 +89,7 @@ function dirlbfgs(
     end
 
     # partial update of lbfgs history 
-    j = mod(lbfgshis.latest, lbfgshis.m) + 1
+    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     lbfgshis.vecs[j].y .= -BM.G
     return dir
 end
@@ -102,14 +102,10 @@ function lbfgs_postprocess!(
     stepsize::T,
 )where T
     # update lbfgs history
-    j = mod(lbfgshis.latest, lbfgshis.m) + 1
+    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     @. lbfgshis.vecs[j].s = stepsize * dir
     lbfgshis.vecs[j].y .+= BM.G
-    lbfgshis.vecs[j].ρ = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
-    lbfgshis.latest = j
-    #@show norm(lbfgshis.vecs[j].y)
-    #@show norm(lbfgshis.vecs[j].s)
-    #@show lbfgshis.vecs[j].a
-    #@show lbfgshis.vecs[j].ρ
+    lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
+    lbfgshis.latest[] = j
 end
 

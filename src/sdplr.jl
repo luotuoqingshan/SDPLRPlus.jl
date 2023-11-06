@@ -1,5 +1,5 @@
 using GenericArpack
-using MKLSparse
+using MKLSparse # to speed up sparse matrix multiplication
 using Random
 using SparseArrays
 include("structs.jl")
@@ -175,13 +175,13 @@ function _sdplr(
     lbfgshis = LBFGSHistory{Ti, Tv}(
         config.numlbfgsvecs,
         LBFGSVector{Tv}[],
-        config.numlbfgsvecs::Ti)
+        Ref(config.numlbfgsvecs))
 
     for i = 1:config.numlbfgsvecs
         push!(lbfgshis.vecs, 
             LBFGSVector(zeros(Tv, size(BM.R)),
                      zeros(Tv, size(BM.R)),
-                     zero(Tv), zero(Tv)))
+                     Ref(zero(Tv)), Ref(zero(Tv))))
     end
 
 
@@ -199,6 +199,7 @@ function _sdplr(
     origval = 𝓛_val 
 
     majoriter_end = false
+    dir = similar(BM.R)
 
     while majoriter < config.maxmajoriter 
         #avoid goto in C
@@ -227,9 +228,7 @@ function _sdplr(
                 iter += 1
                 localiter += 1
                 # direction has been negated
-                dir_dt = @elapsed begin
-                    dir = dirlbfgs(BM, lbfgshis, negate=true)
-                end
+                dirlbfgs!(dir, BM, lbfgshis, negate=true)
                 #@show norm(dir)
 
                 descent = dot(dir, BM.G)
@@ -238,34 +237,25 @@ function _sdplr(
                 end
 
                 lastval = 𝓛_val
-                linesearch_dt = @elapsed begin
-                    α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
-                end
-                @printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
+                α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
 
-                BM.R .+= α * dir
-                essential_calc_dt = @elapsed begin
-                    if recalc_cnt == 0
-                        𝓛_val, stationarity, primal_vio = 
-                            essential_calcs!(BM, SDP, normC, normb)
-                        recalc_cnt = recalcfreq
-                        #@show 𝓛_val, stationarity, primal_vio
-                    else
-                        gradient_dt = @elapsed gradient!(BM, SDP)
-                        @show gradient_dt
-                        stationarity = norm(BM.G, 2) / (1.0 + normC)
-                        primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
-                        recalc_cnt -= 1
-                    end
+                @. BM.R += α * dir
+                if recalc_cnt == 0
+                    𝓛_val, stationarity, primal_vio = 
+                        essential_calcs!(BM, SDP, normC, normb)
+                    recalc_cnt = recalcfreq
+                    #@show 𝓛_val, stationarity, primal_vio
+                else
+                    gradient!(BM, SDP)
+                    stationarity = norm(BM.G, 2) / (1.0 + normC)
+                    primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
+                    recalc_cnt -= 1
                 end
-                #@show BM.obj, BM.σ 
-                #@show stationarity, primal_vio
 
-                lbfgs_dt = @elapsed begin
-                    if config.numlbfgsvecs > 0 
-                        lbfgs_postprocess!(BM, lbfgshis, dir, α)
-                    end
+                if config.numlbfgsvecs > 0 
+                    lbfgs_postprocess!(BM, lbfgshis, dir, α)
                 end
 
                 current_time = time() 
@@ -286,7 +276,6 @@ function _sdplr(
                     current_majoriter_end = true
                     break
                 end
-                @show dir_dt, linesearch_dt, essential_calc_dt, lbfgs_dt
                 bestinfeas = min(primal_vio, bestinfeas)
             end
 
@@ -353,7 +342,7 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(BM.R)), zeros(size(BM.R)), 0.0, 0.0)
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(BM.R)), zeros(size(BM.R)), Ref(0.0), Ref(0.0))
         end
     end
     𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)

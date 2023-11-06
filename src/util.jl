@@ -11,3 +11,16 @@ function goemans_williamson_random_rounding(
     n, r = size(R)
     v = randn()
 end
+
+
+function save_benchmark_results(
+    res,
+    filepath::String,
+)
+    io = IOBuffer()
+    show(io, "text/plain", res)
+    s = String(take!(io))
+    open(filepath, "w") do fid
+        write(fid, s)
+    end
+end

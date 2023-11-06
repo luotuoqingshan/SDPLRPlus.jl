@@ -40,28 +40,25 @@ function Aoper!(
     base = 0
     # store results of 𝓐(UVᵀ + VUᵀ)/2
     Ut = U'
-    constraint_eval_dt = @elapsed begin
-        if same   
-            @inbounds for (i, A) in enumerate(SDP) 
-                𝓐_UV[i] = constraint_eval_UTAU(A, U, Ut)
-            end
-        else
-            Vt = V'
-            @inbounds for (i, A) in enumerate(SDP) 
-                𝓐_UV[i] = constraint_eval_UTAV(A, U, Ut, V, Vt) 
-            end
+    if same   
+        @inbounds for (i, A) in enumerate(SDP) 
+            𝓐_UV[i] = constraint_eval_UTAU(A, U, Ut)
         end
-        # if calcobj = true, deal with objective function value
-        if calcobj 
-            if same
-                obj = constraint_eval_UTAU(SDP.C, U, Ut) 
-            else
-                Vt = V'
-                obj = constraint_eval_UTAV(SDP.C, U, Ut, V, Vt)
-            end
+    else
+        Vt = V'
+        @inbounds for (i, A) in enumerate(SDP) 
+            𝓐_UV[i] = constraint_eval_UTAV(A, U, Ut, V, Vt) 
         end
     end
-    @show constraint_eval_dt
+    # if calcobj = true, deal with objective function value
+    if calcobj 
+        if same
+            obj = constraint_eval_UTAU(SDP.C, U, Ut) 
+        else
+            Vt = V'
+            obj = constraint_eval_UTAV(SDP.C, U, Ut, V, Vt)
+        end
+    end
     return (obj, 𝓐_UV)
 end
 
@@ -90,15 +87,12 @@ function gradient!(
     @. y = -(BM.λ - BM.σ * BM.primal_vio)
     fill!(BM.G, zero(Tv))
     n, r = size(BM.R)
-    #Gt = zeros(r, n) 
-    #Rt = BM.R'
     S = deepcopy(SDP.aggsparse)
     constraint_grad!(BM.G, S, SDP.C, SDP.indC, BM.R, one(Tv))
-    preprocess_dt = @elapsed for (i, A) in enumerate(SDP)
+    for (i, A) in enumerate(SDP)
         constraint_grad!(BM.G, S, A, SDP.indAs[i], BM.R, y[i])
     end
-    matmatmul_dt = @elapsed mul!(BM.G, S, BM.R, one(Tv), one(Tv))
-    @show preprocess_dt, matmatmul_dt
+    mul!(BM.G, S, BM.R, one(Tv), one(Tv))
     lmul!(Tv(2), BM.G)
     return 0
 end
@@ -123,7 +117,6 @@ function essential_calcs!(
     grad_dt = @elapsed begin
         gradient!(BM, SDP)
     end
-    #@show L_val_dt, grad_dt
     stationarity = norm(BM.G, 2) / (1.0 + normC)
     primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, stationarity, primal_vio)
