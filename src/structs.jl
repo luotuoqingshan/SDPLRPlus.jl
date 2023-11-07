@@ -359,8 +359,19 @@ function Base.:length(SDP::SDPProblem)
     return SDP.m
 end
 
+mutable struct BurerMonterioScalarVars{Tv<:AbstractFloat}
+    # penalty parameter
+    σ::Tv
+    # objective
+    obj::Tv
+    # timing
+    starttime::Tv
+    endtime::Tv
+    dual_time::Tv
+    primal_time::Tv
+end
 
-mutable struct BurerMonteiro{Tv<:AbstractFloat}
+struct BurerMonteiro{Tv<:AbstractFloat}
     # primal variables X = RR^T
     R::Matrix{Tv}
     # gradient w.r.t. R
@@ -370,13 +381,6 @@ mutable struct BurerMonteiro{Tv<:AbstractFloat}
     # violation of constraints
     primal_vio::Vector{Tv}
     # penalty parameter
-    σ::Tv
-    # objective
-    obj::Tv
-    # time
-    starttime::Tv
-    endtime::Tv
-    dual_time::Tv
-    primal_time::Tv
+    vars::BurerMonterioScalarVars{Tv}
 end
 

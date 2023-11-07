@@ -133,12 +133,14 @@ function sdplr(
         zeros(size(R₀)), #G, will be initialized later
         λ₀,         #λ
         zeros(m),         #vio(violation + obj), will be initialized later
-        one(Tv) / n,          #σ
-        zero(Tv),                #obj, will be initialized later
-        time(),           #starttime
-        zero(Tv),                #endtime 
-        zero(Tv),                #time spent on computing dual bound
-        zero(Tv),                #time spend on primal computation
+        BurerMonterioScalarVars(
+            one(Tv) / n,          #σ
+            zero(Tv),                #obj, will be initialized later
+            time(),           #starttime
+            zero(Tv),                #endtime 
+            zero(Tv),                #time spent on computing dual bound
+            zero(Tv),                #time spend on primal computation
+        )
     )
     res = _sdplr(BM, SDP, config)
     return res 
@@ -155,8 +157,8 @@ function _sdplr(
     recalc_cnt = 10^7 
     difficulty = 3 
     bestinfeas = 1.0e10
-    BM.starttime = time()
-    lastprint = BM.starttime # timestamp of last print
+    BM.vars.starttime = time()
+    lastprint = BM.vars.starttime # timestamp of last print
     R₀ = deepcopy(BM.R) 
     λ₀ = deepcopy(BM.λ)
 
@@ -186,7 +188,7 @@ function _sdplr(
 
 
     # TODO essential_calc
-    tol_stationarity = config.tol_stationarity / BM.σ 
+    tol_stationarity = config.tol_stationarity / BM.vars.σ 
     #@show tol_stationarity
     𝓛_val, stationarity , primal_vio = 
         essential_calcs!(BM, SDP, normC, normb)
@@ -228,7 +230,10 @@ function _sdplr(
                 iter += 1
                 localiter += 1
                 # direction has been negated
-                dirlbfgs!(dir, BM, lbfgshis, negate=true)
+                dirlbfgs_dt = @elapsed begin
+                    dirlbfgs!(dir, BM, lbfgshis, negate=true)
+                end
+                @show dirlbfgs_dt
                 #@show norm(dir)
 
                 descent = dot(dir, BM.G)
@@ -237,7 +242,10 @@ function _sdplr(
                 end
 
                 lastval = 𝓛_val
-                α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                linesearch_dt = @elapsed begin
+                    α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                end
+                @show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
 
@@ -254,9 +262,12 @@ function _sdplr(
                     recalc_cnt -= 1
                 end
 
-                if config.numlbfgsvecs > 0 
-                    lbfgs_postprocess!(BM, lbfgshis, dir, α)
+                lbfgs_postprecess_dt = @elapsed begin
+                    if config.numlbfgsvecs > 0 
+                        lbfgs_postprocess!(BM, lbfgshis, dir, α)
+                    end
                 end
+                @show lbfgs_postprecess_dt
 
                 current_time = time() 
                 if current_time - lastprint >= config.printfreq
@@ -267,12 +278,12 @@ function _sdplr(
                     end
                 end   
 
-                totaltime = time() - BM.starttime
+                totaltime = time() - BM.vars.starttime
 
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    @. BM.λ -= BM.σ * BM.primal_vio
+                    @. BM.λ -= BM.vars.σ * BM.primal_vio
                     current_majoriter_end = true
                     break
                 end
@@ -285,7 +296,7 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            @. BM.λ -= BM.σ * BM.primal_vio
+            @. BM.λ -= BM.vars.σ * BM.primal_vio
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(BM, SDP, normC, normb)
 
@@ -324,10 +335,10 @@ function _sdplr(
 
         # update sigma
         while true
-            BM.σ *= config.σ_fac
+            BM.vars.σ *= config.σ_fac
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(BM, SDP, normC, normb)
-            tol_stationarity = config.tol_stationarity / BM.σ
+            tol_stationarity = config.tol_stationarity / BM.vars.σ
             if tol_stationarity < stationarity 
                 break
             end
@@ -348,11 +359,11 @@ function _sdplr(
     𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)
     println("Done")
     if config.checkdual
-        BM.dual_time = @elapsed best_dualbd = dualbound(BM, SDP)
+        BM.vars.dual_time = @elapsed best_dualbd = dualbound(BM, SDP)
     end
-    BM.endtime = time()
-    totaltime = BM.endtime - BM.starttime
-    BM.primal_time = totaltime - BM.dual_time
+    BM.vars.endtime = time()
+    totaltime = BM.vars.endtime - BM.vars.starttime
+    BM.vars.primal_time = totaltime - BM.vars.dual_time
     return Dict([
         "R" => BM.R,
         "λ" => BM.λ,
@@ -360,11 +371,11 @@ function _sdplr(
         "λ₀" => λ₀,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
-        "obj" => BM.obj,
+        "obj" => BM.vars.obj,
         "dualbd" => best_dualbd,
         "totattime" => totaltime,
-        "dualtime" => BM.dual_time,
-        "primaltime" => BM.primal_time,
+        "dualtime" => BM.vars.dual_time,
+        "primaltime" => BM.vars.primal_time,
     ])
 end
 

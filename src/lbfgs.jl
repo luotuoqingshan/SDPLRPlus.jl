@@ -1,3 +1,10 @@
+#using LinearAlgebra, SparseArrays, BenchmarkTools
+#using Random, Profile
+#include("util.jl")
+#
+## for reproducing
+#Random.seed!(11235813)
+
 """
 Vector of L-BFGS
 """
@@ -29,6 +36,82 @@ end
 
 
 Base.:length(lbfgshis::LBFGSHistory) = lbfgshis.m
+
+
+#function LBFGS_dir!(
+#    dir::Matrix{Tv},
+#    lbfgshis::LBFGSHistory{Ti, Tv};
+#) where {Ti <: Integer, Tv <: AbstractFloat}
+#    m = lbfgshis.m
+#    lst = lbfgshis.latest[]
+#    # pay attention here, dir, s and y are all matrices
+#    j = lst
+#    for i = 1:m 
+#        α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
+#        LinearAlgebra.axpy!(-α, dir, lbfgshis.vecs[j].y)
+#        lbfgshis.vecs[j].a[] = α
+#        j -= 1
+#        if j == 0
+#            j = m
+#        end
+#    end
+#
+#    j = mod(lst, m) + 1
+#    for i = 1:m 
+#        β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
+#        γ = lbfgshis.vecs[j].a[] - β
+#        LinearAlgebra.axpy!(γ, dir, lbfgshis.vecs[j].s)
+#        j += 1
+#        if j == m + 1
+#            j = 1
+#        end
+#    end
+#end
+
+#numlbfgsvecs = 4 
+#n = 8000
+#r = 41
+#R = randn(n, r)
+#dir = randn(n, r)
+#lbfgshis = LBFGSHistory{Int64, Float64}(numlbfgsvecs, LBFGSVector{Float64}[], Ref(numlbfgsvecs))
+#
+#for i = 1:numlbfgsvecs
+#    push!(lbfgshis.vecs, 
+#        LBFGSVector(similar(R), similar(R), Ref(randn(Float64)), Ref(randn(Float64))))
+#end
+
+#@benchmark LBFGS_dir!($dir, $lbfgshis)
+#
+#Profile.clear()
+#@profile LBFGS_dir!(dir, lbfgshis)
+#
+#save_profile_results(pwd()*"/SDPLR-jl/output/lbfgs_profile_results.txt")
+#Profile.clear()
+#
+#@profile operator2!(dir, R, alpha)
+#save_profile_results(pwd()*"/SDPLR-jl/output/operator2_profile_results.txt")
+#
+#function operator2!(
+#    C::Matrix{Tv},
+#    A::Matrix{Tv},
+#    alpha::Tv,
+#) where {Tv <: AbstractFloat}
+#    @. C += alpha * A
+#end
+#
+#
+#function operator3!(
+#    C::Matrix{Tv},
+#    A::Matrix{Tv},
+#    alpha::Tv,
+#) where {Tv <: AbstractFloat}
+#    @. C -= alpha * A
+#end
+#
+#alpha = randn(Float64)
+#
+#@benchmark operator2!($dir, $R, $alpha)
+#@benchmark operator3!($dir, $R, $alpha)
 
 """
 L-BFGS two-loop recursion
@@ -64,7 +147,7 @@ function dirlbfgs!(
     j = lst
     for i = 1:m 
         α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
-        @. dir -= lbfgshis.vecs[j].y * α 
+        LinearAlgebra.axpy!(-α, lbfgshis.vecs[j].y, dir)
         lbfgshis.vecs[j].a[] = α
         j -= 1
         if j == 0
@@ -75,8 +158,8 @@ function dirlbfgs!(
     j = mod(lst, m) + 1
     for i = 1:m 
         β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
-        @. dir += lbfgshis.vecs[j].s * (lbfgshis.vecs[j].a[] - β) 
-        #@show β, norm(dir)
+        γ = lbfgshis.vecs[j].a[] - β
+        LinearAlgebra.axpy!(γ, lbfgshis.vecs[j].s, dir)
         j += 1
         if j == m + 1
             j = 1

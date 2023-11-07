@@ -13,6 +13,11 @@ function goemans_williamson_random_rounding(
 end
 
 
+"""
+    save_benchmark_results(res, filepath)
+
+save benchmark results to a file.
+"""
 function save_benchmark_results(
     res,
     filepath::String,
@@ -22,5 +27,19 @@ function save_benchmark_results(
     s = String(take!(io))
     open(filepath, "w") do fid
         write(fid, s)
+    end
+end
+
+
+"""
+    save_profile_results
+
+save the output of Profile to a file.
+"""
+function save_profile_results(
+    filepath::String
+)
+    open(filepath, "w") do f
+        Profile.print(IOContext(f, :displaysize => (24, 500)), combine=true)
     end
 end

@@ -11,10 +11,10 @@ function lagrangval!(
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     # apply the operator 𝓐 to RRᵀ and 
     # potentially compute the objective function value
-    BM.obj, _ = Aoper!(BM.primal_vio, SDP, BM.R, BM.R; same=true, calcobj=true)
+    BM.vars.obj, _ = Aoper!(BM.primal_vio, SDP, BM.R, BM.R; same=true, calcobj=true)
     BM.primal_vio .-= SDP.b 
-    return (BM.obj - dot(BM.λ, BM.primal_vio)
-           + BM.σ * dot(BM.primal_vio, BM.primal_vio) / 2) 
+    return (BM.vars.obj - dot(BM.λ, BM.primal_vio)
+           + BM.vars.σ * dot(BM.primal_vio, BM.primal_vio) / 2) 
 end
 
 
@@ -84,7 +84,7 @@ function gradient!(
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
     m = SDP.m
     y = similar(BM.λ)
-    @. y = -(BM.λ - BM.σ * BM.primal_vio)
+    @. y = -(BM.λ - BM.vars.σ * BM.primal_vio)
     fill!(BM.G, zero(Tv))
     n, r = size(BM.R)
     S = deepcopy(SDP.aggsparse)
@@ -119,5 +119,6 @@ function essential_calcs!(
     end
     stationarity = norm(BM.G, 2) / (1.0 + normC)
     primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
+    @show L_val_dt, grad_dt
     return (𝓛_val, stationarity, primal_vio)
 end
