@@ -183,11 +183,12 @@ function lbfgs_postprocess!(
     lbfgshis::LBFGSHistory{<:Integer, T},
     dir::Matrix{T},
     stepsize::T,
-)where T
+)where {T <: AbstractFloat}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
-    @. lbfgshis.vecs[j].s = stepsize * dir
-    lbfgshis.vecs[j].y .+= BM.G
+    lmul!(stepsize, dir)
+    copy!(lbfgshis.vecs[j].s, dir)
+    LinearAlgebra.axpy!(one(T), BM.G, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
     lbfgshis.latest[] = j
 end
