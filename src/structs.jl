@@ -329,60 +329,38 @@ end
 
 
 #TODO: support block-wise data
-struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons, Tind} 
-    # number of constraints
-    m::Ti       
+struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
+    n::Ti                   # size of decision variables
+    m::Ti                   # number of constraints
     # list of matrices which are sparse/dense/low-rank/diagonal
-    constraints::TCons
-    # cost matrix
-    C::TC
-    # right-hand side b
-    b::Vector{Tv}
-    # aggregated matrix for sparse constraints
-    aggsparse::SparseMatrixCSC{Tv}
-    indC::Tind
-    indAs::Vector{Tind}
-end
-
-
-function Base.:iterate(SDP::SDPProblem, state=1)
-    return state > SDP.m ? nothing : (SDP.constraints[state], state + 1)
-end
-
-
-function Base.:getindex(SDP::SDPProblem, i::Int)
-    1 <= i <= SDP.m || throw(BoundsError(SDP, i))
-    return SDP.constraints[i]
-end
-
-function Base.:length(SDP::SDPProblem)
-    return SDP.m
+    sparse_constraints::Vector{SparseConsOrObj{Ti, Tv}}
+    lowrank_constraints::Vector{LowRankConsOrObj{Ti, Tv}}
+    C::TC                   # cost matrix
+    b::Vector{Tv}           # right-hand side b
+    XS_colptr::Vector{Ti}
+    XS_rowval::Vector{Ti}
 end
 
 
 mutable struct BurerMonterioMutableScalars{Tv<:AbstractFloat}
-    # penalty parameter
-    σ::Tv
-    # objective
-    obj::Tv
-    # timing
-    starttime::Tv
+    r::Tv                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+    σ::Tv                   # penalty parameter
+    obj::Tv                 # objective
+    starttime::Tv           # timing
     endtime::Tv
     dual_time::Tv
     primal_time::Tv
 end
 
 
-struct BurerMonteiro{Tv<:AbstractFloat}
-    # primal variables X = RR^T
-    R::Matrix{Tv}
-    # gradient w.r.t. R
-    G::Matrix{Tv}
-    # dual variables
-    λ::Vector{Tv}
-    # violation of constraints
-    primal_vio::Vector{Tv}
-    # mutable scalars
-    scalars::BurerMonterioMutableScalars{Tv}
+struct BurerMonteiro{Ti<:Integer, Tv<:AbstractFloat}
+    R::Matrix{Tv}               # primal variables X = RR^T
+    G::Matrix{Tv}               # gradient w.r.t. R
+    λ::Vector{Tv}               # dual variables
+    y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
+    primal_vio::Vector{Tv}      # violation of constraints
+    X_nzval::Vector{Tv}
+    S_nzval::Vector{Tv}
+    scalars::BurerMonterioMutableScalars{Tv} # mutable scalars
 end
 

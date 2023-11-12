@@ -10,37 +10,104 @@ include("linesearch.jl")
 include("options.jl")
 
 
-function preprocess_sparsecons(As::Vector{SparseMatrixCSC{Tv, Ti}}) where {Tv <: AbstractFloat, Ti <: Integer}
-    I, J, V = Int[], Int[], Tv[]
-    n = size(As[1], 1)
-    for (i, A) in enumerate(As)
-        AI, AJ, AV = findnz(A)
-        append!(I, AI)
-        append!(J, AJ)
-        append!(V, AV)
+"""
+    sparse_sym_to_upper_tri(I, J, V)
+
+Convert a symmetric matrix with form (I, J, V) to upper triangular form.
+"""
+function sparse_sym_to_upper_tri(
+    I::Vector{Ti}, 
+    J::Vector{Ti},
+    V::Vector{Tv},
+)where{Ti <: Integer, Tv <: AbstractFloat}
+    upper_tri_I, upper_tri_J, upper_tri_V = Ti[], Ti[], Tv[]
+    for i in eachindex(I)
+        # only store upper triangular part
+        if I[i] <= J[i] 
+            push!(upper_tri_I, I[i])
+            push!(upper_tri_J, J[i])
+            push!(upper_tri_V, V[i])
+        end
     end
-    S = sparse(I, J, V, n, n)
-    newI, newJ, newV = findnz(S)
-    inds = Vector{Int64}[]
-    for (i, A) in enumerate(As)
-        ind = zeros(Int64, nnz(A))
-        for (j, (x, y, v)) in enumerate(zip(findnz(A)...))
-            low = S.colptr[y]
-            high = S.colptr[y+1]-1
+    return upper_tri_I, upper_tri_J, upper_tri_V
+end
+
+
+"""
+    preprocess_sparsecons(As)
+
+Preprocess the sparse constraints to initialize necessary 
+data structures for BurerMonteiro algorithm.
+"""
+function preprocess_sparsecons(
+    As::Vector{SparseMatrixCSC{Tv, Ti}}
+) where {Tv <: AbstractFloat, Ti <: Integer}
+    # aggregate all constraints into one sparse matrix
+    all_I, all_J, all_V = Ti[], Ti[], Tv[]
+    n = size(As[1], 1)
+    nA = length(As)
+    total_nnz = 0
+    upper_tri_I_list = Vector{Ti}[]
+    upper_tri_J_list = Vector{Ti}[]
+    upper_tri_V_list = Vector{Tv}[]
+    for A in As
+        AI, AJ, AV = findnz(A)
+        upper_tri_AI, upper_tri_AJ, upper_tri_AV = 
+            sparse_sym_to_upper_tri(AI, AJ, AV)
+        push!(upper_tri_I_list)
+        push!(upper_tri_J_list)
+        push!(upper_tri_V_list)
+        append!(all_I, upper_tri_AI)
+        append!(all_J, upper_tri_AJ)
+        # make sure cancellation doesn't happen 
+        append!(all_V, ones(Tv, length(upper_tri_AV)))
+        total_nnz += length(upper_tri_AV)
+    end
+
+    # nnz of sum_A correspond to potential nnz of 
+    # \sum_{i=1}^m y_i A_i
+    # thus via preallocation, we can speed up 
+    # the computation of addition of sparse matrices
+    sum_A = sparse(all_I, all_J, all_V, n, n)
+    agg_A_ptr = zeros(Ti, nA + 1)
+    agg_A_ind = zeros(Ti, total_nnz)
+    agg_A_valone = zeros(Tv, total_nnz)
+    agg_A_valtwo = zeros(Tv, total_nnz)
+
+    cumul_nnz = 0
+    for i in eachindex(As)
+        # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
+        # correspond to the i-th sparse constraint/objective matrix
+        agg_A_ptr[i] = cumul_nnz + 1
+        upper_tri_I = upper_tri_I_list[i]
+        upper_tri_J = upper_tri_J_list[i]
+        upper_tri_V = upper_tri_V_list[i]
+        for j in eachindex(upper_tri_I)
+            row, col = upper_tri_I[j], upper_tri_J[j]
+            low = sum_A.colptr[col]
+            high = sum_A.colptr[col+1]-1
             while low <= high
                 mid = (low + high) ÷ 2
-                if S.rowval[mid] == x
-                    ind[j] = mid 
+                if sum_A.rowval[mid] == row 
+                    agg_A_ind[cumul_nnz+j] = mid 
                     break
-                elseif S.rowval[mid] < x
+                elseif sum_A.rowval[mid] < row 
                     low = mid + 1
                 else
                     high = mid - 1
                 end
             end
+            agg_A_valone[cumul_nnz+j] = upper_tri_V[j] 
+            if row == col
+                agg_A_valtwo[cumul_nnz+j] = upper_tri_V[j]
+            else
+                # since the matrix is symmetric, 
+                # we can scale up the off-diagonal entries by 2
+                agg_A_valtwo[cumul_nnz+j] = Tv(2.0) * upper_tri_V[j] 
+            end
         end
-        push!(inds, ind)
     end
+    agg_A_ptr[end] = total_nnz + 1
     return S, inds
 end
 
@@ -64,7 +131,8 @@ function sdplr(
     Constraints = Any[]
     sparsecons = SparseMatrixCSC{Tv, Ti}[]
 
-    if isa(C, SparseMatrixCSC)
+    # treat diagonal matrices as sparse matrices
+    if isa(C, SparseMatrixCSC) 
         push!(sparsecons, C)
     elseif isa(C, Diagonal)
         push!(sparsecons, sparse(C))
