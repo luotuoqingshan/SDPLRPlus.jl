@@ -14,12 +14,12 @@ function linesearch!(
     update = true,
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # evaluate 𝓐(RDᵀ + DRᵀ)
-    C_RD = Aoper!(SDP.global_A_RD, SDP.global_UVt, SDP, BM.R, D; same=false)
+    C_RD = Aoper!(SDP.A_RD, SDP.UVt, SDP, BM.R, D; same=false)
     # remember we divide it by 2 in Aoper, now scale back
-    SDP.global_A_RD .*= 2.0
+    SDP.A_RD .*= 2.0
     C_RD *= 2.0
     # evaluate 𝓐(DDᵀ)
-    C_DD = Aoper!(SDP.global_A_DD, SDP.global_UVt, SDP, D, D; same=true)
+    C_DD = Aoper!(SDP.A_DD, SDP.UVt, SDP, D, D; same=true)
 
     biquadratic = zeros(5)
     cubic = zeros(4)
@@ -45,17 +45,17 @@ function linesearch!(
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
-    biquadratic[2] = (C_RD - dot(BM.λ, SDP.global_A_RD) + 
-        BM.scalars.σ * dot(BM.primal_vio, SDP.global_A_RD))  
+    biquadratic[2] = (C_RD - dot(BM.λ, SDP.A_RD) + 
+        BM.scalars.σ * dot(BM.primal_vio, SDP.A_RD))  
     
 
-    biquadratic[3] = (C_DD - dot(BM.λ, SDP.global_A_DD) + 
-        BM.scalars.σ * dot(BM.primal_vio, SDP.global_A_DD) + 
-        0.5 * BM.scalars.σ * dot(SDP.global_A_RD, SDP.global_A_RD))
+    biquadratic[3] = (C_DD - dot(BM.λ, SDP.A_DD) + 
+        BM.scalars.σ * dot(BM.primal_vio, SDP.A_DD) + 
+        0.5 * BM.scalars.σ * dot(SDP.A_RD, SDP.A_RD))
 
-    biquadratic[4] = BM.scalars.σ * dot(SDP.global_A_DD, SDP.global_A_RD)
+    biquadratic[4] = BM.scalars.σ * dot(SDP.A_DD, SDP.A_RD)
 
-    biquadratic[5] = 0.5 * BM.scalars.σ * dot(SDP.global_A_DD, SDP.global_A_DD)
+    biquadratic[5] = 0.5 * BM.scalars.σ * dot(SDP.A_DD, SDP.A_DD)
 
     cubic[1] = 1.0 * biquadratic[2]
 
@@ -104,7 +104,7 @@ function linesearch!(
         # notice that 
         # 𝓐((R + αD)(R + αD)ᵀ) =   
         # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-        @. BM.primal_vio += α_star * (α_star * SDP.global_A_DD + SDP.global_A_RD)
+        @. BM.primal_vio += α_star * (α_star * SDP.A_DD + SDP.A_RD)
         BM.scalars.obj += α_star * (α_star * C_DD + C_RD)
     end
 

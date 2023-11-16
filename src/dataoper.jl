@@ -11,7 +11,7 @@ function lagrangval!(
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # apply the operator 𝓐 to RRᵀ and 
     # potentially compute the objective function value
-    BM.scalars.obj = Aoper!(BM.primal_vio, SDP.global_UVt, SDP, BM.R, BM.R; same=true)
+    BM.scalars.obj = Aoper!(BM.primal_vio, SDP.UVt, SDP, BM.R, BM.R; same=true)
     BM.primal_vio .-= SDP.b 
     return (BM.scalars.obj - dot(BM.λ, BM.primal_vio)
            + BM.scalars.σ * dot(BM.primal_vio, BM.primal_vio) / 2) 

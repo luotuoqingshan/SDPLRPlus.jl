@@ -329,9 +329,9 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
 
     X_nzval::Vector{Tv}
     S_nzval::Vector{Tv}
-    global_UVt::Vector{Tv}
-    global_A_RD::Vector{Tv}
-    global_A_DD::Vector{Tv}
+    UVt::Vector{Tv}
+    A_RD::Vector{Tv}
+    A_DD::Vector{Tv}
 end
 
 
