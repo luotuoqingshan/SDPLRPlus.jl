@@ -135,12 +135,12 @@ sᵢ, yᵢ pairs we have already computed
 """
 function dirlbfgs!(
     dir::Matrix{Tv},
-    BM::BurerMonteiro{Ti, Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
     lbfgshis::LBFGSHistory{Ti, Tv};
     negate::Bool=true,
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv <: AbstractFloat, TC}
     # we store l-bfgs vectors as a cyclic array
-    dir .= BM.G
+    dir .= SDP.G
     m = lbfgshis.m
     lst = lbfgshis.latest[]
     # pay attention here, dir, s and y are all matrices
@@ -173,22 +173,22 @@ function dirlbfgs!(
 
     # partial update of lbfgs history 
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
-    lbfgshis.vecs[j].y .= -BM.G
+    lbfgshis.vecs[j].y .= -SDP.G
     return dir
 end
 
 
 function lbfgs_postprocess!(
-    BM::BurerMonteiro{Ti, Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
     lbfgshis::LBFGSHistory{Ti, Tv},
     dir::Matrix{Tv},
     stepsize::Tv,
-)where {Ti<:Integer, Tv <: AbstractFloat}
+)where {Ti<:Integer, Tv <: AbstractFloat, TC}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     lmul!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
-    LinearAlgebra.axpy!(one(Tv), BM.G, lbfgshis.vecs[j].y)
+    LinearAlgebra.axpy!(one(Tv), SDP.G, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
     lbfgshis.latest[] = j
 end

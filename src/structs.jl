@@ -311,6 +311,17 @@ function constraint_grad!(
 end
 
 
+mutable struct BurerMonterioMutableScalars{Ti<:Integer, Tv<:AbstractFloat}
+    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+    σ::Tv                   # penalty parameter
+    obj::Tv                 # objective
+    starttime::Tv           # timing
+    endtime::Tv
+    dual_time::Tv
+    primal_time::Tv
+end
+
+
 struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
@@ -332,26 +343,17 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
     UVt::Vector{Tv}
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
-end
 
-
-mutable struct BurerMonterioMutableScalars{Ti<:Integer, Tv<:AbstractFloat}
-    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    σ::Tv                   # penalty parameter
-    obj::Tv                 # objective
-    starttime::Tv           # timing
-    endtime::Tv
-    dual_time::Tv
-    primal_time::Tv
-end
-
-
-struct BurerMonteiro{Ti<:Integer, Tv<:AbstractFloat}
     R::Matrix{Tv}               # primal variables X = RR^T
     G::Matrix{Tv}               # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints
+
     scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
 end
+
+
+
+
 

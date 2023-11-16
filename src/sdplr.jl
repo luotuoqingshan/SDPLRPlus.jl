@@ -155,38 +155,33 @@ function sdplr(
     n = size(C, 1); m = length(As)
     nnz_sum_A = length(sum_A.rowval)
 
-    SDP = SDPProblem(n, m, C, b, sum_A.colptr, sum_A.rowval,
-                     length(sparse_cons), agg_A_ptr, agg_A_nzind,
-                     agg_A_nzval_one, agg_A_nzval_two, sparse_As_global_inds,
-                     zeros(Tv, nnz_sum_A), zeros(Tv, nnz_sum_A),
-                     zeros(Tv, nnz_sum_A), zeros(Tv, m), zeros(Tv, m))
-
     n = size(C, 1)
     R₀ = 2 .* rand(n, r) .- 1
     λ₀ = randn(m)
-    BM = BurerMonteiro(
-        R₀,              #R
-        zeros(Tv, size(R₀)), #G, will be initialized later
-        λ₀,         #λ
-        zeros(Tv, m),
-        zeros(Tv, m),         #vio(violation + obj), will be initialized later
-        BurerMonterioMutableScalars(
-            r, 
-            one(Tv) / n,          #σ
-            zero(Tv),                #obj, will be initialized later
-            time(),           #starttime
-            zero(Tv),                #endtime 
-            zero(Tv),                #time spent on computing dual bound
-            zero(Tv),                #time spend on primal computation
-        )
-    )
-    res = _sdplr(BM, SDP, config)
+
+    SDP = SDPProblem(n, m, # size of X, number of constraints
+                     C, b, sum_A.colptr, sum_A.rowval,
+                     length(sparse_cons), agg_A_ptr, agg_A_nzind,
+                     agg_A_nzval_one, agg_A_nzval_two, sparse_As_global_inds,
+                     zeros(Tv, nnz_sum_A), zeros(Tv, nnz_sum_A),
+                     zeros(Tv, nnz_sum_A), zeros(Tv, m), zeros(Tv, m),
+                     R₀, zeros(Tv, size(R₀)), λ₀, zeros(Tv, m), zeros(Tv, m),
+                    BurerMonterioMutableScalars(
+                        r, 
+                        one(Tv) / n,          #σ
+                        zero(Tv),                #obj, will be initialized later
+                        time(),           #starttime
+                        zero(Tv),                #endtime 
+                        zero(Tv),                #time spent on computing dual bound
+                        zero(Tv),                #time spend on primal computation
+                    ))
+
+    res = _sdplr(SDP, config)
     return res 
 end
 
 
 function _sdplr(
-    BM::BurerMonteiro{Ti, Tv},
     SDP::SDPProblem{Ti, Tv, TC},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
@@ -195,10 +190,10 @@ function _sdplr(
     recalc_cnt = 10^7 
     difficulty = 3 
     bestinfeas = 1.0e10
-    BM.scalars.starttime = time()
-    lastprint = BM.scalars.starttime # timestamp of last print
-    R₀ = deepcopy(BM.R) 
-    λ₀ = deepcopy(BM.λ)
+    SDP.scalars.starttime = time()
+    lastprint = SDP.scalars.starttime # timestamp of last print
+    R₀ = deepcopy(SDP.R) 
+    λ₀ = deepcopy(SDP.λ)
 
     # TODO setup printing
     if config.printlevel > 0
@@ -219,16 +214,16 @@ function _sdplr(
 
     for i = 1:config.numlbfgsvecs
         push!(lbfgshis.vecs, 
-            LBFGSVector(zeros(Tv, size(BM.R)),
-                     zeros(Tv, size(BM.R)),
+            LBFGSVector(zeros(Tv, size(SDP.R)),
+                     zeros(Tv, size(SDP.R)),
                      Ref(zero(Tv)), Ref(zero(Tv))))
     end
 
 
-    tol_stationarity = config.tol_stationarity / BM.scalars.σ 
+    tol_stationarity = config.tol_stationarity / SDP.scalars.σ 
     #@show tol_stationarity
     𝓛_val, stationarity , primal_vio = 
-        essential_calcs!(BM, SDP, normC, normb)
+        essential_calcs!(SDP, normC, normb)
     majoriter = 0 
     iter = 0 # total number of iterations
 
@@ -238,7 +233,7 @@ function _sdplr(
     origval = 𝓛_val 
 
     majoriter_end = false
-    dir = similar(BM.R)
+    dir = similar(SDP.R)
 
     while majoriter < config.maxmajoriter 
         #avoid goto in C
@@ -268,41 +263,41 @@ function _sdplr(
                 localiter += 1
                 # direction has been negated
                 dirlbfgs_dt = @elapsed begin
-                    dirlbfgs!(dir, BM, lbfgshis, negate=true)
+                    dirlbfgs!(dir, SDP, lbfgshis, negate=true)
                 end
                 @show dirlbfgs_dt
                 #@show norm(dir)
 
-                descent = dot(dir, BM.G)
+                descent = dot(dir, SDP.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
-                    lmul!(-one(Tv), BM.G)
-                    copyto!(dir, BM.G) # reverse back to gradient direction
+                    lmul!(-one(Tv), SDP.G)
+                    copyto!(dir, SDP.G) # reverse back to gradient direction
                 end
 
                 lastval = 𝓛_val
                 linesearch_dt = @elapsed begin
-                    α, 𝓛_val = linesearch!(BM, SDP, dir, α_max=1.0, update=true) 
+                    α, 𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
                 @show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
 
-                LinearAlgebra.axpy!(α, dir, BM.R)
+                LinearAlgebra.axpy!(α, dir, SDP.R)
                 if recalc_cnt == 0
                     𝓛_val, stationarity, primal_vio = 
-                        essential_calcs!(BM, SDP, normC, normb)
+                        essential_calcs!(SDP. SDP, normC, normb)
                     recalc_cnt = recalcfreq
                     #@show 𝓛_val, stationarity, primal_vio
                 else
-                    gradient!(BM, SDP)
-                    stationarity = norm(BM.G, 2) / (1.0 + normC)
-                    primal_vio = norm(BM.primal_vio, 2) / (1.0 + normb)
+                    gradient!(SDP)
+                    stationarity = norm(SDP.G, 2) / (1.0 + normC)
+                    primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
                     recalc_cnt -= 1
                 end
 
                 lbfgs_postprecess_dt = @elapsed begin
                     if config.numlbfgsvecs > 0 
-                        lbfgs_postprocess!(BM, lbfgshis, dir, α)
+                        lbfgs_postprocess!(SDP, lbfgshis, dir, α)
                     end
                 end
                 @show lbfgs_postprecess_dt
@@ -312,16 +307,16 @@ function _sdplr(
                     lastprint = current_time
                     if config.printlevel > 0
                         printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                                  BM.obj, stationarity, primal_vio, best_dualbd)
+                                  SDP.obj, stationarity, primal_vio, best_dualbd)
                     end
                 end   
 
-                totaltime = time() - BM.scalars.starttime
+                totaltime = time() - SDP.scalars.starttime
 
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    LinearAlgebra.axpy!(-BM.scalars.σ, BM.primal_vio, BM.λ)
+                    LinearAlgebra.axpy!(-SDP.scalars.σ, SDP.primal_vio, SDP.λ)
                     current_majoriter_end = true
                     break
                 end
@@ -334,9 +329,9 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            LinearAlgebra.axpy!(-BM.scalars.σ, BM.primal_vio, BM.λ)
+            LinearAlgebra.axpy!(-SDP.scalars.σ, SDP.primal_vio, SDP.λ)
             𝓛_val, stationarity, primal_vio = 
-                essential_calcs!(BM, SDP, normC, normb)
+                essential_calcs!(SDP, normC, normb)
 
             if config.σ_strategy == 1
                 if localiter <= 10
@@ -373,10 +368,10 @@ function _sdplr(
 
         # update sigma
         while true
-            BM.scalars.σ *= config.σ_fac
+            SDP.scalars.σ *= config.σ_fac
             𝓛_val, stationarity, primal_vio = 
-                essential_calcs!(BM, SDP, normC, normb)
-            tol_stationarity = config.tol_stationarity / BM.scalars.σ
+                essential_calcs!(SDP, normC, normb)
+            tol_stationarity = config.tol_stationarity / SDP.scalars.σ
             if tol_stationarity < stationarity 
                 break
             end
@@ -391,43 +386,42 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(BM.R)), zeros(size(BM.R)), Ref(0.0), Ref(0.0))
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(0.0), Ref(0.0))
         end
     end
-    𝓛_val, stationarity, primal_vio = essential_calcs!(BM, SDP, normC, normb)
+    𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
     println("Done")
     if config.checkdual
-        BM.scalars.dual_time = @elapsed best_dualbd = dualbound(BM, SDP)
+        SDP.scalars.dual_time = @elapsed best_dualbd = dualbound(SDP)
     end
-    BM.scalars.endtime = time()
-    totaltime = BM.scalars.endtime - BM.scalars.starttime
-    BM.scalars.primal_time = totaltime - BM.scalars.dual_time
+    SDP.scalars.endtime = time()
+    totaltime = SDP.scalars.endtime - SDP.scalars.starttime
+    SDP.scalars.primal_time = totaltime - SDP.scalars.dual_time
     return Dict([
-        "R" => BM.R,
-        "λ" => BM.λ,
+        "R" => SDP.R,
+        "λ" => SDP.λ,
         "R₀" => R₀,
         "λ₀" => λ₀,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
-        "obj" => BM.scalars.obj,
+        "obj" => SDP.scalars.obj,
         "dualbd" => best_dualbd,
         "totattime" => totaltime,
-        "dualtime" => BM.scalars.dual_time,
-        "primaltime" => BM.scalars.primal_time,
+        "dualtime" => SDP.scalars.dual_time,
+        "primaltime" => SDP.scalars.primal_time,
     ])
 end
 
 
 function dualbound(
-    BM::BurerMonteiro,
     SDP::SDPProblem, 
 )
-    n = size(BM.R, 1)
+    n = size(SDP.R, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
                 mul!(y, SDP.C, x)
                 for i = 1:SDP.m
-                     y .-= BM.λ[i] * (SDP.constraints[i] * x) 
+                     y .-= SDP.λ[i] * (SDP.constraints[i] * x) 
                 end
                 return y
         end, n)
