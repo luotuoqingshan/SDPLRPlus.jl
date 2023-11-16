@@ -54,9 +54,9 @@ function preprocess_sparsecons(
         AI, AJ, AV = findnz(A)
         upper_tri_AI, upper_tri_AJ, upper_tri_AV = 
             sparse_sym_to_upper_tri(AI, AJ, AV)
-        push!(upper_tri_I_list)
-        push!(upper_tri_J_list)
-        push!(upper_tri_V_list)
+        push!(upper_tri_I_list, upper_tri_AI)
+        push!(upper_tri_J_list, upper_tri_AJ)
+        push!(upper_tri_V_list, upper_tri_AV)
         append!(all_I, upper_tri_AI)
         append!(all_J, upper_tri_AJ)
         # make sure cancellation doesn't happen 
@@ -70,9 +70,9 @@ function preprocess_sparsecons(
     # the computation of addition of sparse matrices
     sum_A = sparse(all_I, all_J, all_V, n, n)
     agg_A_ptr = zeros(Ti, nA + 1)
-    agg_A_ind = zeros(Ti, total_nnz)
-    agg_A_valone = zeros(Tv, total_nnz)
-    agg_A_valtwo = zeros(Tv, total_nnz)
+    agg_A_nzind = zeros(Ti, total_nnz)
+    agg_A_nzval_one = zeros(Tv, total_nnz)
+    agg_A_nzval_two = zeros(Tv, total_nnz)
 
     cumul_nnz = 0
     for i in eachindex(As)
@@ -89,7 +89,7 @@ function preprocess_sparsecons(
             while low <= high
                 mid = (low + high) ÷ 2
                 if sum_A.rowval[mid] == row 
-                    agg_A_ind[cumul_nnz+j] = mid 
+                    agg_A_nzind[cumul_nnz+j] = mid 
                     break
                 elseif sum_A.rowval[mid] < row 
                     low = mid + 1
@@ -97,18 +97,19 @@ function preprocess_sparsecons(
                     high = mid - 1
                 end
             end
-            agg_A_valone[cumul_nnz+j] = upper_tri_V[j] 
+            agg_A_nzval_one[cumul_nnz+j] = upper_tri_V[j] 
             if row == col
-                agg_A_valtwo[cumul_nnz+j] = upper_tri_V[j]
+                agg_A_nzval_two[cumul_nnz+j] = upper_tri_V[j]
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
-                agg_A_valtwo[cumul_nnz+j] = Tv(2.0) * upper_tri_V[j] 
+                agg_A_nzval_two[cumul_nnz+j] = Tv(2.0) * upper_tri_V[j] 
             end
         end
+        cumul_nnz += length(upper_tri_I)
     end
     agg_A_ptr[end] = total_nnz + 1
-    return S, inds
+    return sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two
 end
 
 
@@ -127,81 +128,50 @@ function sdplr(
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
 ) where{Ti <: Integer, Tv <: AbstractFloat}
-    m = length(As)
-    Constraints = Any[]
-    sparsecons = SparseMatrixCSC{Tv, Ti}[]
-
+    sparse_cons = SparseMatrixCSC{Tv, Ti}[]
     # treat diagonal matrices as sparse matrices
-    if isa(C, SparseMatrixCSC) 
-        push!(sparsecons, C)
-    elseif isa(C, Diagonal)
-        push!(sparsecons, sparse(C))
-    end
-
-    for A in As
+    sparse_As_global_inds = Ti[]
+    for (i, A) in enumerate(As)
         if isa(A, SparseMatrixCSC)
-            push!(sparsecons, A)
+            push!(sparse_cons, A)
+            push!(sparse_As_global_inds, i)
         elseif isa(A, Diagonal)
-            push!(sparsecons, sparse(A))
+            push!(sparse_cons, sparse(A))
+            push!(sparse_As_global_inds, i)
         end
     end
 
-    S, inds = preprocess_sparsecons(sparsecons)
-    cnt = 0
-
-    fill!(S.nzval, zero(Tv))
-    if isa(C, SparseMatrixCSC)
-        cnt += 1
-        obj = C
-        indC = inds[cnt]
+    if isa(C, SparseMatrixCSC) 
+        push!(sparse_cons, C)
+        push!(sparse_As_global_inds, 0)
     elseif isa(C, Diagonal)
-        cnt += 1
-        obj = C
-        indC = inds[cnt]
-    elseif isa(C, LowRankMatrix)
-        obj = LowRankMatrix(C.D, C.B, r) 
-        indC = zeros(0)
-    elseif isa(C, UnitLowRankMatrix)
-        obj = UnitLowRankMatrix(C.B, r)
-        indC = zeros(0)
-    else
-        obj = C
-        indC = zeros(0)
+        push!(sparse_cons, sparse(C))
+        push!(sparse_As_global_inds, 0)
     end
 
-    indAs = Any[]
-    for A in As
-        if isa(A, LowRankMatrix)
-            indA = zeros(0)
-            push!(Constraints, LowRankMatrix(A.D, A.B, r))
-        elseif isa(A, UnitLowRankMatrix)
-            indA = zeros(0)
-            push!(Constraints, UnitLowRankMatrix(A.B, r))
-        elseif isa(A, SparseMatrixCSC)
-            cnt += 1
-            indA = inds[cnt]
-            push!(Constraints, A)
-        elseif isa(A, Diagonal)
-            cnt += 1
-            indA = inds[cnt]
-            push!(Constraints, A)
-        else
-            indA = zeros(0)
-            push!(Constraints, A)
-        end
-        push!(indAs, indA)
-    end
+    sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two = 
+        preprocess_sparsecons(sparse_cons)
+    
+    n = size(C, 1); m = length(As)
+    nnz_sum_A = length(sum_A.rowval)
 
-    SDP = SDPProblem(m, Constraints, obj, b, S, indC, indAs)
+    SDP = SDPProblem(n, m, C, b, sum_A.colptr, sum_A.rowval,
+                     length(sparse_cons), agg_A_ptr, agg_A_nzind,
+                     agg_A_nzval_one, agg_A_nzval_two, sparse_As_global_inds,
+                     zeros(Tv, nnz_sum_A), zeros(Tv, nnz_sum_A),
+                     zeros(Tv, nnz_sum_A), zeros(Tv, m), zeros(Tv, m))
+
     n = size(C, 1)
     R₀ = 2 .* rand(n, r) .- 1
     λ₀ = randn(m)
     BM = BurerMonteiro(
         R₀,              #R
-        zeros(size(R₀)), #G, will be initialized later
+        zeros(Tv, size(R₀)), #G, will be initialized later
         λ₀,         #λ
-        zeros(m),         #vio(violation + obj), will be initialized later
+        zeros(Tv, m),
+        zeros(Tv, m),         #vio(violation + obj), will be initialized later
         BurerMonterioMutableScalars(
+            r, 
             one(Tv) / n,          #σ
             zero(Tv),                #obj, will be initialized later
             time(),           #starttime
@@ -216,10 +186,10 @@ end
 
 
 function _sdplr(
-    BM::BurerMonteiro{Tv},
-    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    BM::BurerMonteiro{Ti, Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
     config::BurerMonteiroConfig{Ti, Tv},
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # misc declarations
     recalcfreq = 5 
     recalc_cnt = 10^7 
@@ -255,7 +225,6 @@ function _sdplr(
     end
 
 
-    # TODO essential_calc
     tol_stationarity = config.tol_stationarity / BM.scalars.σ 
     #@show tol_stationarity
     𝓛_val, stationarity , primal_vio = 
@@ -306,7 +275,8 @@ function _sdplr(
 
                 descent = dot(dir, BM.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
-                    dir .= -BM.G # reverse back to gradient direction
+                    lmul!(-one(Tv), BM.G)
+                    copyto!(dir, BM.G) # reverse back to gradient direction
                 end
 
                 lastval = 𝓛_val
@@ -317,7 +287,7 @@ function _sdplr(
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
 
-                @. BM.R += α * dir
+                LinearAlgebra.axpy!(α, dir, BM.R)
                 if recalc_cnt == 0
                     𝓛_val, stationarity, primal_vio = 
                         essential_calcs!(BM, SDP, normC, normb)
@@ -351,7 +321,7 @@ function _sdplr(
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    @. BM.λ -= BM.scalars.σ * BM.primal_vio
+                    LinearAlgebra.axpy!(-BM.scalars.σ, BM.primal_vio, BM.λ)
                     current_majoriter_end = true
                     break
                 end
@@ -364,7 +334,7 @@ function _sdplr(
             end
 
             # update Lagrange multipliers and recalculate essentials
-            @. BM.λ -= BM.scalars.σ * BM.primal_vio
+            LinearAlgebra.axpy!(-BM.scalars.σ, BM.primal_vio, BM.λ)
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(BM, SDP, normC, normb)
 

@@ -7,19 +7,19 @@ include("structs.jl")
 Exact line search for minimizing the augmented Lagrangian
 """
 function linesearch!(
-    BM::BurerMonteiro{Tv},
-    SDP::SDPProblem{Ti, Tv, TC, TCons},
+    BM::BurerMonteiro{Ti, Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
     D::Matrix{Tv};
     α_max = one(Tv),
     update = true,
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, TCons}
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # evaluate 𝓐(RDᵀ + DRᵀ)
-    C_RD, 𝓐_RD = Aoper(SDP, BM.R, D, same=false, calcobj=true)
+    C_RD = Aoper!(SDP.global_A_RD, SDP.global_UVt, SDP, BM.R, D; same=false)
     # remember we divide it by 2 in Aoper, now scale back
-    𝓐_RD .*= 2.0
+    SDP.global_A_RD .*= 2.0
     C_RD *= 2.0
     # evaluate 𝓐(DDᵀ)
-    C_DD, 𝓐_DD = Aoper(SDP, D, D, same=true, calcobj=true)
+    C_DD = Aoper!(SDP.global_A_DD, SDP.global_UVt, SDP, D, D; same=true)
 
     biquadratic = zeros(5)
     cubic = zeros(4)
@@ -45,23 +45,22 @@ function linesearch!(
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
-    biquadratic[2] = (C_RD - dot(BM.λ, 𝓐_RD) + 
-        BM.scalars.σ * dot(BM.primal_vio, 𝓐_RD))  
+    biquadratic[2] = (C_RD - dot(BM.λ, SDP.global_A_RD) + 
+        BM.scalars.σ * dot(BM.primal_vio, SDP.global_A_RD))  
     
 
-    biquadratic[3] = (C_DD - dot(BM.λ, 𝓐_DD) + 
-        BM.scalars.σ * dot(BM.primal_vio, 𝓐_DD) + 
-        0.5 * BM.scalars.σ * dot(𝓐_RD, 𝓐_RD))
+    biquadratic[3] = (C_DD - dot(BM.λ, SDP.global_A_DD) + 
+        BM.scalars.σ * dot(BM.primal_vio, SDP.global_A_DD) + 
+        0.5 * BM.scalars.σ * dot(SDP.global_A_RD, SDP.global_A_RD))
 
-    biquadratic[4] = BM.scalars.σ * dot(𝓐_DD, 𝓐_RD)
+    biquadratic[4] = BM.scalars.σ * dot(SDP.global_A_DD, SDP.global_A_RD)
 
-    biquadratic[5] = 0.5 * BM.scalars.σ * dot(𝓐_DD, 𝓐_DD)
+    biquadratic[5] = 0.5 * BM.scalars.σ * dot(SDP.global_A_DD, SDP.global_A_DD)
 
     cubic[1] = 1.0 * biquadratic[2]
 
     if cubic[1] > eps()
-        println("Warning: cubic[1] = $(cubic[1]) should be less than 0.")
-        return 0
+        error("Error: cubic[1] = $(cubic[1]) should be less than 0.")
     end
 
     cubic[2] = 2.0 * biquadratic[3]
@@ -71,8 +70,7 @@ function linesearch!(
     cubic[4] = 4.0 * biquadratic[5]
 
     if abs(cubic[4]) < eps()
-        println("Warning: cubic[4] is zero, got a quadratic function")
-        return 0
+        error("Error: cubic[4] is zero, got a quadratic function")
     end
 
     cubic ./= cubic[4]
@@ -106,7 +104,7 @@ function linesearch!(
         # notice that 
         # 𝓐((R + αD)(R + αD)ᵀ) =   
         # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-        @. BM.primal_vio += α_star * (α_star * 𝓐_DD + 𝓐_RD)
+        @. BM.primal_vio += α_star * (α_star * SDP.global_A_DD + SDP.global_A_RD)
         BM.scalars.obj += α_star * (α_star * C_DD + C_RD)
     end
 

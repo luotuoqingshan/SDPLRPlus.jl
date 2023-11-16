@@ -309,41 +309,34 @@ function constraint_grad!(
         S.nzval[ind[i]] += α * A.diag[i]
     end
 end
-#
-#
-#function constraint_grad!(
-#    G::AbstractMatrix{T},
-#    Gt::AbstractMatrix{T},
-#    A::SparseMatrixCSC{T},
-#    R::AbstractMatrix{T},
-#    Rt::Adjoint{T},
-#    α::T,
-#    ) where {T}
-#    if (size(G, 1) != size(A, 1) || size(G, 2) != size(R, 2) || size(A, 2) != size(R, 1))
-#        throw(DimensionMismatch("dimension mismatch"))
-#    end
-#    @inbounds for (x, y, v) in zip(findnz(A)...)
-#        @view(Gt[:, x]) .+= α * v * @view(Rt[:, y])
-#    end
-#end
 
 
-#TODO: support block-wise data
 struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
-    n::Ti                   # size of decision variables
-    m::Ti                   # number of constraints
+    n::Ti                               # size of decision variables
+    m::Ti                               # number of constraints
     # list of matrices which are sparse/dense/low-rank/diagonal
-    sparse_constraints::Vector{SparseConsOrObj{Ti, Tv}}
-    lowrank_constraints::Vector{LowRankConsOrObj{Ti, Tv}}
-    C::TC                   # cost matrix
-    b::Vector{Tv}           # right-hand side b
+    # lowrank_constraints::Vector{LowRankConsOrObj{Ti, Tv}}
+    C::TC                               # cost matrix
+    b::Vector{Tv}                       # right-hand side b
     XS_colptr::Vector{Ti}
     XS_rowval::Vector{Ti}
+    n_spase_matrices::Ti
+    agg_A_ptr::Vector{Ti}
+    agg_A_nzind::Vector{Ti}
+    agg_A_nzval_one::Vector{Tv}
+    agg_A_nzval_two::Vector{Tv}
+    sparse_As_global_inds::Vector{Ti}
+
+    X_nzval::Vector{Tv}
+    S_nzval::Vector{Tv}
+    global_UVt::Vector{Tv}
+    global_A_RD::Vector{Tv}
+    global_A_DD::Vector{Tv}
 end
 
 
-mutable struct BurerMonterioMutableScalars{Tv<:AbstractFloat}
-    r::Tv                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+mutable struct BurerMonterioMutableScalars{Ti<:Integer, Tv<:AbstractFloat}
+    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
     σ::Tv                   # penalty parameter
     obj::Tv                 # objective
     starttime::Tv           # timing
@@ -359,8 +352,6 @@ struct BurerMonteiro{Ti<:Integer, Tv<:AbstractFloat}
     λ::Vector{Tv}               # dual variables
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints
-    X_nzval::Vector{Tv}
-    S_nzval::Vector{Tv}
-    scalars::BurerMonterioMutableScalars{Tv} # mutable scalars
+    scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
 end
 

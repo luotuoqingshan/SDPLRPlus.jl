@@ -135,7 +135,7 @@ sᵢ, yᵢ pairs we have already computed
 """
 function dirlbfgs!(
     dir::Matrix{Tv},
-    BM::BurerMonteiro{Tv},
+    BM::BurerMonteiro{Ti, Tv},
     lbfgshis::LBFGSHistory{Ti, Tv};
     negate::Bool=true,
 ) where{Ti <: Integer, Tv <: AbstractFloat}
@@ -179,16 +179,16 @@ end
 
 
 function lbfgs_postprocess!(
-    BM::BurerMonteiro{T},
-    lbfgshis::LBFGSHistory{<:Integer, T},
-    dir::Matrix{T},
-    stepsize::T,
-)where {T <: AbstractFloat}
+    BM::BurerMonteiro{Ti, Tv},
+    lbfgshis::LBFGSHistory{Ti, Tv},
+    dir::Matrix{Tv},
+    stepsize::Tv,
+)where {Ti<:Integer, Tv <: AbstractFloat}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     lmul!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
-    LinearAlgebra.axpy!(one(T), BM.G, lbfgshis.vecs[j].y)
+    LinearAlgebra.axpy!(one(Tv), BM.G, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
     lbfgshis.latest[] = j
 end

@@ -2,6 +2,8 @@
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 GenericArpack = "408c25d7-97fa-4992-8bd9-ce15f1a09fe9"
 MKLSparse = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
+Manifolds = "1cead3c2-87b3-11e9-0ccd-23c62b72b94e"
+Manopt = "0fc0a36d-df90-57f3-8f93-d78a9fc72bb5"
 MatrixNetworks = "4f449596-a032-5618-b826-5a251cb6dc11"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PolynomialRoots = "3a141323-8675-5d76-9d11-e1df1406c778"
