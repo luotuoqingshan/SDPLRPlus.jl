@@ -270,13 +270,14 @@ function _sdplr(
 
                 descent = dot(dir, SDP.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
-                    lmul!(-one(Tv), SDP.G)
+                    LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
+                    #lmul!(-one(Tv), SDP.G)
                     copyto!(dir, SDP.G) # reverse back to gradient direction
                 end
 
                 lastval = 𝓛_val
                 linesearch_dt = @elapsed begin
-                    α, 𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
+                    α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
                 @show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
