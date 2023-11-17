@@ -11,25 +11,25 @@ include("options.jl")
 
 
 """
-    sparse_sym_to_upper_tri(I, J, V)
+    sparse_sym_to_triu(I, J, V)
 
 Convert a symmetric matrix with form (I, J, V) to upper triangular form.
 """
-function sparse_sym_to_upper_tri(
+function sparse_sym_to_triu(
     I::Vector{Ti}, 
     J::Vector{Ti},
     V::Vector{Tv},
 )where{Ti <: Integer, Tv <: AbstractFloat}
-    upper_tri_I, upper_tri_J, upper_tri_V = Ti[], Ti[], Tv[]
+    triu_I, triu_J, triu_V = Ti[], Ti[], Tv[]
     for i in eachindex(I)
         # only store upper triangular part
         if I[i] <= J[i] 
-            push!(upper_tri_I, I[i])
-            push!(upper_tri_J, J[i])
-            push!(upper_tri_V, V[i])
+            push!(triu_I, I[i])
+            push!(triu_J, J[i])
+            push!(triu_V, V[i])
         end
     end
-    return upper_tri_I, upper_tri_J, upper_tri_V
+    return triu_I, triu_J, triu_V
 end
 
 
@@ -43,73 +43,106 @@ function preprocess_sparsecons(
     As::Vector{SparseMatrixCSC{Tv, Ti}}
 ) where {Tv <: AbstractFloat, Ti <: Integer}
     # aggregate all constraints into one sparse matrix
+    all_triu_I, all_triu_J, all_triu_V = Ti[], Ti[], Tv[]
     all_I, all_J, all_V = Ti[], Ti[], Tv[]
     n = size(As[1], 1)
     nA = length(As)
     total_nnz = 0
-    upper_tri_I_list = Vector{Ti}[]
-    upper_tri_J_list = Vector{Ti}[]
-    upper_tri_V_list = Vector{Tv}[]
+    triu_I_list = Vector{Ti}[]
+    triu_J_list = Vector{Ti}[]
+    triu_V_list = Vector{Tv}[]
     for A in As
-        AI, AJ, AV = findnz(A)
-        upper_tri_AI, upper_tri_AJ, upper_tri_AV = 
-            sparse_sym_to_upper_tri(AI, AJ, AV)
-        push!(upper_tri_I_list, upper_tri_AI)
-        push!(upper_tri_J_list, upper_tri_AJ)
-        push!(upper_tri_V_list, upper_tri_AV)
-        append!(all_I, upper_tri_AI)
-        append!(all_J, upper_tri_AJ)
+        I, J, V = findnz(A)
+        triu_I, triu_J, triu_V = 
+            sparse_sym_to_triu(I, J, V)
+        push!(triu_I_list, triu_I)
+        push!(triu_J_list, triu_J)
+        push!(triu_V_list, triu_V)
+        append!(all_triu_I, triu_I)
+        append!(all_triu_J, triu_J)
         # make sure cancellation doesn't happen 
-        append!(all_V, ones(Tv, length(upper_tri_AV)))
-        total_nnz += length(upper_tri_AV)
+        append!(all_triu_V, ones(Tv, length(triu_V)))
+
+        append!(all_I, I)
+        append!(all_J, J)
+        append!(all_V, ones(Tv, length(V)))
+        total_nnz += length(triu_V)
     end
 
     # nnz of sum_A correspond to potential nnz of 
     # \sum_{i=1}^m y_i A_i
     # thus via preallocation, we can speed up 
     # the computation of addition of sparse matrices
-    sum_A = sparse(all_I, all_J, all_V, n, n)
+    triu_sum_A = sparse(all_triu_I, all_triu_J, all_triu_V, n, n)
     agg_A_ptr = zeros(Ti, nA + 1)
     agg_A_nzind = zeros(Ti, total_nnz)
     agg_A_nzval_one = zeros(Tv, total_nnz)
     agg_A_nzval_two = zeros(Tv, total_nnz)
+
+    sum_A = sparse(all_I, all_J, all_V, n, n)
 
     cumul_nnz = 0
     for i in eachindex(As)
         # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
         # correspond to the i-th sparse constraint/objective matrix
         agg_A_ptr[i] = cumul_nnz + 1
-        upper_tri_I = upper_tri_I_list[i]
-        upper_tri_J = upper_tri_J_list[i]
-        upper_tri_V = upper_tri_V_list[i]
-        for j in eachindex(upper_tri_I)
-            row, col = upper_tri_I[j], upper_tri_J[j]
-            low = sum_A.colptr[col]
-            high = sum_A.colptr[col+1]-1
+        triu_I = triu_I_list[i]
+        triu_J = triu_J_list[i]
+        triu_V = triu_V_list[i]
+        for j in eachindex(triu_I)
+            row, col = triu_I[j], triu_J[j]
+            low = triu_sum_A.colptr[col]
+            high = triu_sum_A.colptr[col+1]-1
             while low <= high
                 mid = (low + high) ÷ 2
-                if sum_A.rowval[mid] == row 
+                if triu_sum_A.rowval[mid] == row 
                     agg_A_nzind[cumul_nnz+j] = mid 
                     break
-                elseif sum_A.rowval[mid] < row 
+                elseif triu_sum_A.rowval[mid] < row 
                     low = mid + 1
                 else
                     high = mid - 1
                 end
             end
-            agg_A_nzval_one[cumul_nnz+j] = upper_tri_V[j] 
+            agg_A_nzval_one[cumul_nnz+j] = triu_V[j] 
             if row == col
-                agg_A_nzval_two[cumul_nnz+j] = upper_tri_V[j]
+                agg_A_nzval_two[cumul_nnz+j] = triu_V[j]
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
-                agg_A_nzval_two[cumul_nnz+j] = Tv(2.0) * upper_tri_V[j] 
+                agg_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
             end
         end
-        cumul_nnz += length(upper_tri_I)
+        cumul_nnz += length(triu_I)
     end
     agg_A_ptr[end] = total_nnz + 1
-    return sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two
+    sum_A_triu_sum_A_inds = zeros(Ti, length(sum_A.rowval))
+    for col = 1:n
+        for nzi = sum_A.colptr[col]:sum_A.colptr[col+1]-1
+            row = sum_A.rowval[nzi]
+            r = min(row, col)
+            c = max(row, col)
+            low = triu_sum_A.colptr[c]
+            high = triu_sum_A.colptr[c+1]-1
+            #@show low, high, triu_sum_A.rowval[low:high]
+            while low <= high
+                mid = div(low + high, 2)
+                if triu_sum_A.rowval[mid] == r
+                    sum_A_triu_sum_A_inds[nzi] = mid
+                    break
+                elseif triu_sum_A.rowval[mid] > r
+                    high = mid - 1
+                else
+                    low = mid + 1
+                end
+            end
+        end
+    end
+    #@show triu_sum_A
+    #@show sum_A
+    #@show sum_A_triu_sum_A_inds
+    return (triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, 
+           agg_A_nzval_two, sum_A, sum_A_triu_sum_A_inds)
 end
 
 
@@ -149,8 +182,8 @@ function sdplr(
         push!(sparse_As_global_inds, 0)
     end
 
-    sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two = 
-        preprocess_sparsecons(sparse_cons)
+    triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two,
+        sum_A, sum_A_to_triu_A_inds = preprocess_sparsecons(sparse_cons)
     
     n = size(C, 1); m = length(As)
     nnz_sum_A = length(sum_A.rowval)
@@ -160,10 +193,11 @@ function sdplr(
     λ₀ = randn(m)
 
     SDP = SDPProblem(n, m, # size of X, number of constraints
-                     C, b, sum_A.colptr, sum_A.rowval,
+                     C, b, triu_sum_A.colptr, triu_sum_A.rowval,
                      length(sparse_cons), agg_A_ptr, agg_A_nzind,
                      agg_A_nzval_one, agg_A_nzval_two, sparse_As_global_inds,
                      zeros(Tv, nnz_sum_A), zeros(Tv, nnz_sum_A),
+                     sum_A, sum_A_to_triu_A_inds, 
                      zeros(Tv, nnz_sum_A), zeros(Tv, m), zeros(Tv, m),
                      R₀, zeros(Tv, size(R₀)), λ₀, zeros(Tv, m), zeros(Tv, m),
                     BurerMonterioMutableScalars(
@@ -203,7 +237,8 @@ function _sdplr(
 
     # set up algorithm parameters
     normb = norm(SDP.b, Inf)
-    normC = norm(SDP.C, Inf)
+    #normC = norm(SDP.C, Inf)
+    normC = maximum(abs.(SDP.C))
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
@@ -279,6 +314,7 @@ function _sdplr(
                 linesearch_dt = @elapsed begin
                     α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
+                @printf("Iter %d\n", iter)
                 @show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
@@ -398,6 +434,7 @@ function _sdplr(
     SDP.scalars.endtime = time()
     totaltime = SDP.scalars.endtime - SDP.scalars.starttime
     SDP.scalars.primal_time = totaltime - SDP.scalars.dual_time
+    @show normb, normC
     return Dict([
         "R" => SDP.R,
         "λ" => SDP.λ,

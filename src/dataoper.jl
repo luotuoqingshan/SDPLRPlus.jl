@@ -104,26 +104,37 @@ function gradient!(
         end
     end
 
+    @inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
+        SDP.full_S.nzval[i] = SDP.S_nzval[SDP.full_S_triu_S_inds[i]]
+    end
+
 
     #constraint_grad!(SDP.G, S, SDP.C, SDP.indC, SDP.R, one(Tv))
     #for (i, A) in enumerate(SDP)
     #    constraint_grad!(SDP.G, S, A, SDP.indAs[i], SDP.R, y[i])
     #end
-    @inbounds for col = 1:SDP.n 
-        for nzi = SDP.XS_colptr[col]:(SDP.XS_colptr[col + 1] - 1)
-            row = SDP.XS_rowval[nzi]
-            @simd for k = axes(SDP.G, 2) 
-                SDP.G[row, k] += SDP.S_nzval[nzi] * SDP.R[col, k]
-            end
-            if row != col
-                @simd for k = axes(SDP.G, 2) 
-                    SDP.G[col, k] += SDP.S_nzval[nzi] * SDP.R[row, k]
-                end
-            end
-        end
-    end
+
+
+
+    #@inbounds for col = 1:SDP.n 
+    #    for nzi = SDP.XS_colptr[col]:(SDP.XS_colptr[col + 1] - 1)
+    #        row = SDP.XS_rowval[nzi]
+    #        @simd for k = axes(SDP.G, 2) 
+    #            SDP.G[row, k] += SDP.S_nzval[nzi] * SDP.R[col, k]
+    #        end
+    #        if row != col
+    #            @simd for k = axes(SDP.G, 2) 
+    #                SDP.G[col, k] += SDP.S_nzval[nzi] * SDP.R[row, k]
+    #            end
+    #        end
+    #    end
+    #end
+
+    SDP.G .= SDP.full_S * SDP.R 
+
     #mul!(SDP.G, S, SDP.R, one(Tv), one(Tv))
-    lmul!(Tv(2), SDP.G)
+    #lmul!(Tv(2), SDP.G)
+    LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
     return 0
 end
 

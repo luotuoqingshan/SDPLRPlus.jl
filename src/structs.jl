@@ -340,7 +340,8 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
 
     X_nzval::Vector{Tv}
     S_nzval::Vector{Tv}
-    S::SparseMatrixCSC{Tv, Ti}
+    full_S::SparseMatrixCSC{Tv, Ti}
+    full_S_triu_S_inds::Vector{Ti} 
     UVt::Vector{Tv}
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
