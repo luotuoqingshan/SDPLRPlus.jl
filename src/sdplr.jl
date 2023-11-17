@@ -262,6 +262,8 @@ function _sdplr(
     majoriter = 0 
     iter = 0 # total number of iterations
 
+    @show stationarity, primal_vio
+
     # save initial function value, notice that
     # here the constraints may not be satisfied,
     # which means the value may be smaller than the optimum
@@ -300,7 +302,7 @@ function _sdplr(
                 dirlbfgs_dt = @elapsed begin
                     dirlbfgs!(dir, SDP, lbfgshis, negate=true)
                 end
-                @show dirlbfgs_dt
+                #@show dirlbfgs_dt
                 #@show norm(dir)
 
                 descent = dot(dir, SDP.G)
@@ -315,7 +317,7 @@ function _sdplr(
                     α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
                 @printf("Iter %d\n", iter)
-                @show linesearch_dt
+                #@show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
 
@@ -332,12 +334,14 @@ function _sdplr(
                     recalc_cnt -= 1
                 end
 
+                @show stationarity, primal_vio
+
                 lbfgs_postprecess_dt = @elapsed begin
                     if config.numlbfgsvecs > 0 
                         lbfgs_postprocess!(SDP, lbfgshis, dir, α)
                     end
                 end
-                @show lbfgs_postprecess_dt
+                #@show lbfgs_postprecess_dt
 
                 current_time = time() 
                 if current_time - lastprint >= config.printfreq
@@ -434,7 +438,7 @@ function _sdplr(
     SDP.scalars.endtime = time()
     totaltime = SDP.scalars.endtime - SDP.scalars.starttime
     SDP.scalars.primal_time = totaltime - SDP.scalars.dual_time
-    @show normb, normC
+    #@show normb, normC
     return Dict([
         "R" => SDP.R,
         "λ" => SDP.λ,

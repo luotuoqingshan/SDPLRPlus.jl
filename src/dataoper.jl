@@ -159,6 +159,6 @@ function essential_calcs!(
     end
     stationarity = norm(SDP.G, 2) / (1.0 + normC)
     primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-    @show L_val_dt, grad_dt
+    #@show L_val_dt, grad_dt
     return (𝓛_val, stationarity, primal_vio)
 end

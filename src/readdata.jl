@@ -67,7 +67,7 @@ function write_problem_sdpa(
         write(f, "\n")
         triuC = triu(C)
         for (i, j, v) in zip(findnz(triuC)...)
-            write(f, "0 1 $i $j $v\n")
+            write(f, "0 1 $i $j $(-v)\n")
         end
         for i = 1:m
             triuAi = triu(As[i])
