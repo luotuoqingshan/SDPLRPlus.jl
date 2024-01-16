@@ -4,6 +4,7 @@ using Random
 using SparseArrays
 include("structs.jl")
 include("dataoper.jl")
+include("readdata.jl")
 include("lbfgs.jl")
 include("myprint.jl")
 include("linesearch.jl")
@@ -228,6 +229,11 @@ function _sdplr(
     lastprint = SDP.scalars.starttime # timestamp of last print
     R₀ = deepcopy(SDP.R) 
     λ₀ = deepcopy(SDP.λ)
+
+    #@show size(R₀)
+    #println("haha")
+    #include("readdata.jl")
+    #write_initial_solution(R₀, λ₀, "G1.solin")
 
     # TODO setup printing
     if config.printlevel > 0

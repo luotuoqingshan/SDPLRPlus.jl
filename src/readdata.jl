@@ -78,10 +78,48 @@ function write_problem_sdpa(
     end
 end
 
+
+"""
+
+Write initial solution which can be loaded into SDPLR-1.03-beta.
+"""
+function write_initial_solution(
+    R::Matrix{Tv}, 
+    λ::Vector{Tv}, 
+    filename::String;
+    filefolder::String=homedir()*"/SDPLR-1.03-beta 3/data/",
+) where {Tv <: AbstractFloat}
+    n, r = size(R)
+    m = length(λ)
+    filepath = filefolder*filename
+    @show filepath
+    open(filepath, "w") do f
+        write(f, "dual variable $m\n")
+        for i = 1:m
+            write(f, "$(λ[i])\n")
+        end
+        write(f, "primal variable 1 s $n $r $r\n")
+        for j = axes(R, 2) 
+            for i = axes(R, 1)
+                write(f, "$(R[i, j])\n")
+            end
+        end
+        write(f, "special majiter 0\n")
+        write(f, "special iter 0\n")
+        write(f, "special lambdaupdate 0")
+        write(f, "special CG 0\n")
+        write(f, "special curr_CG 0\n")
+        write(f, "special totaltime 0\n")
+        write(f, "special sigma $(1.0/n)\n") 
+        write(f, "special scale 1.0\n")
+    end
+    println("Finishing writing initial solution to $filepath")
+end
+
 include("optprograms.jl")
 
-A = load_gset("G1")
-
-C, As, bs = maxcut(A);
-
-write_problem_sdpa("G1.sdpa", C, As, bs)
+#for i = [70, 72, 77, 81] 
+#    A = load_gset("G$i")
+#    C, As, bs = maxcut(A);
+#    write_problem_sdpa("G$i.sdpa", C, As, bs)
+#end
