@@ -1,4 +1,3 @@
-using Printf
 function printheading(start)
     if start == 1 # print start heading
         println("="^121)

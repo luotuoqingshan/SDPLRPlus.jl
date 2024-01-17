@@ -1,6 +1,3 @@
-include("structs.jl")
-
-
 """
 This function computes the augmented Lagrangian value, 
     𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2

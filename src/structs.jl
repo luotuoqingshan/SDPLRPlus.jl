@@ -1,9 +1,3 @@
-using Random
-using Test
-using SparseArrays
-using LinearAlgebra
-import LinearAlgebra: dot, size, show, norm
-
 """
 Low rank representation of constraint matrices
 written as BDBᵀ, since usually B is really thin,

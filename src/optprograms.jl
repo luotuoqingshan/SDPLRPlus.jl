@@ -1,6 +1,3 @@
-using LinearAlgebra, SparseArrays
-
-
 """
 Maxcut SDP: 
 minimize  - 1/4 ⟨L, X⟩

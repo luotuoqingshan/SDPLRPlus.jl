@@ -46,10 +46,6 @@ for i = k - m, k - m + 1, ... k - 1
     βᵢ = ρᵢ * yᵢᵀ r
     r = r + sᵢ * (αᵢ - βᵢ)
 end
-
-Notice here if we initialize all sᵢ, yᵢ to be zero
-then we don't need to record how many
-sᵢ, yᵢ pairs we have already computed 
 """
 function dirlbfgs!(
     dir::Matrix{Tv},
@@ -96,6 +92,9 @@ function dirlbfgs!(
 end
 
 
+"""
+Postprocessing step of L-BFGS.
+"""
 function lbfgs_postprocess!(
     SDP::SDPProblem{Ti, Tv, TC},
     lbfgshis::LBFGSHistory{Ti, Tv},
@@ -104,10 +103,13 @@ function lbfgs_postprocess!(
 )where {Ti<:Integer, Tv <: AbstractFloat, TC}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
+
     LinearAlgebra.BLAS.scal!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
+
     LinearAlgebra.axpy!(one(Tv), SDP.G, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
+
     lbfgshis.latest[] = j
 end
 

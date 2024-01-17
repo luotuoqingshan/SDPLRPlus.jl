@@ -1,8 +1,3 @@
-using Polynomials
-using PolynomialRoots
-include("dataoper.jl")
-include("structs.jl")
-
 """
 Exact line search for minimizing the augmented Lagrangian
 """
