@@ -23,14 +23,50 @@ function load_gset(
             u = parse(Int, u)
             v = parse(Int, v)
             w = parse(Float64, w)
-            push!(I, u)
-            push!(J, v)
-            push!(V, w)
+            # Turn it into an undirected graph
+            push!(I, u); push!(J, v); push!(V, w)
+            push!(J, u); push!(I, v); push!(V, w)
         end
     end
     A = sparse(I, J, V, n, n)
-    # Turn it into an undirected graph
-    A = max.(A, A')
+    # remove self-loops
+    A[diagind(A)] .= 0
+    dropzeros!(A)
+    return A
+end
+
+
+"""
+    load_gset_smat(filename; [filepath])
+
+Load a GSet graph in the smat format into an adjacency matrix.
+"""
+function load_gset_smat(
+    filename::String;
+    filefolder::String=homedir()*"/Gset/",
+)
+    I = Int32[] 
+    J = Int32[]
+    V = Float64[]
+    n = 0
+    m = 0
+    filepath = filefolder*filename*".smat"
+    open(filepath) do file
+        lines = readlines(file)
+        n, m, nnz_A = split(lines[1], ' ')
+        n = parse(Int, n)
+        m = parse(Int, m)
+        for line in lines[2:end]
+            u, v, w = split(line, ' ')
+            u = parse(Int, u)
+            v = parse(Int, v)
+            w = parse(Float64, w)
+            push!(I, u+1)
+            push!(J, v+1)
+            push!(V, w)
+        end
+    end
+    A = sparse(I, J, V, n, m)
     # remove self-loops
     A[diagind(A)] .= 0
     dropzeros!(A)
@@ -48,7 +84,7 @@ function write_problem_sdpa(
     C::AbstractMatrix{Tv},
     As::TCons,
     bs::Vector{Tv};
-    filefolder::String=homedir()*"/SDPLR-1.03-beta 3/data/"
+    filefolder::String=homedir()*"/SDPLR-1.03-beta/data/"
 ) where {Tv <: AbstractFloat, TCons}
     n = size(C, 1) 
     m = length(As)
