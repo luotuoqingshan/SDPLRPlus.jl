@@ -112,7 +112,6 @@ end
 
 
 """
-
 Write initial solution which can be loaded into SDPLR-1.03-beta.
 """
 function write_initial_solution(
@@ -148,10 +147,20 @@ function write_initial_solution(
     println("Finishing writing initial solution to $filepath")
 end
 
-include("optprograms.jl")
 
-#for i = [70, 72, 77, 81] 
-#    A = load_gset("G$i")
-#    C, As, bs = maxcut(A);
-#    write_problem_sdpa("G$i.sdpa", C, As, bs)
-#end
+"""
+    gset([gset_folder, sdpa_folder])
+
+Batch process Gset graphs, write out their MaxCut SDP,
+and store them in the SDPA format. 
+"""
+function gset_maxcut_sdpa(
+    gset_folder::String=homedir()*"/Gset/",
+    sdpa_folder::String=homedir()*"/SDPLR-1.03-beta/data/",
+)
+    for i = [1:67; 70; 72; 77; 81]
+        A = load_gset("G$i"; filefolder=gset_folder)
+        C, As, bs = maxcut(A) 
+        write_problem_sdpa("G$i.sdpa", C, As, bs; filefolder=sdpa_folder)
+    end
+end
