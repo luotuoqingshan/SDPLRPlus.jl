@@ -37,21 +37,37 @@ function sdplr(
     triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two,
         sum_A, sum_A_to_triu_A_inds = preprocess_sparsecons(sparse_cons)
     
-    n = size(C, 1); m = length(As)
+    n = size(C, 1)
+    m = length(As)
     nnz_sum_A = length(sum_A.rowval)
 
     n = size(C, 1)
+    # randomly initialize primal and dual variables
     R₀ = 2 .* rand(n, r) .- 1
     λ₀ = randn(m)
 
     SDP = SDPProblem(n, m, # size of X, number of constraints
-                     C, b, triu_sum_A.colptr, triu_sum_A.rowval,
-                     length(sparse_cons), agg_A_ptr, agg_A_nzind,
-                     agg_A_nzval_one, agg_A_nzval_two, sparse_As_global_inds,
-                     zeros(Tv, nnz_sum_A), zeros(Tv, nnz_sum_A),
-                     sum_A, sum_A_to_triu_A_inds, 
-                     zeros(Tv, nnz_sum_A), zeros(Tv, m), zeros(Tv, m),
-                     R₀, zeros(Tv, size(R₀)), λ₀, zeros(Tv, m), zeros(Tv, m),
+                     C, # objective matrix
+                     b, # right-hand-side vector of constraints 
+                     triu_sum_A.colptr, 
+                     triu_sum_A.rowval, # (colptr, rowval) for aggregated triu(A)
+                     length(sparse_cons), 
+                     agg_A_ptr, 
+                     agg_A_nzind,
+                     agg_A_nzval_one, 
+                     agg_A_nzval_two, 
+                     sparse_As_global_inds,
+                     zeros(Tv, nnz_sum_A), 
+                     zeros(Tv, nnz_sum_A),
+                     sum_A,
+                     sum_A_to_triu_A_inds, 
+                     zeros(Tv, nnz_sum_A), 
+                     zeros(Tv, m), zeros(Tv, m),
+                     R₀, 
+                     zeros(Tv, size(R₀)), 
+                     λ₀, 
+                     zeros(Tv, m), 
+                     zeros(Tv, m),
                     BurerMonterioMutableScalars(
                         r, 
                         one(Tv) / n,      #σ
@@ -107,19 +123,20 @@ function _sdplr(
     for i = 1:config.numlbfgsvecs
         push!(lbfgshis.vecs, 
             LBFGSVector(zeros(Tv, size(SDP.R)),
-                     zeros(Tv, size(SDP.R)),
-                     Ref(zero(Tv)), Ref(zero(Tv))))
+                        zeros(Tv, size(SDP.R)),
+                        Ref(zero(Tv)), 
+                        Ref(zero(Tv)),
+                        ))
     end
 
 
     tol_stationarity = config.tol_stationarity / SDP.scalars.σ 
-    #@show tol_stationarity
+
     𝓛_val, stationarity , primal_vio = 
         essential_calcs!(SDP, normC, normb)
     majoriter = 0 
     iter = 0 # total number of iterations
 
-    @show stationarity, primal_vio
 
     # save initial function value, notice that
     # here the constraints may not be satisfied,
@@ -173,7 +190,7 @@ function _sdplr(
                 linesearch_dt = @elapsed begin
                     α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
-                @printf("Iter %d\n", iter)
+                #@printf("Iter %d\n", iter)
                 #@show linesearch_dt
                 #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
                 #@show iter, 𝓛_val
@@ -181,7 +198,7 @@ function _sdplr(
                 LinearAlgebra.axpy!(α, dir, SDP.R)
                 if recalc_cnt == 0
                     𝓛_val, stationarity, primal_vio = 
-                        essential_calcs!(SDP. SDP, normC, normb)
+                        essential_calcs!(SDP, normC, normb)
                     recalc_cnt = recalcfreq
                     #@show 𝓛_val, stationarity, primal_vio
                 else
@@ -191,7 +208,7 @@ function _sdplr(
                     recalc_cnt -= 1
                 end
 
-                @show stationarity, primal_vio
+                #@show stationarity, primal_vio
 
                 lbfgs_postprecess_dt = @elapsed begin
                     if config.numlbfgsvecs > 0 
@@ -205,7 +222,7 @@ function _sdplr(
                     lastprint = current_time
                     if config.printlevel > 0
                         printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                                  SDP.obj, stationarity, primal_vio, best_dualbd)
+                                  SDP.scalars.obj, stationarity, primal_vio, best_dualbd)
                     end
                 end   
 
@@ -219,9 +236,11 @@ function _sdplr(
                     break
                 end
                 bestinfeas = min(primal_vio, bestinfeas)
-            end
+            end # end of local iteration
 
             if current_majoriter_end
+                printintermediate(majoriter, localiter, iter, 𝓛_val, 
+                          SDP.scalars.obj, stationarity, primal_vio, best_dualbd)
                 majoriter_end = true
                 break
             end
@@ -243,6 +262,11 @@ function _sdplr(
         end # end one major iteration
 
         # TODO check dual bounds
+        if config.checkdual
+            SDP.scalars.dual_time += @elapsed begin            
+                
+            end
+        end
 
         # cannot further improve infeasibility,
         # in other words to make the solution feasible, 
@@ -301,6 +325,7 @@ function _sdplr(
         "λ" => SDP.λ,
         "R₀" => R₀,
         "λ₀" => λ₀,
+        "σ" => SDP.scalars.σ,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
         "obj" => SDP.scalars.obj,
@@ -308,13 +333,20 @@ function _sdplr(
         "totattime" => totaltime,
         "dualtime" => SDP.scalars.dual_time,
         "primaltime" => SDP.scalars.primal_time,
+        "iter" => iter,
+        "majoriter" => majoriter,
     ])
 end
 
 
-function dualbound(
+
+function surrogate_duality_gap(
     SDP::SDPProblem, 
 )
+    essential_calcs!()
+    g_t = SDP.scalars.obj  
+    duality_gap = (g_t - dot(SDP.λ, SDP.primal_vio) - 
+                   SDP.scalars.σ/2*dot(SDP.primal_vio, SDP.primal_vio))
     n = size(SDP.R, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin

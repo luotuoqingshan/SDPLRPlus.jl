@@ -80,57 +80,51 @@ function Aoper_formUVt!(
 end
 
 
+function AToper!(
+    o::SparseMatrixCSC{Tv, Ti},
+    triu_o_nzval::Vector{Tv},
+    v::Vector{Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    fill!(triu_o_nzval, zero(Tv))
+    for i = 1:SDP.n_spase_matrices
+        ind = SDP.sparse_As_global_inds[i]
+        coeff = ind == 0 ? one(Tv) : v[ind]
+        for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
+            triu_o_nzval[SDP.agg_A_nzind[j]] += SDP.agg_A_nzval_one[j] * coeff
+        end
+    end
+
+    @inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
+        o.nzval[i] = triu_o_nzval[SDP.full_S_triu_S_inds[i]]
+    end
+end
+
 """
 This function computes the gradient of the augmented Lagrangian
 """
 function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    m = SDP.m
     @. SDP.y = -(SDP.λ - SDP.scalars.σ * SDP.primal_vio)
-    fill!(SDP.G, zero(Tv))
-    n, r = size(SDP.R)
 
+    AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
 
-    fill!(SDP.S_nzval, zero(Tv))
-    for i = 1:SDP.n_spase_matrices
-        ind = SDP.sparse_As_global_inds[i]
-        coeff = ind == 0 ? one(Tv) : SDP.y[ind]
-        for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
-            SDP.S_nzval[SDP.agg_A_nzind[j]] += SDP.agg_A_nzval_one[j] * coeff
-        end
-    end
-
-    @inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
-        SDP.full_S.nzval[i] = SDP.S_nzval[SDP.full_S_triu_S_inds[i]]
-    end
-
-
-    #constraint_grad!(SDP.G, S, SDP.C, SDP.indC, SDP.R, one(Tv))
-    #for (i, A) in enumerate(SDP)
-    #    constraint_grad!(SDP.G, S, A, SDP.indAs[i], SDP.R, y[i])
-    #end
-
-
-
-    #@inbounds for col = 1:SDP.n 
-    #    for nzi = SDP.XS_colptr[col]:(SDP.XS_colptr[col + 1] - 1)
-    #        row = SDP.XS_rowval[nzi]
-    #        @simd for k = axes(SDP.G, 2) 
-    #            SDP.G[row, k] += SDP.S_nzval[nzi] * SDP.R[col, k]
-    #        end
-    #        if row != col
-    #            @simd for k = axes(SDP.G, 2) 
-    #                SDP.G[col, k] += SDP.S_nzval[nzi] * SDP.R[row, k]
-    #            end
-    #        end
+    #fill!(SDP.S_nzval, zero(Tv))
+    #for i = 1:SDP.n_spase_matrices
+    #    ind = SDP.sparse_As_global_inds[i]
+    #    coeff = ind == 0 ? one(Tv) : SDP.y[ind]
+    #    for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
+    #        SDP.S_nzval[SDP.agg_A_nzind[j]] += SDP.agg_A_nzval_one[j] * coeff
     #    end
     #end
 
-    SDP.G .= SDP.full_S * SDP.R 
+    #@inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
+    #    SDP.full_S.nzval[i] = SDP.S_nzval[SDP.full_S_triu_S_inds[i]]
+    #end
 
-    #mul!(SDP.G, S, SDP.R, one(Tv), one(Tv))
-    #lmul!(Tv(2), SDP.G)
+    fill!(SDP.G, zero(Tv))
+    SDP.G .= SDP.full_S * SDP.R 
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
     return 0
 end
