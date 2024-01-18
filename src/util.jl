@@ -1,9 +1,14 @@
+"""
+    barvinok_pataki(n, m)
 
+Compute the barvinok-pataki bound.
+"""
 function barvinok_pataki(n::T, m::T) where {T <: Int}
     return min(n, T(floor(sqrt(2*m)+1)))
 end
 
 
+#TODO: finish it
 function goemans_williamson_random_rounding(
     A::SparseMatrixCSC{Tv, Ti},
     R::Matrix{Tv}
