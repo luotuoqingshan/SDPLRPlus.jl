@@ -153,3 +153,23 @@ function essential_calcs!(
     #@show L_val_dt, grad_dt
     return (𝓛_val, stationarity, primal_vio)
 end
+
+
+function surrogate_duality_gap(
+    SDP::SDPProblem{Ti, Tv, TC}, 
+    trace_bound::Tv, 
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    AX = SDP.primal_vio + SDP.b
+    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.scalars.σ * SDP.primal_vio, SDP)
+    op = ArpackSimpleFunctionOp(
+        (y, x) -> begin
+                LinearAlgebra.mul!(y, SDP.full_S, x)
+                return y
+        end, n)
+    eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(100, n), maxiter=1000000)
+    @show real.(eigenvals[1])
+    duality_gap = (SDP.scalars.obj - dot(SDP.λ, SDP.b) + SDP.scalars.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
+           - trace_bound * real.(eigenvals[1]))     
+    rel_duality_gap = duality_gap / (1 + SDP.scalars.obj)
+    return duality_gap, rel_duality_gap 
+end
