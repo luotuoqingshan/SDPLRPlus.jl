@@ -88,8 +88,8 @@ function _sdplr(
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # misc declarations
-    recalcfreq = 5 
-    recalc_cnt = 10^7 
+    #recalcfreq = 5 
+    #recalc_cnt = 10^7 
     difficulty = 3 
     bestinfeas = 1.0e10
     SDP.scalars.starttime = time()
@@ -172,9 +172,9 @@ function _sdplr(
                 #increase both iter and localiter counters
                 iter += 1
                 localiter += 1
-                # direction has been negated
                 dirlbfgs_dt = @elapsed begin
                     dirlbfgs!(dir, SDP, lbfgshis, negate=true)
+                    # the return direction has been negated
                 end
                 #@show dirlbfgs_dt
                 #@show norm(dir)
@@ -182,7 +182,6 @@ function _sdplr(
                 descent = dot(dir, SDP.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
                     LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
-                    #lmul!(-one(Tv), SDP.G)
                     copyto!(dir, SDP.G) # reverse back to gradient direction
                 end
 
@@ -196,17 +195,17 @@ function _sdplr(
                 #@show iter, 𝓛_val
 
                 LinearAlgebra.axpy!(α, dir, SDP.R)
-                if recalc_cnt == 0
-                    𝓛_val, stationarity, primal_vio = 
-                        essential_calcs!(SDP, normC, normb)
-                    recalc_cnt = recalcfreq
-                    #@show 𝓛_val, stationarity, primal_vio
-                else
-                    gradient!(SDP)
-                    stationarity = norm(SDP.G, 2) / (1.0 + normC)
-                    primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-                    recalc_cnt -= 1
-                end
+                #if recalc_cnt == 0
+                #    𝓛_val, stationarity, primal_vio = 
+                #        essential_calcs!(SDP, normC, normb)
+                #    recalc_cnt = recalcfreq
+                #    #@show 𝓛_val, stationarity, primal_vio
+                #else
+                gradient!(SDP)
+                stationarity = norm(SDP.G, 2) / (1.0 + normC)
+                primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
+                #recalc_cnt -= 1
+                #end
 
                 #@show stationarity, primal_vio
 
