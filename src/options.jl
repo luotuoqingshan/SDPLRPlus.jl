@@ -13,5 +13,5 @@
     #gaptol::Float64
     maxmajoriter::Ti = 10^5
     maxiter::Ti = 10^7
-    checkdual::Bool = false 
+    checkdual::Bool = true 
 end

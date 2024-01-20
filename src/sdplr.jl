@@ -314,7 +314,9 @@ function _sdplr(
     𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
     println("Done")
     if config.checkdual
-        SDP.scalars.dual_time = @elapsed best_dualbd = dualbound(SDP)
+        SDP.scalars.dual_time = @elapsed begin 
+            duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n))
+        end
     end
     SDP.scalars.endtime = time()
     totaltime = SDP.scalars.endtime - SDP.scalars.starttime
@@ -329,7 +331,8 @@ function _sdplr(
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
         "obj" => SDP.scalars.obj,
-        "dualbd" => best_dualbd,
+        "duality_bound" => duality_bound,
+        "rel_duality_bound" => rel_duality_bound,
         "totattime" => totaltime,
         "dualtime" => SDP.scalars.dual_time,
         "primaltime" => SDP.scalars.primal_time,
@@ -341,23 +344,21 @@ end
 
 
 function surrogate_duality_gap(
-    SDP::SDPProblem, 
-)
-    essential_calcs!()
-    g_t = SDP.scalars.obj  
-    duality_gap = (g_t - dot(SDP.λ, SDP.primal_vio) - 
-                   SDP.scalars.σ/2*dot(SDP.primal_vio, SDP.primal_vio))
-    n = size(SDP.R, 1)
+    SDP::SDPProblem{Ti, Tv, TC}, 
+    trace_bound::Tv, 
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    AX = SDP.primal_vio + SDP.b
+    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.scalars.σ * SDP.primal_vio, SDP)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
-                mul!(y, SDP.C, x)
-                for i = 1:SDP.m
-                     y .-= SDP.λ[i] * (SDP.constraints[i] * x) 
-                end
+                LinearAlgebra.mul!(y, SDP.full_S, x)
                 return y
         end, n)
     eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(100, n), maxiter=1000000)
-    dualbound = real.(eigenvals[1]) 
-    return dualbound 
+    @show real.(eigenvals[1])
+    duality_gap = (SDP.scalars.obj - dot(SDP.λ, SDP.b) + SDP.scalars.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
+           - trace_bound * real.(eigenvals[1]))     
+    rel_duality_gap = duality_gap / (1 + SDP.scalars.obj)
+    return duality_gap, rel_duality_gap 
 end
 
