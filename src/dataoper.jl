@@ -161,15 +161,112 @@ function surrogate_duality_gap(
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
     AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.scalars.σ * SDP.primal_vio, SDP)
+    #matwrite(homedir()*"/SDPLR-jl/output/S.mat", Dict("S" => SDP.full_S))
+    n = size(SDP.full_S, 1)
+    eigval_dt1 = @elapsed begin
+        #op = ArpackSimpleFunctionOp(
+        #    (y, x) -> begin
+        #            LinearAlgebra.mul!(y, SDP.full_S, x)
+        #            return y
+        #    end, n)
+        eigenvals, eigenvecs = symeigs(SDP.full_S, 1; which=:SA, tol=1e-6, maxiter=1000000)
+        @show real.(eigenvals[1])
+    end
+    eigval_dt2 = @elapsed begin
+        eigenval = approx_mineigval_lanczos(SDP.full_S, 100)
+        @show eigenval
+    end
+    eigval_dt3 = @elapsed begin
+        decomp, history = partialschur(SDP.full_S, which=SR(), tol=1e-6)
+        λs, X = partialeigen(decomp)
+        @show λs
+    end
+    @show eigval_dt1, eigval_dt2, eigval_dt3
+    duality_gap = (SDP.scalars.obj - dot(SDP.λ, SDP.b) + SDP.scalars.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
+           - max(trace_bound, norm(SDP.R)^2) * real.(eigenvals[1]))     
+    rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.scalars.obj)) 
+    return duality_gap, rel_duality_gap 
+end
+
+
+"""
+Function for computing six DIMACS_errors
+    error1 = ||𝒜(X) - b||₂ / (1 + ||b||₂)
+    error2 = max {-λ_min(X), 0} / (1 + ||b||₂)
+    error3 = ||𝒜^*(y) + Z - C||_F / (1 + ||C||_F)
+    error4 = max {-λ_min(Z), 0} / (1 + ||C||_F) 
+    error5 = (<C, X> - b^T y) / (1 + |<C, X>| + |b^T y|)  
+    error6 = <X, Z> / (1 + |<C, X>| + |b^T y|)
+"""
+function DIMACS_errors(
+    SDP::SDPProblem{Ti, Tv, TC},
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    err1 = norm(SDP.primal_vio, 2) / (1.0 + norm(SDP.b, 2))       
+    err2 = 0.0
+    err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
+    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ, SDP)
+    n = size(SDP.full_S, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
                 LinearAlgebra.mul!(y, SDP.full_S, x)
                 return y
         end, n)
-    eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(100, n), maxiter=1000000)
-    @show real.(eigenvals[1])
-    duality_gap = (SDP.scalars.obj - dot(SDP.λ, SDP.b) + SDP.scalars.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
-           - trace_bound * real.(eigenvals[1]))     
-    rel_duality_gap = duality_gap / (1 + SDP.scalars.obj)
-    return duality_gap, rel_duality_gap 
+    eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(10, n), maxiter=1000000)
+    err4 = max(zero(Tv), -real.(eigenvals[1])) / (1.0 + norm(SDP.C, 2))
+    err5 = (SDP.scalars.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
+    err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
+    return [err1, err2, err3, err4, err5, err6]
+end
+
+
+"""
+Approximate the minimum eigenvalue of a symmetric matrix `A`.
+
+Perform `q` Lanczos iterations with *a random start vector* to approximate 
+the minimum eigenvalue of `A`.
+"""
+function approx_mineigval_lanczos(
+    A::AbstractMatrix{Tv},
+    q::Ti,
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    n::Ti = size(A, 1)
+    q = min(q, n - 1)
+
+    # allocate lanczos vectors
+    # alpha is the diagonal of the tridiagonal matrix
+    # beta is the subdiagonal of the tridiagonal matrix
+    alpha = zeros(q, 1)
+    beta = zeros(q, 1)
+
+    v = randn(Tv, n)
+    v ./= norm(v, 2)
+
+    Av = zeros(Tv, n)
+    v_pre = zeros(Tv, n)
+    
+    iter = 0
+    for i = 1:q
+        iter += 1
+        mul!(Av, A, v)
+        alpha[i] = v' * Av
+
+        LinearAlgebra.axpy!(-alpha[i], v, Av) 
+        if i == 1
+            @. Av -= alpha[i] * v
+        else
+            @. Av -= alpha[i] * v + beta[i-1] * v_pre
+        end
+
+        beta[i] = norm(Av, 2)
+
+        if  abs(beta[i]) < sqrt(n) * eps() 
+            break
+        end
+        Av ./= beta[i]
+        copyto!(v_pre, v)
+        copyto!(v, Av)
+    end
+    B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
+    min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=10000, tol=1e-6)
+    return min_eigval 
 end
