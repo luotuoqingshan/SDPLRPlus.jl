@@ -1,7 +1,10 @@
 [deps]
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Convex = "f65535da-76fb-5f13-bab9-19810c17039a"
 GenericArpack = "408c25d7-97fa-4992-8bd9-ce15f1a09fe9"
+MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
 MKLSparse = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
 Manifolds = "1cead3c2-87b3-11e9-0ccd-23c62b72b94e"
 Manopt = "0fc0a36d-df90-57f3-8f93-d78a9fc72bb5"
