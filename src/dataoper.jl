@@ -161,15 +161,9 @@ function surrogate_duality_gap(
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
     AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.scalars.σ * SDP.primal_vio, SDP)
-    #matwrite(homedir()*"/SDPLR-jl/output/S.mat", Dict("S" => SDP.full_S))
     n = size(SDP.full_S, 1)
     eigval_dt1 = @elapsed begin
-        #op = ArpackSimpleFunctionOp(
-        #    (y, x) -> begin
-        #            LinearAlgebra.mul!(y, SDP.full_S, x)
-        #            return y
-        #    end, n)
-        eigenvals, eigenvecs = symeigs(SDP.full_S, 1; which=:SA, tol=1e-6, maxiter=1000000)
+        eigenvals, _ = symeigs(SDP.full_S, 1; which=:SA, tol=1e-6, maxiter=1000000)
         @show real.(eigenvals[1])
     end
     eigval_dt2 = @elapsed begin
@@ -211,7 +205,7 @@ function DIMACS_errors(
                 LinearAlgebra.mul!(y, SDP.full_S, x)
                 return y
         end, n)
-    eigenvals, eigenvecs = symeigs(op, 1; which=:SA, ncv=min(10, n), maxiter=1000000)
+    eigenvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
     err4 = max(zero(Tv), -real.(eigenvals[1])) / (1.0 + norm(SDP.C, 2))
     err5 = (SDP.scalars.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
     err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
@@ -250,7 +244,6 @@ function approx_mineigval_lanczos(
         mul!(Av, A, v)
         alpha[i] = v' * Av
 
-        LinearAlgebra.axpy!(-alpha[i], v, Av) 
         if i == 1
             @. Av -= alpha[i] * v
         else
