@@ -91,6 +91,7 @@ function _sdplr(
     #recalcfreq = 5 
     #recalc_cnt = 10^7 
     #difficulty = 3 
+    n = size(SDP.R, 1)
     bestinfeas = 1.0e10
     SDP.scalars.starttime = time()
     lastprint = SDP.scalars.starttime # timestamp of last print
@@ -150,7 +151,6 @@ function _sdplr(
         #avoid goto in C
         current_majoriter_end = false
         λ_update = 0
-        @assert difficulty == 3
         while ((config.σ_strategy == 0 && λ_update < λ_updatect)
             ||(config.σ_strategy != 0)) 
             #||(config.σ_strategy != 0 && difficulty != 1)) 
@@ -175,13 +175,13 @@ function _sdplr(
                 iter += 1
                 localiter += 1
                 dirlbfgs_dt = @elapsed begin
-                    dirlbfgs!(dir, SDP, lbfgshis, negate=true)
+                    lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
                     # the return direction has been negated
                 end
                 #@show dirlbfgs_dt
                 #@show norm(dir)
 
-                descent = dot(dir, SDP.G)
+                descent = LinearAlgebra.dot(dir, SDP.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
                     LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
                     copyto!(dir, SDP.G) # reverse back to gradient direction
@@ -213,7 +213,7 @@ function _sdplr(
 
                 lbfgs_postprecess_dt = @elapsed begin
                     if config.numlbfgsvecs > 0 
-                        lbfgs_postprocess!(SDP, lbfgshis, dir, α)
+                        lbfgs_update!(dir, lbfgshis, SDP.G, α)
                     end
                 end
                 #@show lbfgs_postprecess_dt
@@ -301,9 +301,9 @@ function _sdplr(
         end
         # refresh some parameters
         λ_update = 0
-        if config.σ_strategy == 1
-            difficulty = 3
-        end
+        #if config.σ_strategy == 1
+        #    difficulty = 3
+        #end
 
         majoriter += 1
 
@@ -322,23 +322,27 @@ function _sdplr(
     SDP.scalars.endtime = time()
     totaltime = SDP.scalars.endtime - SDP.scalars.starttime
     SDP.scalars.primal_time = totaltime - SDP.scalars.dual_time
+    DIMACS_errs = DIMACS_errors(SDP)
     #@show normb, normC
+    @show DIMACS_errs
     return Dict([
         "R" => SDP.R,
-        "λ" => SDP.λ,
-        "R₀" => R₀,
-        "λ₀" => λ₀,
-        "σ" => SDP.scalars.σ,
+        "lamda" => SDP.λ,
+        "R0" => R₀,
+        "lambda0" => λ₀,
+        "sigma" => SDP.scalars.σ,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
         "obj" => SDP.scalars.obj,
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
-        "totattime" => totaltime,
+        "totaltime" => totaltime,
         "dualtime" => SDP.scalars.dual_time,
         "primaltime" => SDP.scalars.primal_time,
         "iter" => iter,
         "majoriter" => majoriter,
+        "DIMACS_errs" => DIMACS_errs,
+        #"config" => config,
     ])
 end
 

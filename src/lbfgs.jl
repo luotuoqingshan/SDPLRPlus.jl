@@ -16,7 +16,7 @@ struct LBFGSVector{T <: AbstractFloat}
 end
 
 """
-History of l-bfgs vectors
+History of L-BFGS vectors
 """
 struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
     # number of l-bfgs vectors
@@ -47,14 +47,14 @@ for i = k - m, k - m + 1, ... k - 1
     r = r + sᵢ * (αᵢ - βᵢ)
 end
 """
-function dirlbfgs!(
+function lbfgs_dir!(
     dir::Matrix{Tv},
-    SDP::SDPProblem{Ti, Tv, TC},
-    lbfgshis::LBFGSHistory{Ti, Tv};
+    lbfgshis::LBFGSHistory{Ti, Tv},
+    grad::Matrix{Tv};
     negate::Bool=true,
-) where{Ti <: Integer, Tv <: AbstractFloat, TC}
+) where{Ti <: Integer, Tv <: AbstractFloat}
     # we store l-bfgs vectors as a cyclic array
-    copyto!(dir, SDP.G)
+    copyto!(dir, grad)
     m = lbfgshis.m
     lst = lbfgshis.latest[]
     # pay attention here, dir, s and y are all matrices
@@ -87,7 +87,7 @@ function dirlbfgs!(
 
     # partial update of lbfgs history 
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
-    copyto!(lbfgshis.vecs[j].y, SDP.G)
+    copyto!(lbfgshis.vecs[j].y, grad)
     LinearAlgebra.BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
 end
 
@@ -95,19 +95,19 @@ end
 """
 Postprocessing step of L-BFGS.
 """
-function lbfgs_postprocess!(
-    SDP::SDPProblem{Ti, Tv, TC},
-    lbfgshis::LBFGSHistory{Ti, Tv},
+function lbfgs_update!(
     dir::Matrix{Tv},
+    lbfgshis::LBFGSHistory{Ti, Tv},
+    grad::Matrix{Tv},
     stepsize::Tv,
-)where {Ti<:Integer, Tv <: AbstractFloat, TC}
+)where {Ti<:Integer, Tv <: AbstractFloat}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
 
     LinearAlgebra.BLAS.scal!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
 
-    LinearAlgebra.axpy!(one(Tv), SDP.G, lbfgshis.vecs[j].y)
+    LinearAlgebra.axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
     lbfgshis.latest[] = j
