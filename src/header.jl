@@ -1,11 +1,15 @@
 using Random, Test, Printf
+
+# linear algebra
 using SparseArrays
 using LinearAlgebra
 import LinearAlgebra: dot, size, show, norm
 using MKLSparse # to speed up sparse matrix multiplication
 using GenericArpack
 
+# file 
 using DelimitedFiles
+using MAT
 
 using Polynomials # for line search
 using PolynomialRoots
@@ -16,6 +20,8 @@ using Convex
 using MosekTools
 using SCS
 const MOI = Convex.MOI
+
+using ArnoldiMethod
 
 
 include("structs.jl")
