@@ -7,10 +7,10 @@ function lagrangval!(
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # apply the operator 𝓐 to RRᵀ and 
     # potentially compute the objective function value
-    SDP.scalars.obj = Aoper!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
+    SDP.obj = Aoper!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
     SDP.primal_vio .-= SDP.b 
-    return (SDP.scalars.obj - dot(SDP.λ, SDP.primal_vio)
-           + SDP.scalars.σ * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
+    return (SDP.obj - dot(SDP.λ, SDP.primal_vio)
+           + SDP.σ * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
 end
 
 
@@ -106,7 +106,7 @@ This function computes the gradient of the augmented Lagrangian
 function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    @. SDP.y = -(SDP.λ - SDP.scalars.σ * SDP.primal_vio)
+    @. SDP.y = -(SDP.λ - SDP.σ * SDP.primal_vio)
 
     AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
 
@@ -160,7 +160,7 @@ function surrogate_duality_gap(
     trace_bound::Tv, 
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
-    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.scalars.σ * SDP.primal_vio, SDP)
+    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.σ * SDP.primal_vio, SDP)
     n = size(SDP.full_S, 1)
     eigval_dt1 = @elapsed begin
         eigenvals, _ = symeigs(SDP.full_S, 1; which=:SA, tol=1e-6, maxiter=1000000)
@@ -176,9 +176,9 @@ function surrogate_duality_gap(
         @show λs
     end
     @show eigval_dt1, eigval_dt2, eigval_dt3
-    duality_gap = (SDP.scalars.obj - dot(SDP.λ, SDP.b) + SDP.scalars.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
+    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
            - max(trace_bound, norm(SDP.R)^2) * real.(eigenvals[1]))     
-    rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.scalars.obj)) 
+    rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
     return duality_gap, rel_duality_gap 
 end
 
@@ -207,8 +207,8 @@ function DIMACS_errors(
         end, n)
     eigenvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
     err4 = max(zero(Tv), -real.(eigenvals[1])) / (1.0 + norm(SDP.C, 2))
-    err5 = (SDP.scalars.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
-    err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.scalars.obj) + abs(dot(SDP.λ, SDP.b)))
+    err5 = (SDP.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
+    err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
     return [err1, err2, err3, err4, err5, err6]
 end
 

@@ -68,7 +68,7 @@ function sdplr(
                      λ₀, 
                      zeros(Tv, m), 
                      zeros(Tv, m),
-                    BurerMonterioMutableScalars(
+                    #BurerMonterioMutableScalars(
                         r, 
                         one(Tv) / n,      #σ
                         zero(Tv),         #obj, will be initialized later
@@ -76,7 +76,8 @@ function sdplr(
                         zero(Tv),         #endtime 
                         zero(Tv),         #time spent on computing dual bound
                         zero(Tv),         #time spend on primal computation
-                    ))
+                    #)
+                    )
 
     res = _sdplr(SDP, config)
     return res 
@@ -87,21 +88,12 @@ function _sdplr(
     SDP::SDPProblem{Ti, Tv, TC},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    # misc declarations
-    #recalcfreq = 5 
-    #recalc_cnt = 10^7 
-    #difficulty = 3 
     n = size(SDP.R, 1)
     bestinfeas = 1.0e10
-    SDP.scalars.starttime = time()
-    lastprint = SDP.scalars.starttime # timestamp of last print
+    SDP.starttime = time()
+    lastprint = SDP.starttime # timestamp of last print
     R₀ = deepcopy(SDP.R) 
     λ₀ = deepcopy(SDP.λ)
-
-    #@show size(R₀)
-    #println("haha")
-    #include("readdata.jl")
-    #write_initial_solution(R₀, λ₀, "G1.solin")
 
     # TODO setup printing
     if config.printlevel > 0
@@ -131,17 +123,13 @@ function _sdplr(
     end
 
 
-    tol_stationarity = config.tol_stationarity / SDP.scalars.σ 
+    tol_stationarity = config.tol_stationarity / SDP.σ 
 
     𝓛_val, stationarity , primal_vio = 
         essential_calcs!(SDP, normC, normb)
     majoriter = 0 
     iter = 0 # total number of iterations
 
-
-    # save initial function value, notice that
-    # here the constraints may not be satisfied,
-    # which means the value may be smaller than the optimum
     origval = 𝓛_val 
 
     majoriter_end = false
@@ -191,12 +179,9 @@ function _sdplr(
                 linesearch_dt = @elapsed begin
                     α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
                 end
-                #@printf("Iter %d\n", iter)
-                #@show linesearch_dt
-                #@printf("iter %d, 𝓛_val %.10lf α %.10lf\n", iter, 𝓛_val, α) 
-                #@show iter, 𝓛_val
 
                 LinearAlgebra.axpy!(α, dir, SDP.R)
+
                 #if recalc_cnt == 0
                 #    𝓛_val, stationarity, primal_vio = 
                 #        essential_calcs!(SDP, normC, normb)
@@ -223,16 +208,16 @@ function _sdplr(
                     lastprint = current_time
                     if config.printlevel > 0
                         printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                                  SDP.scalars.obj, stationarity, primal_vio, best_dualbd)
+                                  SDP.obj, stationarity, primal_vio, best_dualbd)
                     end
                 end   
 
-                totaltime = time() - SDP.scalars.starttime
+                totaltime = time() - SDP.starttime
 
                 if (totaltime >= config.timelim 
                     || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    LinearAlgebra.axpy!(-SDP.scalars.σ, SDP.primal_vio, SDP.λ)
+                    LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
                     current_majoriter_end = true
                     break
                 end
@@ -241,30 +226,21 @@ function _sdplr(
 
             if current_majoriter_end
                 printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                          SDP.scalars.obj, stationarity, primal_vio, best_dualbd)
+                          SDP.obj, stationarity, primal_vio, best_dualbd)
                 majoriter_end = true
                 break
             end
 
             # update Lagrange multipliers and recalculate essentials
-            LinearAlgebra.axpy!(-SDP.scalars.σ, SDP.primal_vio, SDP.λ)
+            LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(SDP, normC, normb)
 
-            #if config.σ_strategy == 1
-            #    if localiter <= 10
-            #        difficulty = 1 # EASY
-            #    elseif localiter > 10 && localiter <= 50 
-            #        difficulty = 2 # MEDIUM
-            #    else
-            #        difficulty = 3 # HARD
-            #    end
-            #end
         end # end one major iteration
 
         # TODO check dual bounds
         if config.checkdual
-            SDP.scalars.dual_time += @elapsed begin            
+            SDP.dual_time += @elapsed begin            
                 
             end
         end
@@ -291,19 +267,16 @@ function _sdplr(
 
         # update sigma
         while true
-            SDP.scalars.σ *= config.σ_fac
+            SDP.σ *= config.σ_fac
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(SDP, normC, normb)
-            tol_stationarity = config.tol_stationarity / SDP.scalars.σ
+            tol_stationarity = config.tol_stationarity / SDP.σ
             if tol_stationarity < stationarity 
                 break
             end
         end
         # refresh some parameters
         λ_update = 0
-        #if config.σ_strategy == 1
-        #    difficulty = 3
-        #end
 
         majoriter += 1
 
@@ -315,13 +288,13 @@ function _sdplr(
     𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
     println("Done")
     if config.checkdual
-        SDP.scalars.dual_time = @elapsed begin 
+        SDP.dual_time = @elapsed begin 
             duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n))
         end
     end
-    SDP.scalars.endtime = time()
-    totaltime = SDP.scalars.endtime - SDP.scalars.starttime
-    SDP.scalars.primal_time = totaltime - SDP.scalars.dual_time
+    SDP.endtime = time()
+    totaltime = SDP.endtime - SDP.starttime
+    SDP.primal_time = totaltime - SDP.dual_time
     DIMACS_errs = DIMACS_errors(SDP)
     #@show normb, normC
     @show DIMACS_errs
@@ -330,15 +303,15 @@ function _sdplr(
         "lamda" => SDP.λ,
         "R0" => R₀,
         "lambda0" => λ₀,
-        "sigma" => SDP.scalars.σ,
+        "sigma" => SDP.σ,
         "stationarity" => stationarity,
         "primal_vio" => primal_vio,
-        "obj" => SDP.scalars.obj,
+        "obj" => SDP.obj,
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
         "totaltime" => totaltime,
-        "dualtime" => SDP.scalars.dual_time,
-        "primaltime" => SDP.scalars.primal_time,
+        "dualtime" => SDP.dual_time,
+        "primaltime" => SDP.primal_time,
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,

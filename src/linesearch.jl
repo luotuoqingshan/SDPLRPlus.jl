@@ -33,23 +33,23 @@ function linesearch!(
     # e = p0 - λᵀ * (-q0) + σ / 2 * ||-q0||²
 
     m = SDP.m
-    biquadratic[1] = (SDP.scalars.obj - dot(SDP.λ, SDP.primal_vio) + 
-        0.5 * SDP.scalars.σ * dot(SDP.primal_vio, SDP.primal_vio))
+    biquadratic[1] = (SDP.obj - dot(SDP.λ, SDP.primal_vio) + 
+        0.5 * SDP.σ * dot(SDP.primal_vio, SDP.primal_vio))
     
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
     biquadratic[2] = (C_RD - dot(SDP.λ, SDP.A_RD) + 
-        SDP.scalars.σ * dot(SDP.primal_vio, SDP.A_RD))  
+        SDP.σ * dot(SDP.primal_vio, SDP.A_RD))  
     
 
     biquadratic[3] = (C_DD - dot(SDP.λ, SDP.A_DD) + 
-        SDP.scalars.σ * dot(SDP.primal_vio, SDP.A_DD) + 
-        0.5 * SDP.scalars.σ * dot(SDP.A_RD, SDP.A_RD))
+        SDP.σ * dot(SDP.primal_vio, SDP.A_DD) + 
+        0.5 * SDP.σ * dot(SDP.A_RD, SDP.A_RD))
 
-    biquadratic[4] = SDP.scalars.σ * dot(SDP.A_DD, SDP.A_RD)
+    biquadratic[4] = SDP.σ * dot(SDP.A_DD, SDP.A_RD)
 
-    biquadratic[5] = 0.5 * SDP.scalars.σ * dot(SDP.A_DD, SDP.A_DD)
+    biquadratic[5] = 0.5 * SDP.σ * dot(SDP.A_DD, SDP.A_DD)
 
     cubic[1] = 1.0 * biquadratic[2]
 
@@ -99,7 +99,7 @@ function linesearch!(
         # 𝓐((R + αD)(R + αD)ᵀ) =   
         # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
         @. SDP.primal_vio += α_star * (α_star * SDP.A_DD + SDP.A_RD)
-        SDP.scalars.obj += α_star * (α_star * C_DD + C_RD)
+        SDP.obj += α_star * (α_star * C_DD + C_RD)
     end
 
     return α_star, f_star 

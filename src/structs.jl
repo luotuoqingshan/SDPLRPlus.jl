@@ -305,18 +305,18 @@ function constraint_grad!(
 end
 
 
-mutable struct BurerMonterioMutableScalars{Ti<:Integer, Tv<:AbstractFloat}
-    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    σ::Tv                   # penalty parameter
-    obj::Tv                 # objective
-    starttime::Tv           # timing
-    endtime::Tv
-    dual_time::Tv
-    primal_time::Tv
-end
+#mutable struct BurerMonterioMutableScalars{Ti<:Integer, Tv<:AbstractFloat}
+#    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+#    σ::Tv                   # penalty parameter
+#    obj::Tv                 # objective
+#    starttime::Tv           # timing
+#    endtime::Tv
+#    dual_time::Tv
+#    primal_time::Tv
+#end
 
 
-struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
+mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     # list of matrices which are sparse/dense/low-rank/diagonal
@@ -346,7 +346,15 @@ struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints
 
-    scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
+    #scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
+
+    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+    σ::Tv                   # penalty parameter
+    obj::Tv                 # objective
+    starttime::Tv           # timing
+    endtime::Tv
+    dual_time::Tv
+    primal_time::Tv
 end
 
 
