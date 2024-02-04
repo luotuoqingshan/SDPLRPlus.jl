@@ -110,19 +110,6 @@ function gradient!(
 
     AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
 
-    #fill!(SDP.S_nzval, zero(Tv))
-    #for i = 1:SDP.n_spase_matrices
-    #    ind = SDP.sparse_As_global_inds[i]
-    #    coeff = ind == 0 ? one(Tv) : SDP.y[ind]
-    #    for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
-    #        SDP.S_nzval[SDP.agg_A_nzind[j]] += SDP.agg_A_nzval_one[j] * coeff
-    #    end
-    #end
-
-    #@inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
-    #    SDP.full_S.nzval[i] = SDP.S_nzval[SDP.full_S_triu_S_inds[i]]
-    #end
-
     fill!(SDP.G, zero(Tv))
     SDP.G .= SDP.full_S * SDP.R 
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
@@ -142,15 +129,10 @@ function essential_calcs!(
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    L_val_dt = @elapsed begin
-        𝓛_val = lagrangval!(SDP)
-    end
-    grad_dt = @elapsed begin
-        gradient!(SDP)
-    end
+    𝓛_val = lagrangval!(SDP)
+    gradient!(SDP)
     stationarity = norm(SDP.G, 2) / (1.0 + normC)
     primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-    #@show L_val_dt, grad_dt
     return (𝓛_val, stationarity, primal_vio)
 end
 

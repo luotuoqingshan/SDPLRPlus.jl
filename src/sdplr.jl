@@ -102,9 +102,8 @@ function _sdplr(
 
 
     # set up algorithm parameters
-    normb = norm(SDP.b, Inf)
-    #normC = norm(SDP.C, Inf)
-    normC = maximum(abs.(SDP.C))
+    normb = norm(SDP.b, 2)
+    normC = norm(SDP.C, 2)
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
@@ -125,14 +124,8 @@ function _sdplr(
     while majoriter < config.maxmajoriter 
         #avoid goto in C
         current_majoriter_end = false
-        λ_update = 0
-        while ((config.σ_strategy == 0 && λ_update < λ_updatect)
-            ||(config.σ_strategy != 0)) 
-            #||(config.σ_strategy != 0 && difficulty != 1)) 
-
+        while true 
             # increase lambda counter, reset local iter counter and lastval
-            λ_update += 1
-            localiter = 0
             lastval = 1.0e10
 
             # check stopping criteria: rho_c_val = norm of gradient
@@ -148,13 +141,8 @@ function _sdplr(
                 #@show tol_stationarity
                 #increase both iter and localiter counters
                 iter += 1
-                localiter += 1
-                dirlbfgs_dt = @elapsed begin
-                    lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
-                    # the return direction has been negated
-                end
-                #@show dirlbfgs_dt
-                #@show norm(dir)
+                # the return direction has been negated
+                lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
 
                 descent = LinearAlgebra.dot(dir, SDP.G)
                 if isnan(descent) || descent >= 0 # not a descent direction
@@ -162,33 +150,18 @@ function _sdplr(
                     copyto!(dir, SDP.G) # reverse back to gradient direction
                 end
 
-                lastval = 𝓛_val
-                linesearch_dt = @elapsed begin
-                    α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
-                end
+                lastval = 𝓛_val # record last Lagrangian value
+                α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
 
+                # update R and update gradient, stationarity, primal violence
                 LinearAlgebra.axpy!(α, dir, SDP.R)
-
-                #if recalc_cnt == 0
-                #    𝓛_val, stationarity, primal_vio = 
-                #        essential_calcs!(SDP, normC, normb)
-                #    recalc_cnt = recalcfreq
-                #    #@show 𝓛_val, stationarity, primal_vio
-                #else
                 gradient!(SDP)
                 stationarity = norm(SDP.G, 2) / (1.0 + normC)
                 primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-                #recalc_cnt -= 1
-                #end
 
-                #@show stationarity, primal_vio
-
-                lbfgs_postprecess_dt = @elapsed begin
-                    if config.numlbfgsvecs > 0 
-                        lbfgs_update!(dir, lbfgshis, SDP.G, α)
-                    end
+                if config.numlbfgsvecs > 0 
+                    lbfgs_update!(dir, lbfgshis, SDP.G, α)
                 end
-                #@show lbfgs_postprecess_dt
 
                 current_time = time() 
                 if current_time - lastprint >= config.printfreq
@@ -269,7 +242,7 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Tv(0), Tv(0))
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), zero(Tv), zero(Tv))
         end
     end
     𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
@@ -302,7 +275,6 @@ function _sdplr(
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,
-        #"config" => config,
     ])
 end
 
