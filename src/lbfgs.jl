@@ -1,7 +1,7 @@
 """
 Vector of L-BFGS
 """
-struct LBFGSVector{T <: AbstractFloat}
+mutable struct LBFGSVector{T <: AbstractFloat}
     # notice that we use matrix instead 
     # of vector to store s and y because our
     # decision variables are matrices
@@ -10,25 +10,53 @@ struct LBFGSVector{T <: AbstractFloat}
     # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
     y::Matrix{T}
     # ρ = 1/(⟨y, s⟩)
-    ρ::Base.RefValue{T}
+    #ρ::Base.RefValue{T}
+    ρ::T
     # temporary variable
-    a::Base.RefValue{T}
+    #a::Base.RefValue{T}
+    a::T
 end
 
 """
 History of L-BFGS vectors
 """
-struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
+mutable struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
     # number of l-bfgs vectors
     m::Ti
     vecs::Vector{LBFGSVector{Tv}}
     # the index of the latest l-bfgs vector
     # we use a cyclic array to store l-bfgs vectors
-    latest::Base.RefValue{Ti}
+    #latest::Base.RefValue{Ti}
+    latest::Ti
 end
 
 
 Base.:length(lbfgshis::LBFGSHistory) = lbfgshis.m
+
+
+"""
+Initialization of L-BFGS history
+"""
+function lbfgs_init(
+    R::Matrix{Tv},
+    numlbfgsvecs::Ti,
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    lbfgshis = LBFGSHistory{Ti, Tv}(
+        numlbfgsvecs,
+        LBFGSVector{Tv}[],
+        numlbfgsvecs)
+
+    for _ = 1:numlbfgsvecs
+        push!(lbfgshis.vecs, 
+            LBFGSVector(zeros(Tv, size(R)),
+                        zeros(Tv, size(R)),
+                        zero(Tv), 
+                        zero(Tv),
+                        ))
+    end
+
+    return lbfgshis
+end
 
 
 """
@@ -56,13 +84,13 @@ function lbfgs_dir!(
     # we store l-bfgs vectors as a cyclic array
     copyto!(dir, grad)
     m = lbfgshis.m
-    lst = lbfgshis.latest[]
+    lst = lbfgshis.latest
     # pay attention here, dir, s and y are all matrices
     j = lst
     for _ = 1:m 
-        α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
+        α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
         LinearAlgebra.axpy!(-α, lbfgshis.vecs[j].y, dir)
-        lbfgshis.vecs[j].a[] = α
+        lbfgshis.vecs[j].a = α
         j -= 1
         if j == 0
             j = m
@@ -71,8 +99,8 @@ function lbfgs_dir!(
 
     j = mod(lst, m) + 1
     for _ = 1:m 
-        β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
-        γ = lbfgshis.vecs[j].a[] - β
+        β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
+        γ = lbfgshis.vecs[j].a - β
         LinearAlgebra.axpy!(γ, lbfgshis.vecs[j].s, dir)
         j += 1
         if j == m + 1
@@ -86,7 +114,7 @@ function lbfgs_dir!(
     end
 
     # partial update of lbfgs history 
-    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
+    j = mod(lbfgshis.latest, lbfgshis.m) + 1
     copyto!(lbfgshis.vecs[j].y, grad)
     LinearAlgebra.BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
 end
@@ -102,14 +130,14 @@ function lbfgs_update!(
     stepsize::Tv,
 )where {Ti<:Integer, Tv <: AbstractFloat}
     # update lbfgs history
-    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
+    j = mod(lbfgshis.latest, lbfgshis.m) + 1
 
     LinearAlgebra.BLAS.scal!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
 
     LinearAlgebra.axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
-    lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
+    lbfgshis.vecs[j].ρ, = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
-    lbfgshis.latest[] = j
+    lbfgshis.latest = j
 end
 

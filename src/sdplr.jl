@@ -108,20 +108,7 @@ function _sdplr(
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
-    lbfgshis = LBFGSHistory{Ti, Tv}(
-        config.numlbfgsvecs,
-        LBFGSVector{Tv}[],
-        Ref(config.numlbfgsvecs))
-
-    for i = 1:config.numlbfgsvecs
-        push!(lbfgshis.vecs, 
-            LBFGSVector(zeros(Tv, size(SDP.R)),
-                        zeros(Tv, size(SDP.R)),
-                        Ref(zero(Tv)), 
-                        Ref(zero(Tv)),
-                        ))
-    end
-
+    lbfgshis = lbfgs_init(SDP.R, config.numlbfgsvecs)
 
     tol_stationarity = config.tol_stationarity / SDP.σ 
 
@@ -282,7 +269,7 @@ function _sdplr(
 
         # clear bfgs vectors
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(0.0), Ref(0.0))
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Tv(0), Tv(0))
         end
     end
     𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
