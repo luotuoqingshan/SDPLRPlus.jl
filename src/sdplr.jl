@@ -124,8 +124,9 @@ function _sdplr(
     while majoriter < config.maxmajoriter 
         #avoid goto in C
         current_majoriter_end = false
+        localiter = 0
         while true 
-            # increase lambda counter, reset local iter counter and lastval
+            localiter += 1
             lastval = 1.0e10
 
             # check stopping criteria: rho_c_val = norm of gradient
@@ -138,9 +139,9 @@ function _sdplr(
             # the subproblem using lbfgsb and return a solution
             # satisfying stationarity condition
             while (stationarity > tol_stationarity) 
-                #@show tol_stationarity
                 #increase both iter and localiter counters
                 iter += 1
+                localiter += 1
                 # the return direction has been negated
                 lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
 
@@ -175,42 +176,37 @@ function _sdplr(
                 totaltime = time() - SDP.starttime
 
                 if (totaltime >= config.timelim 
-                    || primal_vio <= config.tol_primal_vio
                     ||  iter >= 10^7)
-                    LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
-                    current_majoriter_end = true
+                    #|| primal_vio <= config.tol_primal_vio)
+                    # LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
+                    #current_majoriter_end = true
                     break
                 end
                 bestinfeas = min(primal_vio, bestinfeas)
             end # end of local iteration
 
-            if current_majoriter_end
+            #if current_majoriter_end
                 printintermediate(majoriter, localiter, iter, 𝓛_val, 
                           SDP.obj, stationarity, primal_vio, best_dualbd)
-                majoriter_end = true
-                break
-            end
+            #    break
+            #end
 
             # update Lagrange multipliers and recalculate essentials
             LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
             𝓛_val, stationarity, primal_vio = 
                 essential_calcs!(SDP, normC, normb)
 
-        end # end one major iteration
+        end 
+        # end one major iteration
+        # either due to too many iterations or time limit exceeded
+        # or one of primal_vio and stationarity is small enough
 
-        # TODO check dual bounds
-        if config.checkdual
-            SDP.dual_time += @elapsed begin            
-                
-            end
-        end
 
         # cannot further improve infeasibility,
         # in other words to make the solution feasible, 
         # we get a ridiculously large value
         if 𝓛_val > 1.0e10 * abs(origval) 
-            majoriter_end = true
-            printf("Cannot reduce infeasibility any further.\n")
+            println("Cannot reduce infeasibility any further.")
             break
         end
 
@@ -219,11 +215,26 @@ function _sdplr(
             return 0
         end
 
-        if majoriter_end
+        if time() - SDP.starttime > config.timelim 
+            println("Time limit exceeded. Stop optimizing.")
             break
         end
 
-        # TODO potential rank reduction 
+        if iter >= 10^7
+            println("Iteration limit exceeded. Stop optimizing.")
+            break
+        end
+
+        if primal_vio <= config.tol_primal_vio
+            SDP.dual_time += @elapsed begin
+                eig_iter = Ti(round(log(n) / sqrt(config.tol_duality_gap))) 
+                _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
+            end
+            if rel_duality_bound <= config.tol_duality_gap
+                println("Duality gap and primal violence are small enough.")
+                break
+            end
+        end
 
         # update sigma
         while true
@@ -235,8 +246,7 @@ function _sdplr(
                 break
             end
         end
-        # refresh some parameters
-        λ_update = 0
+        @show tol_stationarity
 
         majoriter += 1
 
@@ -245,18 +255,21 @@ function _sdplr(
             lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), zero(Tv), zero(Tv))
         end
     end
+    #end of optimization
+
+
     𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
     println("Done")
-    if config.checkdual
-        SDP.dual_time = @elapsed begin 
-            duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n))
-        end
+    SDP.dual_time += @elapsed begin 
+        eig_iter = Ti(round(log(n) / config.tol_duality_gap^0.5)) 
+        duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter; highprecision=true)
     end
     SDP.endtime = time()
     totaltime = SDP.endtime - SDP.starttime
     SDP.primal_time = totaltime - SDP.dual_time
     DIMACS_errs = DIMACS_errors(SDP)
     #@show normb, normC
+    @show rel_duality_bound
     @show DIMACS_errs
     return Dict([
         "R" => SDP.R,

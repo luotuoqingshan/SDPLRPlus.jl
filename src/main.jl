@@ -44,11 +44,11 @@ end
 #print_gset_time(1, "base")
 #print_gset_time(48:67, "base")
 
-benchmark_gset(48:67, "lbfgs_init")
-print_gset_time(48:67, "base")
-print_gset_time(48:67, "change_lbfgs")
-print_gset_time(48:67, "benchmark_lbfgs_mutable")
+benchmark_gset(64, "early_termination")
+#print_gset_time(48:67, "change_lbfgs")
+#print_gset_time(48:67, "benchmark_lbfgs_mutable")
 print_gset_time(48:67, "lbfgs_init")
+print_gset_time(48:67, "early_termination")
 #for i = 1:1 
 #    A = load_gset("G$i")
 #    C, As, bs = maxcut(A)

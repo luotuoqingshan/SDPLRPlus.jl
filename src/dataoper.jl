@@ -140,26 +140,26 @@ end
 function surrogate_duality_gap(
     SDP::SDPProblem{Ti, Tv, TC}, 
     trace_bound::Tv, 
+    iter::Ti;
+    highprecision::Bool=false,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
     AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.σ * SDP.primal_vio, SDP)
-    n = size(SDP.full_S, 1)
-    eigval_dt1 = @elapsed begin
-        eigenvals, _ = symeigs(SDP.full_S, 1; which=:SA, tol=1e-6, maxiter=1000000)
-        @show real.(eigenvals[1])
+    lanczos_dt = @elapsed begin
+        lanczos_eigenval = approx_mineigval_lanczos(SDP.full_S, iter)
     end
-    eigval_dt2 = @elapsed begin
-        eigenval = approx_mineigval_lanczos(SDP.full_S, 100)
-        @show eigenval
+    res = lanczos_eigenval
+    @show lanczos_dt, lanczos_eigenval
+    if highprecision
+        GenericArpack_dt = @elapsed begin
+            GenericArpack_eigvals, _ = symeigs(SDP.full_S, 1; which=:SA, tol=1e-5, maxiter=1000000)
+        end
+        res = real.(GenericArpack_eigvals)
+        @show GenericArpack_dt, real.(GenericArpack_eigvals[1]) 
     end
-    eigval_dt3 = @elapsed begin
-        decomp, history = partialschur(SDP.full_S, which=SR(), tol=1e-6)
-        λs, X = partialeigen(decomp)
-        @show λs
-    end
-    @show eigval_dt1, eigval_dt2, eigval_dt3
+
     duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
-           - max(trace_bound, norm(SDP.R)^2) * real.(eigenvals[1]))     
+           - max(trace_bound, norm(SDP.R)^2) * res[1])     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
     return duality_gap, rel_duality_gap 
 end

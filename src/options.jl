@@ -1,6 +1,7 @@
 @with_kw struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
     tol_stationarity::Tv = 1e-1
-    tol_primal_vio::Tv = 1e-4
+    tol_primal_vio::Tv = 1e-5
+    tol_duality_gap::Tv = 1e-3
     σ_fac::Tv = 2.0 
     #rankreduce::Int
     timelim::Tv = 3600.0
