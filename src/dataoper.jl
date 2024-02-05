@@ -10,7 +10,7 @@ function lagrangval!(
     SDP.obj = Aoper!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
     SDP.primal_vio .-= SDP.b 
     return (SDP.obj - dot(SDP.λ, SDP.primal_vio)
-           + SDP.σ * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
+           + SDP.sigma * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
 end
 
 
@@ -106,7 +106,7 @@ This function computes the gradient of the augmented Lagrangian
 function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    @. SDP.y = -(SDP.λ - SDP.σ * SDP.primal_vio)
+    @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
 
     AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
 
@@ -144,7 +144,7 @@ function surrogate_duality_gap(
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
-    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.σ * SDP.primal_vio, SDP)
+    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.sigma * SDP.primal_vio, SDP)
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(SDP.full_S, iter)
     end
@@ -158,7 +158,7 @@ function surrogate_duality_gap(
         @show GenericArpack_dt, real.(GenericArpack_eigvals[1]) 
     end
 
-    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
+    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.sigma/2 * dot(SDP.primal_vio, AX + SDP.b)
            - max(trace_bound, norm(SDP.R)^2) * res[1])     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
     return duality_gap, rel_duality_gap 

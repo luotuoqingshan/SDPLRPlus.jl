@@ -43,8 +43,8 @@ function sdplr(
 
     n = size(C, 1)
     # randomly initialize primal and dual variables
-    R₀ = 2 .* rand(n, r) .- 1
-    λ₀ = randn(m)
+    R0 = 2 .* rand(n, r) .- 1
+    λ0 = randn(m)
 
     SDP = SDPProblem(n, m, # size of X, number of constraints
                      C, # objective matrix
@@ -63,14 +63,14 @@ function sdplr(
                      sum_A_to_triu_A_inds, 
                      zeros(Tv, nnz_sum_A), 
                      zeros(Tv, m), zeros(Tv, m),
-                     R₀, 
-                     zeros(Tv, size(R₀)), 
-                     λ₀, 
+                     R0, 
+                     zeros(Tv, size(R0)), 
+                     λ0, 
                      zeros(Tv, m), 
                      zeros(Tv, m),
                     #BurerMonterioMutableScalars(
                         r, 
-                        one(Tv) / n,      #σ
+                        10.0,      #sigma
                         zero(Tv),         #obj, will be initialized later
                         time(),           #starttime
                         zero(Tv),         #endtime 
@@ -92,8 +92,8 @@ function _sdplr(
     bestinfeas = 1.0e10
     SDP.starttime = time()
     lastprint = SDP.starttime # timestamp of last print
-    R₀ = deepcopy(SDP.R) 
-    λ₀ = deepcopy(SDP.λ)
+    R0 = deepcopy(SDP.R) 
+    λ0 = deepcopy(SDP.λ)
 
     # TODO setup printing
     if config.printlevel > 0
@@ -109,159 +109,124 @@ function _sdplr(
     # initialize lbfgs datastructures
     lbfgshis = lbfgs_init(SDP.R, config.numlbfgsvecs)
 
-    tol_stationarity = config.tol_stationarity / SDP.σ 
+    omega = 1.0 / SDP.sigma     # stationarity tolerance
+    eta = 1.0 / SDP.sigma^0.1   # primal violation tolerance
 
-    𝓛_val, stationarity , primal_vio = 
+    𝓛_val, stationarity_norm , primal_vio_norm = 
         essential_calcs!(SDP, normC, normb)
-    majoriter = 0 
     iter = 0 # total number of iterations
-
     origval = 𝓛_val 
 
-    majoriter_end = false
     dir = similar(SDP.R)
-
-    while majoriter < config.maxmajoriter 
-        #avoid goto in C
-        current_majoriter_end = false
-        localiter = 0
-        while true 
-            localiter += 1
-            lastval = 1.0e10
-
-            # check stopping criteria: rho_c_val = norm of gradient
-            # once stationarity condition is satisfied, then break
-            if stationarity <= tol_stationarity 
-                break
-            end
-
-            # in the local iteration, we keep optimizing
-            # the subproblem using lbfgsb and return a solution
-            # satisfying stationarity condition
-            while (stationarity > tol_stationarity) 
-                #increase both iter and localiter counters
-                iter += 1
-                localiter += 1
-                # the return direction has been negated
-                lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
-
-                descent = LinearAlgebra.dot(dir, SDP.G)
-                if isnan(descent) || descent >= 0 # not a descent direction
-                    LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
-                    copyto!(dir, SDP.G) # reverse back to gradient direction
-                end
-
-                lastval = 𝓛_val # record last Lagrangian value
-                α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
-
-                # update R and update gradient, stationarity, primal violence
-                LinearAlgebra.axpy!(α, dir, SDP.R)
-                gradient!(SDP)
-                stationarity = norm(SDP.G, 2) / (1.0 + normC)
-                primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-
-                if config.numlbfgsvecs > 0 
-                    lbfgs_update!(dir, lbfgshis, SDP.G, α)
-                end
-
-                current_time = time() 
-                if current_time - lastprint >= config.printfreq
-                    lastprint = current_time
-                    if config.printlevel > 0
-                        printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                                  SDP.obj, stationarity, primal_vio, best_dualbd)
-                    end
-                end   
-
-                totaltime = time() - SDP.starttime
-
-                if (totaltime >= config.timelim 
-                    ||  iter >= 10^7)
-                    #|| primal_vio <= config.tol_primal_vio)
-                    # LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
-                    #current_majoriter_end = true
-                    break
-                end
-                bestinfeas = min(primal_vio, bestinfeas)
-            end # end of local iteration
-
-            #if current_majoriter_end
-                printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                          SDP.obj, stationarity, primal_vio, best_dualbd)
-            #    break
-            #end
-
-            # update Lagrange multipliers and recalculate essentials
-            LinearAlgebra.axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
-            𝓛_val, stationarity, primal_vio = 
-                essential_calcs!(SDP, normC, normb)
-
-        end 
-        # end one major iteration
-        # either due to too many iterations or time limit exceeded
-        # or one of primal_vio and stationarity is small enough
-
-
-        # cannot further improve infeasibility,
-        # in other words to make the solution feasible, 
-        # we get a ridiculously large value
-        if 𝓛_val > 1.0e10 * abs(origval) 
-            println("Cannot reduce infeasibility any further.")
-            break
-        end
-
-        if isnan(𝓛_val)
-            println("Error(sdplrlib): Got NaN.")
-            return 0
-        end
-
-        if time() - SDP.starttime > config.timelim 
-            println("Time limit exceeded. Stop optimizing.")
-            break
-        end
-
-        if iter >= 10^7
-            println("Iteration limit exceeded. Stop optimizing.")
-            break
-        end
-
-        if primal_vio <= config.tol_primal_vio
-            SDP.dual_time += @elapsed begin
-                eig_iter = Ti(round(log(n) / sqrt(config.tol_duality_gap))) 
-                _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
-            end
-            if rel_duality_bound <= config.tol_duality_gap
-                println("Duality gap and primal violence are small enough.")
-                break
-            end
-        end
-
-        # update sigma
-        while true
-            SDP.σ *= config.σ_fac
-            𝓛_val, stationarity, primal_vio = 
-                essential_calcs!(SDP, normC, normb)
-            tol_stationarity = config.tol_stationarity / SDP.σ
-            if tol_stationarity < stationarity 
-                break
-            end
-        end
-        @show tol_stationarity
-
+    majoriter = 0
+    for _ = 1:config.majoriter_limit
         majoriter += 1
+        localiter = 0
+        while stationarity_norm > omega 
+            # update iteration counters
+            localiter += 1     
+            iter += 1
+            # find the lbfgs direction
+            # the return direction has been negated
+            lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
 
-        # clear bfgs vectors
+            descent = LinearAlgebra.dot(dir, SDP.G)
+            if isnan(descent) || descent >= 0 # not a descent direction
+                LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
+                copyto!(dir, SDP.G) # reverse back to gradient direction
+            end
+
+            lastval = 𝓛_val # record last Lagrangian value
+            # line search the best step size
+            α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
+
+            # update R and update gradient, stationarity, primal violence
+            LinearAlgebra.axpy!(α, dir, SDP.R)
+            gradient!(SDP)
+            stationarity_norm = norm(SDP.G, 2) / (1.0 + normC)
+            primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
+
+            # update lbfgs vectors
+            if config.numlbfgsvecs > 0 
+                lbfgs_update!(dir, lbfgshis, SDP.G, α)
+            end
+
+            current_time = time()
+            if current_time - lastprint >= config.printfreq
+                lastprint = current_time
+                if config.printlevel > 0
+                    printintermediate(majoriter, localiter, iter, 𝓛_val, 
+                              SDP.obj, stationarity_norm, primal_vio_norm, best_dualbd)
+                end
+            end   
+
+            if (current_time - SDP.starttime > config.time_limit
+                || iter > config.iter_limit)
+                break
+            end
+        end
+
+
+        printintermediate(majoriter, localiter, iter, 𝓛_val, 
+                  SDP.obj, stationarity_norm, primal_vio_norm, best_dualbd)
+
+        current_time = time()
+        if current_time - SDP.starttime > config.time_limit
+            @warn "Time limit exceeded. Stop optimizing."
+            break
+        end
+
+        if iter > config.iter_limit
+            @warn "Iteration limit exceeded. Stop optimizing."
+            break
+        end
+
+
+        if primal_vio_norm <= eta
+            if primal_vio_norm <= config.primal_vio_tol 
+                SDP.dual_time += @elapsed begin
+                    eig_iter = Ti(round(log(n) / sqrt(config.duality_gap_tol))) 
+                    _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
+                end
+                if rel_duality_bound <= config.duality_gap_tol
+                    @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound stationarity_norm
+                    break
+                else
+                    LinearAlgebra.axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
+                    eta = eta / SDP.sigma^0.9
+                    omega = omega / SDP.sigma
+                end
+            else
+                LinearAlgebra.axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
+                eta = eta / SDP.sigma^0.9
+                omega = omega / SDP.sigma
+            end
+        else 
+            SDP.sigma *= 10
+            eta = 1 / SDP.sigma^0.1
+            omega = 1 / SDP.sigma 
+        end
+
+        omega = max(omega, config.stationarity_tol)
+        eta = max(eta, config.primal_vio_tol)
+
+        𝓛_val, stationarity_norm, primal_vio_norm = 
+            essential_calcs!(SDP, normC, normb)
+
+        # clear lbfgs vectors for next major iteration
         for i = 1:lbfgshis.m
             lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), zero(Tv), zero(Tv))
         end
+
+        if majoriter == config.majoriter_limit
+            @warn "Major iteration limit exceeded. Stop optimizing."
+        end
     end
-    #end of optimization
-
-
-    𝓛_val, stationarity, primal_vio = essential_calcs!(SDP, normC, normb)
+    
+    𝓛_val, stationarity_norm, primal_vio_norm = essential_calcs!(SDP, normC, normb)
     println("Done")
     SDP.dual_time += @elapsed begin 
-        eig_iter = Ti(round(log(n) / config.tol_duality_gap^0.5)) 
+        eig_iter = Ti(round(log(n) / config.duality_gap_tol^0.5)) 
         duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter; highprecision=true)
     end
     SDP.endtime = time()
@@ -274,11 +239,11 @@ function _sdplr(
     return Dict([
         "R" => SDP.R,
         "lamda" => SDP.λ,
-        "R0" => R₀,
-        "lambda0" => λ₀,
-        "sigma" => SDP.σ,
-        "stationarity" => stationarity,
-        "primal_vio" => primal_vio,
+        "R0" => R0,
+        "lambda0" => λ0,
+        "sigma" => SDP.sigma,
+        "stationarity" => stationarity_norm,
+        "primal_vio" => primal_vio_norm,
         "obj" => SDP.obj,
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
@@ -288,6 +253,9 @@ function _sdplr(
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,
+        "stationarity_tol" => config.stationarity_tol,
+        "primal_vio_tol" => config.primal_vio_tol,
+        "duality_gap_tol" => config.duality_gap_tol,
     ])
 end
 
