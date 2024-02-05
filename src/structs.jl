@@ -349,7 +349,7 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
     #scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
 
     r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    σ::Tv                   # penalty parameter
+    sigma::Tv               # penalty parameter
     obj::Tv                 # objective
     starttime::Tv           # timing
     endtime::Tv
