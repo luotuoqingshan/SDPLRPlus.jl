@@ -1,18 +1,14 @@
 @with_kw struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
-    tol_stationarity::Tv = 1e-1
-    tol_primal_vio::Tv = 1e-5
-    tol_duality_gap::Tv = 1e-3
-    σ_fac::Tv = 2.0 
+    stationarity_tol::Tv = 1e-3
+    primal_vio_tol::Tv = 1e-4
+    duality_gap_tol::Tv = 1e-3
+    sigma_fac::Tv = 2.0 
     #rankreduce::Int
-    timelim::Tv = 3600.0
+    time_limit::Tv = 3600.0
     printlevel::Ti = 1
     printfreq::Tv = 60.0
     numlbfgsvecs::Ti = 4 
-    σ_strategy::Ti = 1
-    λ_updatect::Ti = 1
-    #rankredtol::Float64
-    #gaptol::Float64
-    maxmajoriter::Ti = 10^5
-    maxiter::Ti = 10^7
+    majoriter_limit::Ti = 10^5
+    iter_limit::Ti = 10^7
     checkdual::Bool = true 
 end
