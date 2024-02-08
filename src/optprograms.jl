@@ -14,7 +14,7 @@ function maxcut(A::SparseMatrixCSC; Tv=Float64)
     L = sparse(Diagonal(d) - A)
     L .*= Tv(-0.25)
     As = []
-    bs = [] 
+    bs = Tv[] 
     for i in eachindex(d)
         push!(As, sparse([i], [i], [one(Tv)], n, n))
         push!(bs, one(Tv))
@@ -34,13 +34,13 @@ s.t.     Tr(X) = 1
 
          X ≽ 0
 """
-function lovasz_theta_SDP(A::SparseMatrixCSC; Tv=Float64)
+function lovasz_theta(A::SparseMatrixCSC; Tv=Float64)
     @assert A == A' "Only undirected graphs supported now."
     n = size(A, 1)
     C = LowRankMatrix(Diagonal(-ones(Tv, 1)), ones(Tv, (n, 1)))
 
     As = []
-    bs = []
+    bs = Tv[]
     for (i, j, _) in zip(findnz(A)...)
         if i < j
             push!(As, sparse([i, j], [j, i], [one(Tv), one(Tv)], n, n))
