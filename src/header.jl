@@ -25,8 +25,8 @@ using ArnoldiMethod
 
 
 include("structs.jl")
-include("dataoper.jl")
-include("readdata.jl")
+include("coreop.jl")
+include("data_utils.jl")
 include("lbfgs.jl")
 include("myprint.jl")
 include("linesearch.jl")
@@ -35,4 +35,4 @@ include("preprocess.jl")
 include("sdplr.jl")
 include("optprograms.jl")
 include("othersolvers.jl")
-include("util.jl")
+include("utils.jl")

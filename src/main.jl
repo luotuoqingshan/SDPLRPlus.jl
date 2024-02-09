@@ -15,7 +15,7 @@ Random.seed!(0)
     A = load_gset("G$i")
     C, As, bs = maxcut(A)
     n = size(A, 1)
-    r = barvinok_pataki(n, n)  
+    r = barvinok_pataki(n, length(As))  
 
     res = sdplr(C, As, bs, r)
 
@@ -27,40 +27,33 @@ function benchmark_gset(gset_ids, filename::String)
     pmap(i -> f(i, filename), gset_ids)                
 end
 
-function print_gset_time(gset_ids, filename::String)
-    avg_primal_time = 0.0
-    avg_dual_time = 0.0
+function print_gset(
+    gset_ids, 
+    field::String, 
+    program::String, 
+    filename::String; 
+    average::Bool=false,
+)
+    sum = 0.0
     for i in gset_ids
-        output_folder = homedir()*"/SDPLR-jl/output/MaxCut/"
+        output_folder = homedir()*"/SDPLR-jl/output/"*program*"/"
         res = matread(output_folder*"G$i/"*filename*".mat")
-        avg_primal_time += res["primaltime"]
-        avg_dual_time += res["dualtime"]
-        @printf("G%d: primal time: %.3lf (s), dual time: %.3lf (s)\n",i, res["primaltime"], res["dualtime"])
-        @printf("G%d: stationarity: %.3lf, primal violence: %.7lf\n",i, res["stationarity"], res["primal_vio"])
+        @assert field in keys(res) "This field was not saved."
+        sum += res[field]
+        @info "G$i: $field: $(res[field])"
     end
-    @printf("Average primal time: %.3lf (s), average dual time: %.3lf (s)\n", avg_primal_time/length(gset_ids), avg_dual_time/length(gset_ids))
+    if average
+        @info "Average $field: $(sum/length(gset_ids))"
+    end
 end
 
-#f(1, "base")
-#print_gset_time(1, "base")
-#print_gset_time(48:67, "base")
+#f(66, "early_termination_1e-5_1e-4")
+#print_gset(66:66, "primaltime", "MaxCut", "early_termination_1e-5_1e-4")
+A = load_gset("G1")
+C, As, bs = minimum_bisection(A);
+r = barvinok_pataki(size(C, 1), length(As))
 
-benchmark_gset(48:67, "early_termination")
-#print_gset_time(48:67, "change_lbfgs")
-#print_gset_time(48:67, "benchmark_lbfgs_mutable")
-print_gset_time(48:67, "base")
-print_gset_time(48:67, "early_termination")
-#for i = 1:1 
-#    A = load_gset("G$i")
-#    C, As, bs = maxcut(A)
-#    n = size(A, 1)
-#    r = barvinok_pataki(n, n)  
-#    size(A)
-#    nnz(A)
+#res = sdplr(C, As, bs, r)
 #
-#    res = sdplr(C, As, bs, r)
-#
-#    output_folder = homedir()*"/SDPLR-jl/output/MaxCut/"
-#    mkdir(output_folder*"G$i/")
-#    matwrite(output_folder*"G$i/SDPLR.mat", res)
-#end
+#C, As, bs = maxcut(A)
+write_problem_sdplr(C, As, bs, homedir()*"/SDPLR-jl/data/G1_lovasz_theta.sdplr")

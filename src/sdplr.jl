@@ -14,8 +14,15 @@ function sdplr(
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     sparse_cons = SparseMatrixCSC{Tv, Ti}[]
+    lowrank_cons = LowRankMatrix{Tv}[]
     # treat diagonal matrices as sparse matrices
     sparse_As_global_inds = Ti[]
+    lowrank_As_global_inds = Ti[]
+    
+    # pre-allocate intermediate variables
+    # for low-rank matrix evaluations
+    BtVs = Matrix{Tv}[]
+    BtUs = Matrix{Tv}[]
     for (i, A) in enumerate(As)
         if isa(A, SparseMatrixCSC)
             push!(sparse_cons, A)
@@ -23,6 +30,15 @@ function sdplr(
         elseif isa(A, Diagonal)
             push!(sparse_cons, sparse(A))
             push!(sparse_As_global_inds, i)
+        elseif isa(A, LowRankMatrix)
+            push!(lowrank_cons, A)
+            push!(lowrank_As_global_inds, i)
+            s = size(A.B, 2)
+            # s and r are usually really small compared with n
+            push!(BtVs, zeros(Tv, (s, r)))
+            push!(BtUs, zeros(Tv, (s, r)))
+        else
+            @error "Currently only sparse/lowrank/diagonal constraints are supported."
         end
     end
 
@@ -32,6 +48,15 @@ function sdplr(
     elseif isa(C, Diagonal)
         push!(sparse_cons, sparse(C))
         push!(sparse_As_global_inds, 0)
+    elseif isa(C, LowRankMatrix)
+        push!(lowrank_cons, C)
+        push!(lowrank_As_global_inds, 0)
+        s = size(C.B, 2)
+        # s and r are usually really small compared with n
+        push!(BtVs, zeros(Tv, (s, r)))
+        push!(BtUs, zeros(Tv, (s, r)))
+    else
+        @error "Currently only sparse/lowrank/diagonal objectives are supported."
     end
 
     triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two,
@@ -46,37 +71,41 @@ function sdplr(
     R0 = 2 .* rand(n, r) .- 1
     λ0 = randn(m)
 
+    # TODO: deal with indicies
     SDP = SDPProblem(n, m, # size of X, number of constraints
-                     C, # objective matrix
-                     b, # right-hand-side vector of constraints 
-                     triu_sum_A.colptr, 
-                     triu_sum_A.rowval, # (colptr, rowval) for aggregated triu(A)
-                     length(sparse_cons), 
-                     agg_A_ptr, 
-                     agg_A_nzind,
-                     agg_A_nzval_one, 
-                     agg_A_nzval_two, 
-                     sparse_As_global_inds,
-                     zeros(Tv, nnz_sum_A), 
-                     zeros(Tv, nnz_sum_A),
-                     sum_A,
-                     sum_A_to_triu_A_inds, 
-                     zeros(Tv, nnz_sum_A), 
-                     zeros(Tv, m), zeros(Tv, m),
-                     R0, 
-                     zeros(Tv, size(R0)), 
-                     λ0, 
-                     zeros(Tv, m), 
-                     zeros(Tv, m),
-                    #BurerMonterioMutableScalars(
-                        r, 
-                        10.0,      #sigma
-                        zero(Tv),         #obj, will be initialized later
-                        time(),           #starttime
-                        zero(Tv),         #endtime 
-                        zero(Tv),         #time spent on computing dual bound
-                        zero(Tv),         #time spend on primal computation
-                    #)
+                    C, # objective matrix
+                    b, # right-hand-side vector of constraints 
+                    triu_sum_A.colptr, 
+                    triu_sum_A.rowval, # (colptr, rowval) for aggregated triu(A)
+                    length(sparse_cons), 
+                    agg_A_ptr, 
+                    agg_A_nzind,
+                    agg_A_nzval_one, 
+                    agg_A_nzval_two, 
+                    sparse_As_global_inds,
+                    zeros(Tv, nnz_sum_A), 
+                    zeros(Tv, nnz_sum_A),
+                    sum_A,
+                    sum_A_to_triu_A_inds, 
+                    zeros(Tv, nnz_sum_A), 
+                    zeros(Tv, m), zeros(Tv, m),
+                    length(lowrank_cons),
+                    lowrank_cons, 
+                    lowrank_As_global_inds,
+                    BtVs,
+                    BtUs,
+                    R0, 
+                    zeros(Tv, size(R0)), 
+                    λ0, 
+                    zeros(Tv, m), 
+                    zeros(Tv, m),
+                    r,         #rank
+                    10.0,      #sigma
+                    zero(Tv),         #obj, will be initialized later
+                    time(),           #starttime
+                    zero(Tv),         #endtime 
+                    zero(Tv),         #time spent on computing dual bound
+                    zero(Tv),         #time spend on primal computation
                     )
 
     res = _sdplr(SDP, config)
