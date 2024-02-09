@@ -152,7 +152,8 @@ function gradient!(
        for i = 1:SDP.n_lowrank_matrices
             mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, SDP.R)
             lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
-            mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], one(Tv), one(Tv))
+            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
+            mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], coeff, one(Tv))
         end 
     end
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
