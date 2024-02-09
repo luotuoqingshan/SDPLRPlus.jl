@@ -34,16 +34,49 @@ function Aoper!(
     obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
     # store results of 𝓐(UVᵀ + VUᵀ)/2
-    Aoper_formUVt!(UVt, SDP, U, V; same=same) 
-    for i = 1:SDP.n_spase_matrices
-        res = zero(Tv) 
-        for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
-            res += SDP.agg_A_nzval_two[j] * UVt[SDP.agg_A_nzind[j]]
+    if SDP.n_spase_matrices > 0
+        Aoper_formUVt!(UVt, SDP, U, V; same=same) 
+        for i = 1:SDP.n_spase_matrices
+            res = zero(Tv) 
+            for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
+                res += SDP.agg_A_nzval_two[j] * UVt[SDP.agg_A_nzind[j]]
+            end
+            if SDP.sparse_As_global_inds[i] == 0
+                obj = res
+            else
+                𝓐_UV[SDP.sparse_As_global_inds[i]] = res
+            end
         end
-        if SDP.sparse_As_global_inds[i] == 0
-            obj = res
+    end
+    # then deal with low-rank matrices
+    if SDP.n_lowrank_matrices > 0
+        if same
+            for i = 1:SDP.n_lowrank_matrices
+                mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, U)
+                @. SDP.BtUs[i] = SDP.BtUs[i]^2
+                lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+                res = sum(SDP.BtUs[i])
+
+                if SDP.lowrank_As_global_inds[i] == 0
+                    obj = res
+                else
+                    𝓐_UV[SDP.lowrank_As_global_inds[i]] = res 
+                end
+            end
         else
-            𝓐_UV[SDP.sparse_As_global_inds[i]] = res
+            for i = 1:SDP.n_lowrank_matrices
+                mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, U)
+                mul!(SDP.BtVs[i], SDP.lowrank_As[i].Bt, V)
+                @. SDP.BtUs[i] *= SDP.BtVs[i]
+                lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+                res = sum(SDP.BtUs[i])
+
+                if SDP.lowrank_As_global_inds[i] == 0
+                    obj = res
+                else
+                    𝓐_UV[SDP.lowrank_As_global_inds[i]] = res 
+                end
+            end
         end
     end
     return obj
@@ -107,11 +140,21 @@ function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
-
-    AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
-
     fill!(SDP.G, zero(Tv))
-    SDP.G .= SDP.full_S * SDP.R 
+
+    # deal with sparse and diagonal constraints first
+    if SDP.n_spase_matrices > 0
+        AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
+        SDP.G .= SDP.full_S * SDP.R 
+    end
+    # then deal with low-rank matrices
+    if SDP.n_lowrank_matrices > 0
+       for i = 1:SDP.n_lowrank_matrices
+            mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, SDP.R)
+            lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+            mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], one(Tv), one(Tv))
+        end 
+    end
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
     return 0
 end
