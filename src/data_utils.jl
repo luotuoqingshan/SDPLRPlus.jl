@@ -1,31 +1,42 @@
 """
-    load_gset(filename; [filepath])
+    read_graph(filename; [filefolder])
 
-Load a GSet format graph file into an adjacency matrix.
+Read a graph from the file FILEFOLDER/FILENAME into an adjacency matrix. 
+Gset format and smat format are supported.
 """
-function load_gset(
+function read_graph(
     filename::String;
     filefolder::String=homedir()*"/Gset/",
+    extension::String="",
 )::SparseMatrixCSC
     I = Int32[] 
     J = Int32[]
     V = Float64[]
     n = 0
-    m = 0
-    filepath = filefolder*filename
+    filepath = filefolder*filename*extension
+    @assert extension in ["", ".smat"] "Currently we only support Gset and smat formats."   
     open(filepath) do file
         lines = readlines(file)
-        n, m = split(lines[1], ' ')
+        if extension == ""
+            n, _ = split(lines[1], ' ')
+        else
+            n, _, _ = split(lines[1], ' ')
+        end
         n = parse(Int, n)
-        m = parse(Int, m)
         for line in lines[2:end]
             u, v, w = split(line, ' ')
             u = parse(Int, u)
             v = parse(Int, v)
             w = parse(Float64, w)
             # Turn it into an undirected graph
-            push!(I, u); push!(J, v); push!(V, w)
-            push!(J, u); push!(I, v); push!(V, w)
+            if extension == ""
+                push!(I, u); push!(J, v); push!(V, w)
+                push!(J, u); push!(I, v); push!(V, w)
+            elseif extension == ".smat"
+                push!(I, u+1)
+                push!(J, v+1)
+                push!(V, w)
+            end
         end
     end
     A = sparse(I, J, V, n, n)
@@ -37,40 +48,41 @@ end
 
 
 """
-    load_gset_smat(filename; [filepath])
+    write_graph_smat(filename; [filefolder])
 
-Load a GSet graph in the smat format into an adjacency matrix.
+Write one adjacency matrix to the file FILEFOLDER/FILENAME
+in the Gset/smat format.
 """
-function load_gset_smat(
+function write_graph(
+    A::SparseMatrixCSC{Tv, Ti},
     filename::String;
     filefolder::String=homedir()*"/Gset/",
-)
-    I = Int32[] 
-    J = Int32[]
-    V = Float64[]
-    n = 0
-    m = 0
-    filepath = filefolder*filename*".smat"
-    open(filepath) do file
-        lines = readlines(file)
-        n, m, nnz_A = split(lines[1], ' ')
-        n = parse(Int, n)
-        m = parse(Int, m)
-        for line in lines[2:end]
-            u, v, w = split(line, ' ')
-            u = parse(Int, u)
-            v = parse(Int, v)
-            w = parse(Float64, w)
-            push!(I, u+1)
-            push!(J, v+1)
-            push!(V, w)
+    extension::String="",
+)where {Tv <: AbstractFloat, Ti <: Integer}
+    filepath = filefolder*filename*extension
+
+    @assert A == A' "Only undirected graphs are supported."
+    @assert extension in ["", ".smat"] "Currently we only support Gset and smat formats."
+
+    open(filepath, "w") do f
+        n = size(A, 1)
+        m = div(nnz(A), 2)
+        nnz_A = nnz(A)
+        if extension == ""
+            write(f, "$n $m\n")
+        else
+            write(f, "$n $n $nnz_A\n")
+        end
+        for (i, j, v) in zip(findnz(A)...)
+            if extension == ""
+                if i <= j
+                    write(f, "$i $j $(Int(v))\n")
+                end
+            else
+                write(f, "$(i-1) $(j-1) $(Int(v))\n")
+            end
         end
     end
-    A = sparse(I, J, V, n, m)
-    # remove self-loops
-    A[diagind(A)] .= 0
-    dropzeros!(A)
-    return A
 end
 
 
@@ -259,30 +271,3 @@ function gset_sdp_preprocess_data(
     end
 end
 
-
-
-#"""
-#Generate the SDPLR format for the maxcut SDP.
-#"""
-#function maxcut_write_sdplr(A::SparseMatrixCSC, filepath::String; Tv=Float64)
-#    n = size(A, 1) 
-#    d = sum(A, dims=2)[:, 1]
-#    L = sparse(Diagonal(d) - A)
-#    C = -Tv.(L)
-#    open(filepath, "w") do f
-#        write(f, "$n\n") # number of constraint matrices
-#        write(f, "1\n")  # number of blocks in the SDP
-#        write(f, "$n\n") # sizes of the blocks
-#        write(f, ("1.0 "^n)*"\n") # b
-#        write(f, "1.0\n")
-#        triuC = triu(C)
-#        write(f, "0 1 s $(nnz(triuC))\n")
-#        for (i, j, v) in zip(findnz(triuC)...)
-#            write(f, "$i $j $v\n")
-#        end
-#        for i = 1:n
-#            write(f, "$i 1 s 1\n")
-#            write(f, "$i $i 1.0\n")
-#        end
-#    end
-#end
