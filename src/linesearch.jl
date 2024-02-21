@@ -42,7 +42,6 @@ function linesearch!(
     biquadratic[2] = (C_RD - dot(SDP.λ, SDP.A_RD) + 
         SDP.sigma * dot(SDP.primal_vio, SDP.A_RD))  
     
-
     biquadratic[3] = (C_DD - dot(SDP.λ, SDP.A_DD) + 
         SDP.sigma * dot(SDP.primal_vio, SDP.A_DD) + 
         0.5 * SDP.sigma * dot(SDP.A_RD, SDP.A_RD))
