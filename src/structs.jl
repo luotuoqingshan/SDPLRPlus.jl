@@ -59,9 +59,9 @@ end
 
 
 function LinearAlgebra.mul!(
-    Y, 
+    Y::AbstractVector{Tv}, 
     A::LowRankMatrix{Tv},
-    X,
+    X::AbstractVector{Tv},
 ) where {Tv <: AbstractFloat}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
@@ -70,9 +70,9 @@ end
 
 
 function LinearAlgebra.mul!(
-    Y, 
+    Y::AbstractVector{Tv}, 
     A::LowRankMatrix{Tv},
-    X,
+    X::AbstractVector{Tv},
     α::Tv,
     β::Tv,
 ) where{Tv <: AbstractFloat}
