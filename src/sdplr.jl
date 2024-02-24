@@ -3,7 +3,7 @@ Interface for SDPLR
 
 Problem formulation:
     min   Tr(C (YY^T))
-    s.t.  Tr(As[i] (YY^T)) = bsi]
+    s.t.  Tr(As[i] (YY^T)) = bs[i]
             Y in R^{n x r}
 """
 function sdplr(
@@ -23,6 +23,7 @@ function sdplr(
     # for low-rank matrix evaluations
     BtVs = Matrix{Tv}[]
     BtUs = Matrix{Tv}[]
+    Btvs = Vector{Tv}[]
     for (i, A) in enumerate(As)
         if isa(A, SparseMatrixCSC)
             push!(sparse_cons, A)
@@ -37,6 +38,7 @@ function sdplr(
             # s and r are usually really small compared with n
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
+            push!(Btvs, zeros(Tv, s))
         else
             @error "Currently only sparse/lowrank/diagonal constraints are supported."
         end
@@ -55,6 +57,7 @@ function sdplr(
         # s and r are usually really small compared with n
         push!(BtVs, zeros(Tv, (s, r)))
         push!(BtUs, zeros(Tv, (s, r)))
+        push!(Btvs, zeros(Tv, s))
     else
         @error "Currently only sparse/lowrank/diagonal objectives are supported."
     end
@@ -94,6 +97,7 @@ function sdplr(
                     lowrank_As_global_inds,
                     BtVs,
                     BtUs,
+                    Btvs,
                     R0, 
                     zeros(Tv, size(R0)), 
                     λ0, 
@@ -131,8 +135,8 @@ function _sdplr(
 
 
     # set up algorithm parameters
-    normb = norm(SDP.b, 2)
-    normC = norm(SDP.C, 2)
+    normb = norm(SDP.b, Inf)
+    normC = norm(SDP.C, Inf)
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
