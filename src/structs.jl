@@ -59,41 +59,27 @@ end
 
 
 function LinearAlgebra.mul!(
-    Y::AbstractMatrix{Tv},
+    Y, 
     A::LowRankMatrix{Tv},
-    X::AbstractMatrix{Tv},
-    ) where {Tv <: AbstractFloat}
-    n, _ = size(A.B)
-    if size(Y, 1) != n || size(X, 1) != n || size(Y, 2) != size(X, 2) 
-        throw(DimensionMismatch("dimension mismatch"))
-    end
-    # A.Bt: s x n , X: n x r, A.extra: s x r
-    mul!(A.extra, A.Bt, X)
-    lmul!(A.D, A.extra)
-    mul!(Y, A.B, A.extra)
+    X,
+) where {Tv <: AbstractFloat}
+    BtX = A.Bt * X
+    lmul!(A.D, BtX)
+    mul!(Y, A.B, BtX)
 end
 
 
-function dot_xTAx(
+function LinearAlgebra.mul!(
+    Y, 
     A::LowRankMatrix{Tv},
-    X::AbstractMatrix{Tv},
-    ) where {Tv <: AbstractFloat}
-    mul!(A.extra, A.Bt, X)
-    return dot(A.extra, A.D, A.extra)
+    X,
+    α::Tv,
+    β::Tv,
+) where{Tv <: AbstractFloat}
+    BtX = A.Bt * X
+    lmul!(A.D, BtX)
+    mul!(Y, A.B, BtX, α, β)
 end
-
-
-function dot(
-    X::AbstractMatrix{Tv},
-    A::LowRankMatrix{Tv},
-    Y::AbstractMatrix{Tv},
-    ) where {Tv <: AbstractFloat}
-    return dot(X, A * Y)
-end
-
-
-# fall back function for other matrices
-dot_xTAx(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot(X, A, X)
 
 
 mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}} 
