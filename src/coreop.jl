@@ -140,6 +140,8 @@ end
 function AToper_preprocess!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    # update auxiliary vector y based on primal violence and λ
+    # and then update the sparse matrix
     @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
     if SDP.n_sparse_matrices > 0
         AToper_preprocess_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
@@ -153,10 +155,6 @@ function AToper!(
     Btvs::Vector{Tx},
     x::Tx, 
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, Tx <: AbstractArray{Tv}}
-    # update auxiliary vector y based on primal violence and λ
-    # and then update the sparse matrix
-    #AToper_preprocess!(SDP)
-
     # zero out output vector
     fill!(y, zero(Tv))
 
@@ -183,22 +181,6 @@ This function computes the gradient of the augmented Lagrangian
 function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    #fill!(SDP.G, zero(Tv))
-
-    ## deal with sparse and diagonal constraints first
-    #if SDP.n_sparse_matrices > 0
-    #    AToper_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
-    #    SDP.G .= SDP.full_S * SDP.R 
-    #end
-    ## then deal with low-rank matrices
-    #if SDP.n_lowrank_matrices > 0
-    #   for i = 1:SDP.n_lowrank_matrices
-    #        mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, SDP.R)
-    #        lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
-    #        coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
-    #        mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], coeff, one(Tv))
-    #    end 
-    #end
     AToper_preprocess!(SDP)
     AToper!(SDP.G, SDP, SDP.BtUs, SDP.R)
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
@@ -244,7 +226,17 @@ function surrogate_duality_gap(
         GenericArpack_dt = @elapsed begin
             op = ArpackSimpleFunctionOp(
                 (y, x) -> begin
-                        return y
+                    fill!(y, zero(Tv))
+                    if SDP.n_sparse_matrices > 0
+                        y .= SDP.full_S * x 
+                    end
+                    if SDP.n_lowrank_matrices > 0
+                        for i = 1:SDP.n_lowrank_matrices
+                            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
+                            LinearAlgebra.mul!(y, SDP.lowrank_As[i], x, coeff, one(Tv))
+                        end 
+                    end
+                    return y
                 end, n)
             GenericArpack_eigvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
         end
@@ -255,6 +247,7 @@ function surrogate_duality_gap(
     duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.sigma/2 * dot(SDP.primal_vio, AX + SDP.b)
            - max(trace_bound, norm(SDP.R)^2) * res[1])     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
+    @show rel_duality_gap
     return duality_gap, rel_duality_gap 
 end
 
@@ -278,8 +271,17 @@ function DIMACS_errors(
     n = size(SDP.full_S, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
-                AToper!(y, SDP, SDP.Btvs, x)
-                return y
+            fill!(y, zero(Tv))
+            if SDP.n_sparse_matrices > 0
+                y .= SDP.full_S * x 
+            end
+            if SDP.n_lowrank_matrices > 0
+                for i = 1:SDP.n_lowrank_matrices
+                    coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
+                    LinearAlgebra.mul!(y, SDP.lowrank_As[i], x, coeff, one(Tv))
+                end 
+            end
+            return y
         end, n)
     eigenvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
     err4 = max(zero(Tv), -real.(eigenvals[1])) / (1.0 + norm(SDP.C, 2))
@@ -337,6 +339,6 @@ function approx_mineigval_lanczos(
         copyto!(v, Av)
     end
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
-    min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=10000, tol=1e-6)
+    min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=1000000, tol=1e-6)
     return min_eigval 
 end
