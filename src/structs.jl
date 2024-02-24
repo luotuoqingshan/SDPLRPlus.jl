@@ -96,7 +96,7 @@ end
 dot_xTAx(A::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T} = dot(X, A, X)
 
 
-mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC} 
+mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}} 
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     # list of matrices which are sparse/dense/low-rank/diagonal
@@ -107,7 +107,7 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
     # sparse constraints
     XS_colptr::Vector{Ti}
     XS_rowval::Vector{Ti}
-    n_spase_matrices::Ti
+    n_sparse_matrices::Ti
     agg_A_ptr::Vector{Ti}
     agg_A_nzind::Vector{Ti}
     agg_A_nzval_one::Vector{Tv}
@@ -126,8 +126,9 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC}
     n_lowrank_matrices::Ti
     lowrank_As::Vector{LowRankMatrix{Tv}}
     lowrank_As_global_inds::Vector{Ti}
-    BtVs::Vector{Matrix{Tv}}
-    BtUs::Vector{Matrix{Tv}}
+    BtVs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * V
+    BtUs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * U
+    Btvs::Vector{Vector{Tv}}    # pre-allocated to store Bᵀ * v
 
     R::Matrix{Tv}               # primal variables X = RR^T
     G::Matrix{Tv}               # gradient w.r.t. R

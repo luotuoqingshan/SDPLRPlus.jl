@@ -34,9 +34,9 @@ function Aoper!(
     obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
     # store results of 𝓐(UVᵀ + VUᵀ)/2
-    if SDP.n_spase_matrices > 0
+    if SDP.n_sparse_matrices > 0
         Aoper_formUVt!(UVt, SDP, U, V; same=same) 
-        for i = 1:SDP.n_spase_matrices
+        for i = 1:SDP.n_sparse_matrices
             res = zero(Tv) 
             for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
                 res += SDP.agg_A_nzval_two[j] * UVt[SDP.agg_A_nzind[j]]
@@ -113,14 +113,17 @@ function Aoper_formUVt!(
 end
 
 
-function AToper!(
+"""
+    AToper!(o, triu_o_nzval, v, SDP)
+"""
+function AToper_preprocess_sparse!(
     o::SparseMatrixCSC{Tv, Ti},
     triu_o_nzval::Vector{Tv},
     v::Vector{Tv},
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     fill!(triu_o_nzval, zero(Tv))
-    for i = 1:SDP.n_spase_matrices
+    for i = 1:SDP.n_sparse_matrices
         ind = SDP.sparse_As_global_inds[i]
         coeff = ind == 0 ? one(Tv) : v[ind]
         for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
@@ -133,29 +136,71 @@ function AToper!(
     end
 end
 
+
+function AToper_preprocess!(
+    SDP::SDPProblem{Ti, Tv, TC},
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
+    if SDP.n_sparse_matrices > 0
+        AToper_preprocess_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
+    end
+end
+
+
+function AToper!(
+    y::Tx,
+    SDP::SDPProblem{Ti, Tv, TC},
+    Btvs::Vector{Tx},
+    x::Tx, 
+) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, Tx <: AbstractArray{Tv}}
+    # update auxiliary vector y based on primal violence and λ
+    # and then update the sparse matrix
+    #AToper_preprocess!(SDP)
+
+    # zero out output vector
+    fill!(y, zero(Tv))
+
+    # deal with sparse and diagonal constraints first
+    if SDP.n_sparse_matrices > 0
+        y .= SDP.full_S * x
+    end
+
+    # then deal with low-rank matrices 
+    if SDP.n_lowrank_matrices > 0
+        for i = 1:SDP.n_lowrank_matrices
+            mul!(Btvs[i], SDP.lowrank_As[i].Bt, x)
+            lmul!(SDP.lowrank_As[i].D, Btvs[i])
+            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
+            mul!(y, SDP.lowrank_As[i].B, Btvs[i], coeff, one(Tv))
+        end 
+    end
+end
+
+
 """
 This function computes the gradient of the augmented Lagrangian
 """
 function gradient!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
-    fill!(SDP.G, zero(Tv))
+    #fill!(SDP.G, zero(Tv))
 
-    # deal with sparse and diagonal constraints first
-    if SDP.n_spase_matrices > 0
-        AToper!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
-        SDP.G .= SDP.full_S * SDP.R 
-    end
-    # then deal with low-rank matrices
-    if SDP.n_lowrank_matrices > 0
-       for i = 1:SDP.n_lowrank_matrices
-            mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, SDP.R)
-            lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
-            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
-            mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], coeff, one(Tv))
-        end 
-    end
+    ## deal with sparse and diagonal constraints first
+    #if SDP.n_sparse_matrices > 0
+    #    AToper_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
+    #    SDP.G .= SDP.full_S * SDP.R 
+    #end
+    ## then deal with low-rank matrices
+    #if SDP.n_lowrank_matrices > 0
+    #   for i = 1:SDP.n_lowrank_matrices
+    #        mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, SDP.R)
+    #        lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+    #        coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
+    #        mul!(SDP.G, SDP.lowrank_As[i].B, SDP.BtUs[i], coeff, one(Tv))
+    #    end 
+    #end
+    AToper_preprocess!(SDP)
+    AToper!(SDP.G, SDP, SDP.BtUs, SDP.R)
     LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
     return 0
 end
@@ -188,15 +233,20 @@ function surrogate_duality_gap(
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AX = SDP.primal_vio + SDP.b
-    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ + SDP.sigma * SDP.primal_vio, SDP)
+    AToper_preprocess!(SDP)
+    n = size(SDP.full_S, 1)
     lanczos_dt = @elapsed begin
-        lanczos_eigenval = approx_mineigval_lanczos(SDP.full_S, iter)
+        lanczos_eigenval = approx_mineigval_lanczos(SDP, iter)
     end
     res = lanczos_eigenval
     @show lanczos_dt, lanczos_eigenval
     if highprecision
         GenericArpack_dt = @elapsed begin
-            GenericArpack_eigvals, _ = symeigs(SDP.full_S, 1; which=:SA, tol=1e-5, maxiter=1000000)
+            op = ArpackSimpleFunctionOp(
+                (y, x) -> begin
+                        return y
+                end, n)
+            GenericArpack_eigvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
         end
         res = real.(GenericArpack_eigvals)
         @show GenericArpack_dt, real.(GenericArpack_eigvals[1]) 
@@ -224,11 +274,11 @@ function DIMACS_errors(
     err1 = norm(SDP.primal_vio, 2) / (1.0 + norm(SDP.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
-    AToper!(SDP.full_S, SDP.S_nzval, -SDP.λ, SDP)
+    AToper_preprocess!(SDP)
     n = size(SDP.full_S, 1)
     op = ArpackSimpleFunctionOp(
         (y, x) -> begin
-                LinearAlgebra.mul!(y, SDP.full_S, x)
+                AToper!(y, SDP, SDP.Btvs, x)
                 return y
         end, n)
     eigenvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
@@ -246,9 +296,9 @@ Perform `q` Lanczos iterations with *a random start vector* to approximate
 the minimum eigenvalue of `A`.
 """
 function approx_mineigval_lanczos(
-    A::AbstractMatrix{Tv},
+    SDP::SDPProblem{Ti, Tv, TC},
     q::Ti,
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     n::Ti = size(A, 1)
     q = min(q, n - 1)
 
@@ -265,9 +315,10 @@ function approx_mineigval_lanczos(
     v_pre = zeros(Tv, n)
     
     iter = 0
+
     for i = 1:q
         iter += 1
-        mul!(Av, A, v)
+        AToper!(Av, SDP, SDP.Btvs, v)
         alpha[i] = v' * Av
 
         if i == 1
