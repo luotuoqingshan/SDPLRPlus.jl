@@ -179,6 +179,11 @@ function _sdplr(
             stationarity_norm = norm(SDP.G, 2) / (1.0 + normC)
             primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
 
+            # if change of the Lagrangian value is small enough
+            # then we terminate the current major iteration
+            if (lastval - 𝓛_val) / max(1.0, abs(𝓛_val), lastval) < config.factr * eps()
+                break
+            end
             # update lbfgs vectors
             if config.numlbfgsvecs > 0 
                 lbfgs_update!(dir, lbfgshis, SDP.G, α)
