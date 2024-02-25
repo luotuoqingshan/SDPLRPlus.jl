@@ -37,7 +37,7 @@ s.t.     Tr(X) = 1
 function lovasz_theta(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @assert A == A' "Only undirected graphs supported now."
     n = size(A, 1)
-    C = LowRankMatrix(Diagonal(-ones(Tv, 1)), ones(Tv, (n, 1)))
+    C = SymLowRankMatrix(Diagonal(-ones(Tv, 1)), ones(Tv, (n, 1)))
 
     As = []
     bs = Tv[]
@@ -79,7 +79,7 @@ function minimum_bisection(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
         push!(As, sparse(Ti[i], Ti[i], [one(Tv)], n, n))
         push!(bs, one(Tv))
     end
-    push!(As, LowRankMatrix(Diagonal(ones(Tv, 1)), ones(Tv, n, 1)))
+    push!(As, SymLowRankMatrix(Diagonal(ones(Tv, 1)), ones(Tv, n, 1)))
     push!(bs, zero(Tv))
     return Tv.(L) , As, bs
 end

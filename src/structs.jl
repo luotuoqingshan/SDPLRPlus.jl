@@ -1,13 +1,23 @@
 """
-Low rank representation of constraint matrices
-written as BDBᵀ, since usually B is really thin,
-so storing Bᵀ as well doesn't cost too much more storage.
+    SymLowRankMatrix{T}
+
+Symmetric low-rank matrix of the form BDBᵀ with elements of type `T`.
+Besides the diagonal matrix `D` and the thin matrix `B`,
+we also store the transpose of `B` as `Bt`.
+It's because usually `B` is really thin, storing `Bt` doesn't cost too much more storage
+but will save allocation during computation.
 """
-struct LowRankMatrix{T} <: AbstractMatrix{T}
+struct SymLowRankMatrix{T} <: AbstractMatrix{T}
     D::Diagonal{T}
     B::Matrix{T}
     Bt::Matrix{T}
-    function LowRankMatrix(
+
+    @doc """
+        SymLowRankMatrix(D, B)
+    
+    Construct a symmetric low-rank matrix of the form `BDBᵀ`.
+    """
+    function SymLowRankMatrix(
         D::Diagonal{T},
         B::Matrix{T},
     )where {T}
@@ -16,14 +26,14 @@ struct LowRankMatrix{T} <: AbstractMatrix{T}
 end
 
 
-size(A::LowRankMatrix) = (n = size(A.B, 1); (n, n))
-Base.getindex(A::LowRankMatrix, i::Int, j::Int) = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
+size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
+Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
 
 
-function show(io::IO, mime::MIME{Symbol("text/plain")}, A::LowRankMatrix)
+function show(io::IO, mime::MIME{Symbol("text/plain")}, A::SymLowRankMatrix)
     summary(io, A) 
     println(io)
-    println(io, "LowRankMatrix of form BDBᵀ.")
+    println(io, "SymLowRankMatrix of form BDBᵀ.")
     println(io, "B factor:")
     show(io, mime, A.B)
     println(io, "\nD factor:")
@@ -31,8 +41,14 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, A::LowRankMatrix)
 end
 
 
+"""
+    norm(A, p)
+
+Compute the `p`-norm of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
+Currently support `p` ∈ [2, Inf]. 
+"""
 function norm(
-    A::LowRankMatrix{Tv},
+    A::SymLowRankMatrix{Tv},
     p::Real,
 ) where {Tv <: AbstractFloat}
     # norm is usually not performance critical
@@ -58,9 +74,14 @@ function norm(
 end
 
 
+"""
+    mul!(Y, A, X)
+
+Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` with an AbstractVector `X`.
+"""
 function LinearAlgebra.mul!(
     Y::AbstractVector{Tv}, 
-    A::LowRankMatrix{Tv},
+    A::SymLowRankMatrix{Tv},
     X::AbstractVector{Tv},
 ) where {Tv <: AbstractFloat}
     BtX = A.Bt * X
@@ -69,9 +90,14 @@ function LinearAlgebra.mul!(
 end
 
 
+"""
+    mul!(Y, A, X, α, β)
+
+Compute `Y = α * A * X + β * Y` where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
+"""
 function LinearAlgebra.mul!(
     Y::AbstractVector{Tv}, 
-    A::LowRankMatrix{Tv},
+    A::SymLowRankMatrix{Tv},
     X::AbstractVector{Tv},
     α::Tv,
     β::Tv,
@@ -82,11 +108,13 @@ function LinearAlgebra.mul!(
 end
 
 
+"""
+    SDPProblem
+"""
 mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}} 
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     # list of matrices which are sparse/dense/low-rank/diagonal
-    # lowrank_constraints::Vector{LowRankConsOrObj{Ti, Tv}}
     C::TC                               # cost matrix
     b::Vector{Tv}                       # right-hand side b
 
@@ -108,10 +136,10 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatr
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
 
-    # low-rank constraints
-    n_lowrank_matrices::Ti
-    lowrank_As::Vector{LowRankMatrix{Tv}}
-    lowrank_As_global_inds::Vector{Ti}
+    # symmetric low-rank constraints
+    n_symlowrank_matrices::Ti
+    symlowrank_As::Vector{SymLowRankMatrix{Tv}}
+    symlowrank_As_global_inds::Vector{Ti}
     BtVs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * V
     BtUs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * U
     Btvs::Vector{Vector{Tv}}    # pre-allocated to store Bᵀ * v
@@ -121,8 +149,6 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatr
     λ::Vector{Tv}               # dual variables
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints
-
-    #scalars::BurerMonterioMutableScalars{Ti, Tv} # mutable scalars
 
     r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
     sigma::Tv               # penalty parameter

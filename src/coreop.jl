@@ -49,32 +49,32 @@ function Aoper!(
         end
     end
     # then deal with low-rank matrices
-    if SDP.n_lowrank_matrices > 0
+    if SDP.n_symlowrank_matrices > 0
         if same
-            for i = 1:SDP.n_lowrank_matrices
-                mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, U)
+            for i = 1:SDP.n_symlowrank_matrices
+                mul!(SDP.BtUs[i], SDP.symlowrank_As[i].Bt, U)
                 @. SDP.BtUs[i] = SDP.BtUs[i]^2
-                lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+                lmul!(SDP.symlowrank_As[i].D, SDP.BtUs[i])
                 res = sum(SDP.BtUs[i])
 
-                if SDP.lowrank_As_global_inds[i] == 0
+                if SDP.symlowrank_As_global_inds[i] == 0
                     obj = res
                 else
-                    𝓐_UV[SDP.lowrank_As_global_inds[i]] = res 
+                    𝓐_UV[SDP.symlowrank_As_global_inds[i]] = res 
                 end
             end
         else
-            for i = 1:SDP.n_lowrank_matrices
-                mul!(SDP.BtUs[i], SDP.lowrank_As[i].Bt, U)
-                mul!(SDP.BtVs[i], SDP.lowrank_As[i].Bt, V)
+            for i = 1:SDP.n_symlowrank_matrices
+                mul!(SDP.BtUs[i], SDP.symlowrank_As[i].Bt, U)
+                mul!(SDP.BtVs[i], SDP.symlowrank_As[i].Bt, V)
                 @. SDP.BtUs[i] *= SDP.BtVs[i]
-                lmul!(SDP.lowrank_As[i].D, SDP.BtUs[i])
+                lmul!(SDP.symlowrank_As[i].D, SDP.BtUs[i])
                 res = sum(SDP.BtUs[i])
 
-                if SDP.lowrank_As_global_inds[i] == 0
+                if SDP.symlowrank_As_global_inds[i] == 0
                     obj = res
                 else
-                    𝓐_UV[SDP.lowrank_As_global_inds[i]] = res 
+                    𝓐_UV[SDP.symlowrank_As_global_inds[i]] = res 
                 end
             end
         end
@@ -164,12 +164,12 @@ function AToper!(
     end
 
     # then deal with low-rank matrices 
-    if SDP.n_lowrank_matrices > 0
-        for i = 1:SDP.n_lowrank_matrices
-            mul!(Btvs[i], SDP.lowrank_As[i].Bt, x)
-            lmul!(SDP.lowrank_As[i].D, Btvs[i])
-            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
-            mul!(y, SDP.lowrank_As[i].B, Btvs[i], coeff, one(Tv))
+    if SDP.n_symlowrank_matrices > 0
+        for i = 1:SDP.n_symlowrank_matrices
+            mul!(Btvs[i], SDP.symlowrank_As[i].Bt, x)
+            lmul!(SDP.symlowrank_As[i].D, Btvs[i])
+            coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
+            mul!(y, SDP.symlowrank_As[i].B, Btvs[i], coeff, one(Tv))
         end 
     end
 end
@@ -230,10 +230,10 @@ function surrogate_duality_gap(
                     if SDP.n_sparse_matrices > 0
                         y .= SDP.full_S * x 
                     end
-                    if SDP.n_lowrank_matrices > 0
-                        for i = 1:SDP.n_lowrank_matrices
-                            coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
-                            LinearAlgebra.mul!(y, SDP.lowrank_As[i], x, coeff, one(Tv))
+                    if SDP.n_symlowrank_matrices > 0
+                        for i = 1:SDP.n_symlowrank_matrices
+                            coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
+                            LinearAlgebra.mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
                         end 
                     end
                     return y
@@ -275,10 +275,10 @@ function DIMACS_errors(
             if SDP.n_sparse_matrices > 0
                 y .= SDP.full_S * x 
             end
-            if SDP.n_lowrank_matrices > 0
-                for i = 1:SDP.n_lowrank_matrices
-                    coeff = SDP.lowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.lowrank_As_global_inds[i]]
-                    LinearAlgebra.mul!(y, SDP.lowrank_As[i], x, coeff, one(Tv))
+            if SDP.n_symlowrank_matrices > 0
+                for i = 1:SDP.n_symlowrank_matrices
+                    coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
+                    LinearAlgebra.mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
                 end 
             end
             return y

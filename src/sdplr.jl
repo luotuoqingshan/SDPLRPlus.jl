@@ -14,10 +14,10 @@ function sdplr(
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
 ) where{Ti <: Integer, Tv <: AbstractFloat}
     sparse_cons = SparseMatrixCSC{Tv, Ti}[]
-    lowrank_cons = LowRankMatrix{Tv}[]
+    symlowrank_cons = SymLowRankMatrix{Tv}[]
     # treat diagonal matrices as sparse matrices
     sparse_As_global_inds = Ti[]
-    lowrank_As_global_inds = Ti[]
+    symlowrank_As_global_inds = Ti[]
     
     # pre-allocate intermediate variables
     # for low-rank matrix evaluations
@@ -31,16 +31,16 @@ function sdplr(
         elseif isa(A, Diagonal)
             push!(sparse_cons, sparse(A))
             push!(sparse_As_global_inds, i)
-        elseif isa(A, LowRankMatrix)
-            push!(lowrank_cons, A)
-            push!(lowrank_As_global_inds, i)
+        elseif isa(A, SymLowRankMatrix)
+            push!(symlowrank_cons, A)
+            push!(symlowrank_As_global_inds, i)
             s = size(A.B, 2)
             # s and r are usually really small compared with n
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
             push!(Btvs, zeros(Tv, s))
         else
-            @error "Currently only sparse/lowrank/diagonal constraints are supported."
+            @error "Currently only sparse/symmetric low-rank/diagonal constraints are supported."
         end
     end
 
@@ -50,9 +50,9 @@ function sdplr(
     elseif isa(C, Diagonal)
         push!(sparse_cons, sparse(C))
         push!(sparse_As_global_inds, 0)
-    elseif isa(C, LowRankMatrix)
-        push!(lowrank_cons, C)
-        push!(lowrank_As_global_inds, 0)
+    elseif isa(C, SymLowRankMatrix)
+        push!(symlowrank_cons, C)
+        push!(symlowrank_As_global_inds, 0)
         s = size(C.B, 2)
         # s and r are usually really small compared with n
         push!(BtVs, zeros(Tv, (s, r)))
@@ -92,9 +92,9 @@ function sdplr(
                     sum_A_to_triu_A_inds, 
                     zeros(Tv, nnz_sum_A), 
                     zeros(Tv, m), zeros(Tv, m),
-                    length(lowrank_cons),
-                    lowrank_cons, 
-                    lowrank_As_global_inds,
+                    length(symlowrank_cons),
+                    symlowrank_cons, 
+                    symlowrank_As_global_inds,
                     BtVs,
                     BtUs,
                     Btvs,
@@ -135,8 +135,8 @@ function _sdplr(
 
 
     # set up algorithm parameters
-    normb = norm(SDP.b, Inf)
-    normC = norm(SDP.C, Inf)
+    normb = norm(SDP.b, 2)
+    normC = norm(SDP.C, 2)
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures

@@ -139,7 +139,7 @@ end
 
 
 function write_matrix_sdplr(
-    A::LowRankMatrix{Tv},
+    A::SymLowRankMatrix{Tv},
     id::Ti,
     f::IOStream,
 ) where {Tv <: AbstractFloat, Ti <: Integer}
