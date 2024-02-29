@@ -109,7 +109,12 @@ function sdplr(
                     time(),           #starttime
                     zero(Tv),         #endtime 
                     zero(Tv),         #time spent on computing dual bound
+                    zero(Tv),
+                    Ti[],
+                    Tv[],
+                    Tv[],
                     zero(Tv),         #time spend on primal computation
+                    zero(Tv),
                     )
 
     res = _sdplr(SDP, config)
@@ -152,7 +157,7 @@ function _sdplr(
 
     dir = similar(SDP.R)
     majoriter = 0
-    for _ = 1:config.majoriter_limit
+    for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
         while stationarity_norm > omega 
@@ -163,9 +168,9 @@ function _sdplr(
             # the return direction has been negated
             lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
 
-            descent = LinearAlgebra.dot(dir, SDP.G)
+            descent = dot(dir, SDP.G)
             if isnan(descent) || descent >= 0 # not a descent direction
-                LinearAlgebra.BLAS.scal!(-one(Tv), SDP.G)
+                BLAS.scal!(-one(Tv), SDP.G)
                 copyto!(dir, SDP.G) # reverse back to gradient direction
             end
 
@@ -174,14 +179,14 @@ function _sdplr(
             α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
 
             # update R and update gradient, stationarity, primal violence
-            LinearAlgebra.axpy!(α, dir, SDP.R)
+            axpy!(α, dir, SDP.R)
             gradient!(SDP)
             stationarity_norm = norm(SDP.G, 2) / (1.0 + normC)
             primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
-            if (lastval - 𝓛_val) / max(1.0, abs(𝓛_val), lastval) < config.factr * eps()
+            if (lastval - 𝓛_val) / max(1.0, abs(𝓛_val), lastval) < config.fprec * eps()
                 break
             end
             # update lbfgs vectors
@@ -198,8 +203,8 @@ function _sdplr(
                 end
             end   
 
-            if (current_time - SDP.starttime > config.time_limit
-                || iter > config.iter_limit)
+            if (current_time - SDP.starttime > config.maxtime
+                || iter > config.maxiter)
                 break
             end
         end
@@ -209,44 +214,47 @@ function _sdplr(
                   SDP.obj, stationarity_norm, primal_vio_norm, best_dualbd)
 
         current_time = time()
-        if current_time - SDP.starttime > config.time_limit
+        if current_time - SDP.starttime > config.maxtime
             @warn "Time limit exceeded. Stop optimizing."
             break
         end
 
-        if iter > config.iter_limit
+        if iter > config.maxiter
             @warn "Iteration limit exceeded. Stop optimizing."
             break
         end
 
 
         if primal_vio_norm <= eta
-            if primal_vio_norm <= config.primal_vio_tol 
-                SDP.dual_time += @elapsed begin
-                    eig_iter = Ti(round(log(n) / sqrt(config.duality_gap_tol))) 
-                    _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
-                end
-                if rel_duality_bound <= config.duality_gap_tol
+            if primal_vio_norm <= config.ptol 
+                eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
+                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
+                SDP.dual_lanczos_time += lanczos_dt
+                SDP.dual_GenericArpack_time += GenericArpack_dt
+                push!(SDP.checkdualbd_iters, iter)
+                push!(SDP.lanczos_eigvals, lanczos_eigval)
+                push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
+                if rel_duality_bound <= config.objtol
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound stationarity_norm
                     break
                 else
-                    LinearAlgebra.axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
+                    axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
                     eta = eta / SDP.sigma^0.9
                     omega = omega / SDP.sigma
                 end
             else
-                LinearAlgebra.axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
+                axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
                 eta = eta / SDP.sigma^0.9
                 omega = omega / SDP.sigma
             end
         else 
-            SDP.sigma *= 10
+            SDP.sigma *= config.σfac 
             eta = 1 / SDP.sigma^0.1
             omega = 1 / SDP.sigma 
         end
 
-        omega = max(omega, config.stationarity_tol)
-        eta = max(eta, config.primal_vio_tol)
+        omega = max(omega, config.gtol)
+        eta = max(eta, config.ptol)
 
         𝓛_val, stationarity_norm, primal_vio_norm = 
             essential_calcs!(SDP, normC, normb)
@@ -256,27 +264,33 @@ function _sdplr(
             lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), zero(Tv), zero(Tv))
         end
 
-        if majoriter == config.majoriter_limit
+        if majoriter == config.maxmajoriter
             @warn "Major iteration limit exceeded. Stop optimizing."
         end
     end
     
     𝓛_val, stationarity_norm, primal_vio_norm = essential_calcs!(SDP, normC, normb)
     println("Done")
-    SDP.dual_time += @elapsed begin 
-        eig_iter = Ti(round(log(n) / config.duality_gap_tol^0.5)) 
-        duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter; highprecision=true)
-    end
+    eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
+    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
+    SDP.dual_lanczos_time += lanczos_dt
+    SDP.dual_GenericArpack_time += GenericArpack_dt
+    push!(SDP.checkdualbd_iters, iter)
+    push!(SDP.lanczos_eigvals, lanczos_eigval)
+    push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
+
     SDP.endtime = time()
     totaltime = SDP.endtime - SDP.starttime
-    SDP.primal_time = totaltime - SDP.dual_time
-    DIMACS_errs = DIMACS_errors(SDP)
+    SDP.primal_time = totaltime - SDP.dual_lanczos_time - SDP.dual_GenericArpack_time
+    SDP.DIMACS_time = @elapsed begin
+        DIMACS_errs = DIMACS_errors(SDP)
+    end
     #@show normb, normC
     @show rel_duality_bound
     @show DIMACS_errs
     return Dict([
         "R" => SDP.R,
-        "lamda" => SDP.λ,
+        "lambda" => SDP.λ,
         "R0" => R0,
         "lambda0" => λ0,
         "sigma" => SDP.sigma,
@@ -286,14 +300,18 @@ function _sdplr(
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
         "totaltime" => totaltime,
-        "dualtime" => SDP.dual_time,
+        "dual_lanczos_time" => SDP.dual_lanczos_time,
+        "dual_GenericArpack_time" => SDP.dual_GenericArpack_time,
+        "checkdualbd_iters" => SDP.checkdualbd_iters,
+        "lanczos_eigvals" => SDP.lanczos_eigvals,
+        "GenericArpack_eigvals" => SDP.GenericArpack_eigvals,
         "primaltime" => SDP.primal_time,
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,
-        "stationarity_tol" => config.stationarity_tol,
-        "primal_vio_tol" => config.primal_vio_tol,
-        "duality_gap_tol" => config.duality_gap_tol,
+        "gtol" => config.gtol,
+        "ptol" => config.ptol,
+        "dtol" => config.objtol,
     ])
 end
 

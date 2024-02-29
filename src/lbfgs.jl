@@ -89,7 +89,7 @@ function lbfgs_dir!(
     j = lst
     for _ = 1:m 
         α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
-        LinearAlgebra.axpy!(-α, lbfgshis.vecs[j].y, dir)
+        axpy!(-α, lbfgshis.vecs[j].y, dir)
         lbfgshis.vecs[j].a = α
         j -= 1
         if j == 0
@@ -101,7 +101,7 @@ function lbfgs_dir!(
     for _ = 1:m 
         β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
         γ = lbfgshis.vecs[j].a - β
-        LinearAlgebra.axpy!(γ, lbfgshis.vecs[j].s, dir)
+        axpy!(γ, lbfgshis.vecs[j].s, dir)
         j += 1
         if j == m + 1
             j = 1
@@ -110,13 +110,13 @@ function lbfgs_dir!(
 
     # we need to pick -dir as search direction
     if negate 
-        LinearAlgebra.BLAS.scal!(-one(Tv), dir)
+        BLAS.scal!(-one(Tv), dir)
     end
 
     # partial update of lbfgs history 
     j = mod(lbfgshis.latest, lbfgshis.m) + 1
     copyto!(lbfgshis.vecs[j].y, grad)
-    LinearAlgebra.BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
+    BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
 end
 
 
@@ -132,10 +132,10 @@ function lbfgs_update!(
     # update lbfgs history
     j = mod(lbfgshis.latest, lbfgshis.m) + 1
 
-    LinearAlgebra.BLAS.scal!(stepsize, dir)
+    BLAS.scal!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
 
-    LinearAlgebra.axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
+    axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ, = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
     lbfgshis.latest = j

@@ -3,12 +3,12 @@ using Distributed
 
 Random.seed!(0)
 
-@everywhere function f(i, filename::String)
+@everywhere function batch_eval_maxcut(i, filename::String)
     # warmup
     A = read_graph("G1") 
     C, As, bs = maxcut(A)
     n = size(A, 1)
-    r = barvinok_pataki(n, n)
+    r = barvinok_pataki(n, length(As))
     res = sdplr(C, As, bs, r)
 
     # real start 
@@ -22,6 +22,22 @@ Random.seed!(0)
     output_folder = homedir()*"/SDPLR-jl/output/MaxCut/"
     matwrite(output_folder*"G$i/"*filename*".mat", res)
 end
+
+
+@everywhere function batch_eval_minimum_bisection(i, filename::String)
+    @info "Running minimum bisection on G$i."
+    A = read_graph("G$i")
+    C, As, bs = minimum_bisection(A)
+    n = size(A, 1)
+    r = barvinok_pataki(n, length(As))  
+
+    res = sdplr(C, As, bs, r)
+
+    output_folder = homedir()*"/SDPLR-jl/output/MinimumBisection/"
+    mkpath(output_folder*"G$i/")
+    matwrite(output_folder*"G$i/"*filename*".mat", res)
+end
+
 
 function benchmark_gset(gset_ids, filename::String)
     pmap(i -> f(i, filename), gset_ids)                
@@ -47,24 +63,17 @@ function print_gset(
     end
 end
 
-#f(66, "early_termination_1e-5_1e-4")
-#for i = 1:67
-#    f(i, "early_termination_1e-3_1e-3_1e-3")
-#end
-#print_gset(66:66, "primaltime", "MaxCut", "early_termination_1e-5_1e-4")
-A = read_graph("G1")
-C, As, bs = minimum_bisection(A);
-#C, As, bs = lovasz_theta(A)
-r = barvinok_pataki(size(C, 1), length(As))
-res = sdplr(C, As, bs, r)
+#warmup
+batch_eval_minimum_bisection(1, "tol-1e-2")
 
-n = 20 
-A = ones(n, n)
-A[diagind(A)] .= 0
-A = sparse(A)
-dropzeros!(A)
+# real start
+for i = 1:67
+    batch_eval_minimum_bisection(i, "tol-1e-2")
+end
 
-write_graph(A, "K$n"; extension=".smat")
-#
-#C, As, bs = maxcut(A)
-#write_problem_sdplr(C, As, bs, homedir()*"/SDPLR-jl/data/G1_lovasz_theta.sdplr")
+A = read_graph("G57")
+C, As, bs = lovasz_theta(A)
+n = size(A, 1)
+r = barvinok_pataki(n, length(As))  
+
+@timed res = sdplr(C, As, bs, 5)

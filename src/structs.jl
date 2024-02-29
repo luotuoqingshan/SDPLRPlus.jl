@@ -155,8 +155,13 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatr
     obj::Tv                 # objective
     starttime::Tv           # timing
     endtime::Tv
-    dual_time::Tv
+    dual_lanczos_time::Tv
+    dual_GenericArpack_time::Tv
+    checkdualbd_iters::Vector{Ti}
+    lanczos_eigvals::Vector{Tv}
+    GenericArpack_eigvals::Vector{Tv}
     primal_time::Tv
+    DIMACS_time::Tv  
 end
 
 

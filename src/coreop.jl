@@ -1,13 +1,14 @@
 """
-This function computes the augmented Lagrangian value, 
+    ℒ!(SDP)
+
+Update the objective value, primal violence and compute 
+the augmented Lagrangian value, 
     𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2
 """
-function lagrangval!(
-    SDP::SDPProblem{Ti, Tv, TC}, 
+function ℒ!(SDP::SDPProblem{Ti, Tv, TC}
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    # apply the operator 𝓐 to RRᵀ and 
-    # potentially compute the objective function value
-    SDP.obj = Aoper!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
+    # apply the operator 𝓐 to RRᵀ and compute the objective value
+    SDP.obj = 𝒜!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
     SDP.primal_vio .-= SDP.b 
     return (SDP.obj - dot(SDP.λ, SDP.primal_vio)
            + SDP.sigma * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
@@ -22,7 +23,7 @@ same : 1 if U and V are the same matrix
      : 0 if U and V are different matrices
 obj  : whether to compute the objective function value
 """
-function Aoper!(
+function 𝒜!(
     𝓐_UV::Vector{Tv},
     UVt::Vector{Tv},
     SDP::SDPProblem{Ti, Tv, TC},
@@ -183,7 +184,7 @@ function gradient!(
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AToper_preprocess!(SDP)
     AToper!(SDP.G, SDP, SDP.BtUs, SDP.R)
-    LinearAlgebra.BLAS.scal!(Tv(2), SDP.G)
+    BLAS.scal!(Tv(2), SDP.G)
     return 0
 end
 
@@ -200,11 +201,49 @@ function essential_calcs!(
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    𝓛_val = lagrangval!(SDP)
+    𝓛_val = ℒ!(SDP)
     gradient!(SDP)
     stationarity = norm(SDP.G, 2) / (1.0 + normC)
     primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, stationarity, primal_vio)
+end
+
+
+"""
+
+"""
+function SDP_S_eigval(
+    SDP::SDPProblem{Ti, Tv, TC},
+    nevs::Ti,
+    preprocessed::Bool=false;
+    kwargs...
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    if !preprocessed
+        AToper_preprocess!(SDP)
+    end
+    n = size(SDP.full_S, 1)
+    GenericArpack_dt = @elapsed begin
+        op = ArpackSimpleFunctionOp(
+            (y, x) -> begin
+                fill!(y, zero(Tv))
+                if SDP.n_sparse_matrices > 0
+                    y .= SDP.full_S * x 
+                end
+                if SDP.n_symlowrank_matrices > 0
+                    for i = 1:SDP.n_symlowrank_matrices
+                        coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
+                        mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
+                    end 
+                end
+                # shift the matrix by I
+                y .+= x
+                return y 
+            end, n)
+        GenericArpack_eigvals, _ = symeigs(op, nevs; kwargs...)
+    end
+    GenericArpack_eigvals = real.(GenericArpack_eigvals)
+    GenericArpack_eigvals .-= 1 # cancel the shift
+    return GenericArpack_eigvals, GenericArpack_dt
 end
 
 
@@ -221,34 +260,15 @@ function surrogate_duality_gap(
         lanczos_eigenval = approx_mineigval_lanczos(SDP, iter)
     end
     res = lanczos_eigenval
-    @show lanczos_dt, lanczos_eigenval
     if highprecision
-        GenericArpack_dt = @elapsed begin
-            op = ArpackSimpleFunctionOp(
-                (y, x) -> begin
-                    fill!(y, zero(Tv))
-                    if SDP.n_sparse_matrices > 0
-                        y .= SDP.full_S * x 
-                    end
-                    if SDP.n_symlowrank_matrices > 0
-                        for i = 1:SDP.n_symlowrank_matrices
-                            coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
-                            LinearAlgebra.mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
-                        end 
-                    end
-                    return y
-                end, n)
-            GenericArpack_eigvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
-        end
-        res = real.(GenericArpack_eigvals)
-        @show GenericArpack_dt, real.(GenericArpack_eigvals[1]) 
+        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(SDP, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+        res = GenericArpack_evs[1]
     end
 
     duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.sigma/2 * dot(SDP.primal_vio, AX + SDP.b)
            - max(trace_bound, norm(SDP.R)^2) * res[1])     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
-    @show rel_duality_gap
-    return duality_gap, rel_duality_gap 
+    return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
 end
 
 
@@ -269,22 +289,9 @@ function DIMACS_errors(
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
     AToper_preprocess!(SDP)
     n = size(SDP.full_S, 1)
-    op = ArpackSimpleFunctionOp(
-        (y, x) -> begin
-            fill!(y, zero(Tv))
-            if SDP.n_sparse_matrices > 0
-                y .= SDP.full_S * x 
-            end
-            if SDP.n_symlowrank_matrices > 0
-                for i = 1:SDP.n_symlowrank_matrices
-                    coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
-                    LinearAlgebra.mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
-                end 
-            end
-            return y
-        end, n)
-    eigenvals, _ = symeigs(op, 1; which=:SA, tol=1e-6, maxiter=1000000)
-    err4 = max(zero(Tv), -real.(eigenvals[1])) / (1.0 + norm(SDP.C, 2))
+
+    GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(SDP, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+    err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(SDP.C, 2))
     err5 = (SDP.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
     err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
     return [err1, err2, err3, err4, err5, err6]
@@ -301,7 +308,7 @@ function approx_mineigval_lanczos(
     SDP::SDPProblem{Ti, Tv, TC},
     q::Ti,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    n::Ti = size(A, 1)
+    n::Ti = size(SDP.full_S, 1)
     q = min(q, n - 1)
 
     # allocate lanczos vectors
@@ -340,5 +347,5 @@ function approx_mineigval_lanczos(
     end
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
     min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=1000000, tol=1e-6)
-    return min_eigval 
+    return real.(min_eigval)[1]
 end
