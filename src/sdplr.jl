@@ -267,7 +267,7 @@ function _sdplr(
         end
     end
     
-    𝓛_val, grad_norm, primal_vio_norm = essential_calcs!(SDP, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(SDP, normC, normb)
     println("Done")
     eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
     lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
