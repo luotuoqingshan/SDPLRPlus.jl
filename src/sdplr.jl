@@ -150,8 +150,7 @@ function _sdplr(
     cur_gtol = 1.0 / SDP.σ     # stationarity tolerance
     cur_ptol = 1.0 / SDP.σ^0.1   # primal violation tolerance
 
-    𝓛_val, stationarity_norm , primal_vio_norm = 
-        essential_calcs!(SDP, normC, normb)
+    𝓛_val, grad_norm , primal_vio_norm = fg!(SDP, normC, normb)
     iter = 0 # total number of iterations
     origval = 𝓛_val 
 
@@ -160,7 +159,7 @@ function _sdplr(
     for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
-        while stationarity_norm > cur_gtol 
+        while grad_norm > cur_gtol 
             # update iteration counters
             localiter += 1     
             iter += 1
@@ -180,8 +179,8 @@ function _sdplr(
 
             # update R and update gradient, stationarity, primal violence
             axpy!(α, dir, SDP.R)
-            gradient!(SDP)
-            stationarity_norm = norm(SDP.G, 2) / (1.0 + normC)
+            g!(SDP)
+            grad_norm = norm(SDP.G, 2) / (1.0 + normC)
             primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
@@ -199,7 +198,7 @@ function _sdplr(
                 lastprint = current_time
                 if config.printlevel > 0
                     printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                              SDP.obj, stationarity_norm, primal_vio_norm, best_dualbd)
+                              SDP.obj, grad_norm, primal_vio_norm, best_dualbd)
                 end
             end   
 
@@ -211,7 +210,7 @@ function _sdplr(
 
 
         printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                  SDP.obj, stationarity_norm, primal_vio_norm, best_dualbd)
+                  SDP.obj, grad_norm, primal_vio_norm, best_dualbd)
 
         current_time = time()
         if current_time - SDP.starttime > config.maxtime
@@ -235,7 +234,7 @@ function _sdplr(
                 push!(SDP.lanczos_eigvals, lanczos_eigval)
                 push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
                 if rel_duality_bound <= config.objtol
-                    @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound stationarity_norm
+                    @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
                     break
                 else
                     axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
@@ -256,8 +255,7 @@ function _sdplr(
         cur_gtol = max(cur_gtol, config.gtol)
         cur_ptol = max(cur_ptol, config.ptol)
 
-        𝓛_val, stationarity_norm, primal_vio_norm = 
-            essential_calcs!(SDP, normC, normb)
+        𝓛_val, grad_norm, primal_vio_norm = fg!(SDP, normC, normb)
 
         # clear lbfgs vectors for next major iteration
         for i = 1:lbfgshis.m
@@ -269,7 +267,7 @@ function _sdplr(
         end
     end
     
-    𝓛_val, stationarity_norm, primal_vio_norm = essential_calcs!(SDP, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = essential_calcs!(SDP, normC, normb)
     println("Done")
     eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
     lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
@@ -294,7 +292,7 @@ function _sdplr(
         "R0" => R0,
         "lambda0" => λ0,
         "sigma" => SDP.σ,
-        "stationarity" => stationarity_norm,
+        "grad_norm" => grad_norm,
         "primal_vio" => primal_vio_norm,
         "obj" => SDP.obj,
         "duality_bound" => duality_bound,

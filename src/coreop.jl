@@ -1,11 +1,11 @@
 """
-    ℒ!(SDP)
+    f!(SDP)
 
 Update the objective value, primal violence and compute 
 the augmented Lagrangian value, 
     𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2
 """
-function ℒ!(SDP::SDPProblem{Ti, Tv, TC}
+function f!(SDP::SDPProblem{Ti, Tv, TC}
     ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # apply the operator 𝓐 to RRᵀ and compute the objective value
     SDP.obj = 𝒜!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
@@ -179,7 +179,7 @@ end
 """
 This function computes the gradient of the augmented Lagrangian
 """
-function gradient!(
+function g!(
     SDP::SDPProblem{Ti, Tv, TC},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     AToper_preprocess!(SDP)
@@ -196,16 +196,16 @@ val : Lagrangian value
 ρ_c_val : stationary condition
 ρ_f_val : primal feasibility
 """
-function essential_calcs!(
+function fg!(
     SDP::SDPProblem{Ti, Tv, TC},
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    𝓛_val = ℒ!(SDP)
-    gradient!(SDP)
-    stationarity = norm(SDP.G, 2) / (1.0 + normC)
-    primal_vio = norm(SDP.primal_vio, 2) / (1.0 + normb)
-    return (𝓛_val, stationarity, primal_vio)
+    𝓛_val = f!(SDP)
+    g!(SDP)
+    grad_norm = norm(SDP.G, 2) / (1.0 + normC)
+    primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
+    return (𝓛_val, grad_norm, primal_vio_norm)
 end
 
 
