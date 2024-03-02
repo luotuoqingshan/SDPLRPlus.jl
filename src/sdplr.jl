@@ -147,8 +147,8 @@ function _sdplr(
     # initialize lbfgs datastructures
     lbfgshis = lbfgs_init(SDP.R, config.numlbfgsvecs)
 
-    omega = 1.0 / SDP.sigma     # stationarity tolerance
-    eta = 1.0 / SDP.sigma^0.1   # primal violation tolerance
+    cur_gtol = 1.0 / SDP.σ     # stationarity tolerance
+    cur_ptol = 1.0 / SDP.σ^0.1   # primal violation tolerance
 
     𝓛_val, stationarity_norm , primal_vio_norm = 
         essential_calcs!(SDP, normC, normb)
@@ -160,7 +160,7 @@ function _sdplr(
     for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
-        while stationarity_norm > omega 
+        while stationarity_norm > cur_gtol 
             # update iteration counters
             localiter += 1     
             iter += 1
@@ -225,7 +225,7 @@ function _sdplr(
         end
 
 
-        if primal_vio_norm <= eta
+        if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
                 eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
                 lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
@@ -238,23 +238,23 @@ function _sdplr(
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound stationarity_norm
                     break
                 else
-                    axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
-                    eta = eta / SDP.sigma^0.9
-                    omega = omega / SDP.sigma
+                    axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
+                    cur_ptol = cur_ptol / SDP.σ^0.9
+                    cur_gtol = cur_gtol / SDP.σ
                 end
             else
-                axpy!(-SDP.sigma, SDP.primal_vio, SDP.λ)
-                eta = eta / SDP.sigma^0.9
-                omega = omega / SDP.sigma
+                axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
+                cur_ptol = cur_ptol / SDP.σ^0.9
+                cur_gtol = cur_gtol / SDP.σ
             end
         else 
-            SDP.sigma *= config.σfac 
-            eta = 1 / SDP.sigma^0.1
-            omega = 1 / SDP.sigma 
+            SDP.σ *= config.σfac 
+            cur_ptol = 1 / SDP.σ^0.1
+            cur_gtol = 1 / SDP.σ 
         end
 
-        omega = max(omega, config.gtol)
-        eta = max(eta, config.ptol)
+        cur_gtol = max(cur_gtol, config.gtol)
+        cur_ptol = max(cur_ptol, config.ptol)
 
         𝓛_val, stationarity_norm, primal_vio_norm = 
             essential_calcs!(SDP, normC, normb)
@@ -293,7 +293,7 @@ function _sdplr(
         "lambda" => SDP.λ,
         "R0" => R0,
         "lambda0" => λ0,
-        "sigma" => SDP.sigma,
+        "sigma" => SDP.σ,
         "stationarity" => stationarity_norm,
         "primal_vio" => primal_vio_norm,
         "obj" => SDP.obj,

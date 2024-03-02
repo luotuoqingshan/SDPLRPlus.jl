@@ -151,7 +151,7 @@ mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatr
     primal_vio::Vector{Tv}      # violation of constraints
 
     r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    sigma::Tv               # penalty parameter
+    σ::Tv               # penalty parameter
     obj::Tv                 # objective
     starttime::Tv           # timing
     endtime::Tv

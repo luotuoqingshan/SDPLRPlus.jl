@@ -11,7 +11,7 @@ function ℒ!(SDP::SDPProblem{Ti, Tv, TC}
     SDP.obj = 𝒜!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
     SDP.primal_vio .-= SDP.b 
     return (SDP.obj - dot(SDP.λ, SDP.primal_vio)
-           + SDP.sigma * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
+           + SDP.σ * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
 end
 
 
@@ -143,7 +143,7 @@ function AToper_preprocess!(
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # update auxiliary vector y based on primal violence and λ
     # and then update the sparse matrix
-    @. SDP.y = -(SDP.λ - SDP.sigma * SDP.primal_vio)
+    @. SDP.y = -(SDP.λ - SDP.σ * SDP.primal_vio)
     if SDP.n_sparse_matrices > 0
         AToper_preprocess_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
     end
@@ -265,7 +265,7 @@ function surrogate_duality_gap(
         res = GenericArpack_evs[1]
     end
 
-    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.sigma/2 * dot(SDP.primal_vio, AX + SDP.b)
+    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
            - max(trace_bound, norm(SDP.R)^2) * res[1])     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
