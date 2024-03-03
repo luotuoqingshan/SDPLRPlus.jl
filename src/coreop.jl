@@ -201,8 +201,13 @@ function fg!(
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    𝓛_val = f!(SDP)
-    g!(SDP)
+    f_dt = @elapsed begin
+        𝓛_val = f!(SDP)
+    end
+    g_dt = @elapsed begin
+        g!(SDP)
+    end
+    @debug "f dt, g dt" f_dt, g_dt
     grad_norm = norm(SDP.G, 2) / (1.0 + normC)
     primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
@@ -266,7 +271,7 @@ function surrogate_duality_gap(
     end
 
     duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
-           - max(trace_bound, norm(SDP.R)^2) * res[1])     
+           - max(trace_bound, norm(SDP.R)^2) * min(res[1], 0.0))     
     rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
 end
