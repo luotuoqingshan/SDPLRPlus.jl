@@ -103,7 +103,7 @@ function sdplr(
                     zeros(Tv, m), 
                     zeros(Tv, m),
                     r,         #rank
-                    10.0,      #sigma
+                    2.0,      #sigma
                     zero(Tv),         #obj, will be initialized later
                     time(),           #starttime
                     zero(Tv),         #endtime 
@@ -155,6 +155,8 @@ function _sdplr(
 
     dir = similar(SDP.R)
     majoriter = 0
+
+    last_rel_duality_bound = 1e20
     for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
@@ -246,6 +248,12 @@ function _sdplr(
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
                     break
                 else
+                    if last_rel_duality_bound - rel_duality_bound < config.objtol
+                        @error "Duality gap is not decreasing. Stop optimizing."
+                        break
+                    else
+                        last_rel_duality_bound = rel_duality_bound
+                    end
                     axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
                     cur_ptol = cur_ptol / SDP.σ^0.9
                     cur_gtol = cur_gtol / SDP.σ
@@ -261,8 +269,8 @@ function _sdplr(
             cur_gtol = 1 / SDP.σ 
         end
 
-        cur_gtol = max(cur_gtol, config.gtol)
         cur_ptol = max(cur_ptol, config.ptol)
+        @info cur_ptol, cur_gtol
 
         𝓛_val, grad_norm, primal_vio_norm = fg!(SDP, normC, normb)
 
