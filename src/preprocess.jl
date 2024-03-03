@@ -72,72 +72,72 @@ function preprocess_sparsecons(
         total_nnz += length(triu_V)
     end
 
-    # nnz of sum_A correspond to potential nnz of 
+    # nnz of agg_sparse_A correspond to potential nnz of 
     # \sum_{i=1}^m y_i A_i
     # thus via preallocation, we can speed up 
     # the computation of addition of sparse matrices
 
     # combine all upper triangular parts of As
-    triu_sum_A = sparse(all_triu_I, all_triu_J, all_triu_V, n, n)
+    triu_agg_sparse_A = sparse(all_triu_I, all_triu_J, all_triu_V, n, n)
 
     # combine all entries of As
-    sum_A = sparse(all_I, all_J, all_V, n, n)
+    agg_sparse_A = sparse(all_I, all_J, all_V, n, n)
 
-    agg_A_ptr = zeros(Ti, nA + 1)
-    agg_A_nzind = zeros(Ti, total_nnz)
-    agg_A_nzval_one = zeros(Tv, total_nnz)
-    agg_A_nzval_two = zeros(Tv, total_nnz)
+    agg_sparse_A_matrixptr = zeros(Ti, nA + 1)
+    agg_sparse_A_nzind = zeros(Ti, total_nnz)
+    agg_sparse_A_nzval_one = zeros(Tv, total_nnz)
+    agg_sparse_A_nzval_two = zeros(Tv, total_nnz)
 
     cumul_nnz = 0
     for i in eachindex(As)
         # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
         # correspond to the i-th sparse constraint/objective matrix
-        agg_A_ptr[i] = cumul_nnz + 1
+        agg_sparse_A_matrixptr[i] = cumul_nnz + 1
         triu_I = triu_I_list[i]
         triu_J = triu_J_list[i]
         triu_V = triu_V_list[i]
         for j in eachindex(triu_I)
             row, col = triu_I[j], triu_J[j]
-            low = triu_sum_A.colptr[col]
-            high = triu_sum_A.colptr[col+1]-1
+            low = triu_agg_sparse_A.colptr[col]
+            high = triu_agg_sparse_A.colptr[col+1]-1
             while low <= high
                 mid = (low + high) ÷ 2
-                if triu_sum_A.rowval[mid] == row 
-                    agg_A_nzind[cumul_nnz+j] = mid 
+                if triu_agg_sparse_A.rowval[mid] == row 
+                    agg_sparse_A_nzind[cumul_nnz+j] = mid 
                     break
-                elseif triu_sum_A.rowval[mid] < row 
+                elseif triu_agg_sparse_A.rowval[mid] < row 
                     low = mid + 1
                 else
                     high = mid - 1
                 end
             end
-            agg_A_nzval_one[cumul_nnz+j] = triu_V[j] 
+            agg_sparse_A_nzval_one[cumul_nnz+j] = triu_V[j] 
             if row == col
-                agg_A_nzval_two[cumul_nnz+j] = triu_V[j]
+                agg_sparse_A_nzval_two[cumul_nnz+j] = triu_V[j]
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
-                agg_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
+                agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
             end
         end
         cumul_nnz += length(triu_I)
     end
-    agg_A_ptr[end] = total_nnz + 1
-    sum_A_triu_sum_A_inds = zeros(Ti, length(sum_A.rowval))
+    agg_sparse_A_matrixptr[end] = total_nnz + 1
+    agg_sparse_A_mappedto_triu = zeros(Ti, length(agg_sparse_A.rowval))
     for col = 1:n
-        for nzi = sum_A.colptr[col]:sum_A.colptr[col+1]-1
-            row = sum_A.rowval[nzi]
+        for nzi = agg_sparse_A.colptr[col]:agg_sparse_A.colptr[col+1]-1
+            row = agg_sparse_A.rowval[nzi]
             r = min(row, col)
             c = max(row, col)
-            low = triu_sum_A.colptr[c]
-            high = triu_sum_A.colptr[c+1]-1
+            low = triu_agg_sparse_A.colptr[c]
+            high = triu_agg_sparse_A.colptr[c+1]-1
             #@show low, high, triu_sum_A.rowval[low:high]
             while low <= high
                 mid = div(low + high, 2)
-                if triu_sum_A.rowval[mid] == r
-                    sum_A_triu_sum_A_inds[nzi] = mid
+                if triu_agg_sparse_A.rowval[mid] == r
+                    agg_sparse_A_mappedto_triu[nzi] = mid
                     break
-                elseif triu_sum_A.rowval[mid] > r
+                elseif triu_agg_sparse_A.rowval[mid] > r
                     high = mid - 1
                 else
                     low = mid + 1
@@ -145,6 +145,7 @@ function preprocess_sparsecons(
             end
         end
     end
-    return (triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, 
-           agg_A_nzval_two, sum_A, sum_A_triu_sum_A_inds)
+    return (triu_agg_sparse_A, agg_sparse_A_matrixptr, agg_sparse_A_nzind, 
+           agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+           agg_sparse_A_mappedto_triu)
 end
