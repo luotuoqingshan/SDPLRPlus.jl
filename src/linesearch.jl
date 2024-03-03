@@ -8,12 +8,17 @@ function linesearch!(
     update = true,
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # evaluate 𝓐(RDᵀ + DRᵀ)
-    C_RD = 𝒜!(SDP.A_RD, SDP.UVt, SDP, SDP.R, D; same=false)
+    RD_dt = @elapsed begin
+        C_RD = 𝒜!(SDP.A_RD, SDP.UVt, SDP, SDP.R, D; same=false)
+    end
     # remember we divide it by 2 in Aoper, now scale back
     SDP.A_RD .*= 2.0
     C_RD *= 2.0
     # evaluate 𝓐(DDᵀ)
-    C_DD = 𝒜!(SDP.A_DD, SDP.UVt, SDP, D, D; same=true)
+    DD_dt = @elapsed begin
+        C_DD = 𝒜!(SDP.A_DD, SDP.UVt, SDP, D, D; same=true)
+    end
+    @debug "RD_dt, DD_dt" RD_dt, DD_dt
 
     biquadratic = zeros(5)
     cubic = zeros(4)

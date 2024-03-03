@@ -87,7 +87,6 @@ function sdplr(
                     agg_A_nzval_two, 
                     sparse_As_global_inds,
                     zeros(Tv, nnz_sum_A), 
-                    zeros(Tv, nnz_sum_A),
                     sum_A,
                     sum_A_to_triu_A_inds, 
                     zeros(Tv, nnz_sum_A), 
@@ -168,7 +167,7 @@ function _sdplr(
             lbfgs_dir_dt = @elapsed begin
                 lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
             end
-            @show lbfgs_dir_dt
+            @debug "lbfgs dir dt" lbfgs_dir_dt
 
             descent = dot(dir, SDP.G)
             if isnan(descent) || descent >= 0 # not a descent direction
@@ -181,14 +180,14 @@ function _sdplr(
             linesearch_dt = @elapsed begin
                 α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
             end
-            @show linesearch_dt
+            @debug "line search time" linesearch_dt
 
             # update R and update gradient, stationarity, primal violence
             axpy!(α, dir, SDP.R)
             g_dt = @elapsed begin
                 g!(SDP)
             end
-            @show g_dt
+            @debug "g time" g_dt
             grad_norm = norm(SDP.G, 2) / (1.0 + normC)
             primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
 
@@ -242,6 +241,7 @@ function _sdplr(
                 push!(SDP.checkdualbd_iters, iter)
                 push!(SDP.lanczos_eigvals, lanczos_eigval)
                 push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
+                @info rel_duality_bound
                 if rel_duality_bound <= config.objtol
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
                     break
