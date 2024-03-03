@@ -165,7 +165,10 @@ function _sdplr(
             iter += 1
             # find the lbfgs direction
             # the return direction has been negated
-            lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
+            lbfgs_dir_dt = @elapsed begin
+                lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
+            end
+            @show lbfgs_dir_dt
 
             descent = dot(dir, SDP.G)
             if isnan(descent) || descent >= 0 # not a descent direction
@@ -175,11 +178,17 @@ function _sdplr(
 
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
-            α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
+            linesearch_dt = @elapsed begin
+                α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
+            end
+            @show linesearch_dt
 
             # update R and update gradient, stationarity, primal violence
             axpy!(α, dir, SDP.R)
-            g!(SDP)
+            g_dt = @elapsed begin
+                g!(SDP)
+            end
+            @show g_dt
             grad_norm = norm(SDP.G, 2) / (1.0 + normC)
             primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
 
@@ -259,7 +268,7 @@ function _sdplr(
 
         # clear lbfgs vectors for next major iteration
         for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), zero(Tv), zero(Tv))
+            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(zero(Tv)), Ref(zero(Tv)))
         end
 
         if majoriter == config.maxmajoriter

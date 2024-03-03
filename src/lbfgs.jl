@@ -1,7 +1,7 @@
 """
 Vector of L-BFGS
 """
-mutable struct LBFGSVector{T <: AbstractFloat}
+struct LBFGSVector{T <: AbstractFloat}
     # notice that we use matrix instead 
     # of vector to store s and y because our
     # decision variables are matrices
@@ -10,11 +10,9 @@ mutable struct LBFGSVector{T <: AbstractFloat}
     # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
     y::Matrix{T}
     # ρ = 1/(⟨y, s⟩)
-    #ρ::Base.RefValue{T}
-    ρ::T
+    ρ::Base.RefValue{T}
     # temporary variable
-    #a::Base.RefValue{T}
-    a::T
+    a::Base.RefValue{T}
 end
 
 """
@@ -50,8 +48,8 @@ function lbfgs_init(
         push!(lbfgshis.vecs, 
             LBFGSVector(zeros(Tv, size(R)),
                         zeros(Tv, size(R)),
-                        zero(Tv), 
-                        zero(Tv),
+                        Ref(zero(Tv)), 
+                        Ref(zero(Tv)),
                         ))
     end
 
@@ -88,9 +86,9 @@ function lbfgs_dir!(
     # pay attention here, dir, s and y are all matrices
     j = lst
     for _ = 1:m 
-        α = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].s, dir)
+        α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
         axpy!(-α, lbfgshis.vecs[j].y, dir)
-        lbfgshis.vecs[j].a = α
+        lbfgshis.vecs[j].a[] = α
         j -= 1
         if j == 0
             j = m
@@ -99,8 +97,8 @@ function lbfgs_dir!(
 
     j = mod(lst, m) + 1
     for _ = 1:m 
-        β = lbfgshis.vecs[j].ρ * dot(lbfgshis.vecs[j].y, dir)
-        γ = lbfgshis.vecs[j].a - β
+        β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
+        γ = lbfgshis.vecs[j].a[] - β
         axpy!(γ, lbfgshis.vecs[j].s, dir)
         j += 1
         if j == m + 1
@@ -136,7 +134,7 @@ function lbfgs_update!(
     copy!(lbfgshis.vecs[j].s, dir)
 
     axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
-    lbfgshis.vecs[j].ρ, = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
+    lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
     lbfgshis.latest = j
 end
