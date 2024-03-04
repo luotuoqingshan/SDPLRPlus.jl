@@ -108,62 +108,65 @@ function LinearAlgebra.mul!(
 end
 
 
-"""
-    SDPProblem
-"""
-mutable struct SDPProblem{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}} 
+struct SDPData{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
-    # list of matrices which are sparse/dense/low-rank/diagonal
     C::TC                               # cost matrix
+    As::Vector{Any}                     # set of constraint matrices
     b::Vector{Tv}                       # right-hand side b
+end
 
+
+struct SolverVars{Ti <: Integer, Tv <: AbstractFloat}
+    R::Matrix{Tv}               # primal variables X = RR^T
+    G::Matrix{Tv}               # gradient w.r.t. R
+    λ::Vector{Tv}               # dual variables
+
+    r::Base.RefValue{Ti}                       # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+    σ::Base.RefValue{Tv}                       # penalty parameter
+    obj::Base.RefValue{Tv}                     # objective
+end
+
+
+struct SolverAuxiliary{Ti <: Integer, Tv <: AbstractFloat}
     # sparse constraints
-    XS_colptr::Vector{Ti}
-    XS_rowval::Vector{Ti}
     n_sparse_matrices::Ti
-    agg_A_ptr::Vector{Ti}
-    agg_A_nzind::Vector{Ti}
-    agg_A_nzval_one::Vector{Tv}
-    agg_A_nzval_two::Vector{Tv}
+    agg_sparse_A_matptr::Vector{Ti}
+    agg_sparse_A_nzind::Vector{Ti}
+    agg_sparse_A_nzval_one::Vector{Tv}
+    agg_sparse_A_nzval_two::Vector{Tv}
+    agg_sparse_A_mappedto_triu::Vector{Ti} 
     sparse_As_global_inds::Vector{Ti}
 
-    X_nzval::Vector{Tv}
-    S_nzval::Vector{Tv}
-    full_S::SparseMatrixCSC{Tv, Ti}
-    full_S_triu_S_inds::Vector{Ti} 
+    triu_sparse_S::SparseMatrixCSC{Tv, Ti}
+    sparse_S::SparseMatrixCSC{Tv, Ti}
     UVt::Vector{Tv}
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
-
+    
     # symmetric low-rank constraints
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
     BtVs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * V
     BtUs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * U
-    Btvs::Vector{Vector{Tv}}    # pre-allocated to store Bᵀ * v
 
-    R::Matrix{Tv}               # primal variables X = RR^T
-    G::Matrix{Tv}               # gradient w.r.t. R
-    λ::Vector{Tv}               # dual variables
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints
+end
 
-    r::Ti                   # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    σ::Tv                   # penalty parameter
-    obj::Tv                 # objective
-    starttime::Tv           # timing
-    endtime::Tv
-    dual_lanczos_time::Tv
-    dual_GenericArpack_time::Tv
+
+struct SolverStats{Ti <: Integer, Tv <: AbstractFloat}
+    starttime::Base.RefValue{Tv}               # timing
+    endtime::Base.RefValue{Tv}
+    dual_lanczos_time::Base.RefValue{Tv}
+    dual_GenericArpack_time::Base.RefValue{Tv}
     checkdualbd_iters::Vector{Ti}
     lanczos_eigvals::Vector{Tv}
     GenericArpack_eigvals::Vector{Tv}
-    primal_time::Tv
-    DIMACS_time::Tv  
+    primal_time::Base.RefValue{Tv}
+    DIMACS_time::Base.RefValue{Tv}  
 end
-
 
 
 

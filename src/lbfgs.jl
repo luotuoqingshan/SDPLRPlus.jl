@@ -18,14 +18,14 @@ end
 """
 History of L-BFGS vectors
 """
-mutable struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
+struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
     # number of l-bfgs vectors
     m::Ti
     vecs::Vector{LBFGSVector{Tv}}
     # the index of the latest l-bfgs vector
     # we use a cyclic array to store l-bfgs vectors
     #latest::Base.RefValue{Ti}
-    latest::Ti
+    latest::Base.RefValue{Ti}
 end
 
 
@@ -39,21 +39,32 @@ function lbfgs_init(
     R::Matrix{Tv},
     numlbfgsvecs::Ti,
 ) where {Ti <: Integer, Tv <: AbstractFloat}
-    lbfgshis = LBFGSHistory{Ti, Tv}(
-        numlbfgsvecs,
-        LBFGSVector{Tv}[],
-        numlbfgsvecs)
-
+    lbfgsvecs = LBFGSVector{Tv}[]
     for _ = 1:numlbfgsvecs
-        push!(lbfgshis.vecs, 
+        push!(lbfgsvecs, 
             LBFGSVector(zeros(Tv, size(R)),
                         zeros(Tv, size(R)),
                         Ref(zero(Tv)), 
                         Ref(zero(Tv)),
                         ))
     end
-
+    lbfgshis = LBFGSHistory{Ti, Tv}(
+        numlbfgsvecs,
+        lbfgsvecs,
+        Ref(numlbfgsvecs))
     return lbfgshis
+end
+
+
+function lbfgs_clear!(
+    lbfgshis::LBFGSHistory{Ti, Tv}
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    for i = 1:lbfgshis.m
+        lbfgshis.vecs[i].s .= zero(Tv)
+        lbfgshis.vecs[i].y .= zero(Tv)
+        lbfgshis.vecs[i].ρ[] = zero(Tv)
+        lbfgshis.vecs[i].a[] = zero(Tv)
+    end
 end
 
 
@@ -82,7 +93,7 @@ function lbfgs_dir!(
     # we store l-bfgs vectors as a cyclic array
     copyto!(dir, grad)
     m = lbfgshis.m
-    lst = lbfgshis.latest
+    lst = lbfgshis.latest[]
     # pay attention here, dir, s and y are all matrices
     j = lst
     for _ = 1:m 
@@ -112,7 +123,7 @@ function lbfgs_dir!(
     end
 
     # partial update of lbfgs history 
-    j = mod(lbfgshis.latest, lbfgshis.m) + 1
+    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     copyto!(lbfgshis.vecs[j].y, grad)
     BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
 end
@@ -128,7 +139,7 @@ function lbfgs_update!(
     stepsize::Tv,
 )where {Ti<:Integer, Tv <: AbstractFloat}
     # update lbfgs history
-    j = mod(lbfgshis.latest, lbfgshis.m) + 1
+    j = mod(lbfgshis.latest[], lbfgshis.m) + 1
 
     BLAS.scal!(stepsize, dir)
     copy!(lbfgshis.vecs[j].s, dir)
@@ -136,6 +147,6 @@ function lbfgs_update!(
     axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
-    lbfgshis.latest = j
+    lbfgshis.latest[] = j
 end
 

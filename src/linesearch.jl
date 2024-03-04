@@ -2,31 +2,32 @@
 Exact line search for minimizing the augmented Lagrangian
 """
 function linesearch!(
-    SDP::SDPProblem{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
     D::Matrix{Tv};
     α_max = one(Tv),
     update = true,
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where{Ti <: Integer, Tv <: AbstractFloat}
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
-        C_RD = 𝒜!(SDP.A_RD, SDP.UVt, SDP, SDP.R, D; same=false)
+        C_RD = 𝒜!(aux.A_RD, aux.UVt, aux, var.R, D; same=false)
     end
     # remember we divide it by 2 in Aoper, now scale back
-    SDP.A_RD .*= 2.0
+    aux.A_RD .*= 2.0
     C_RD *= 2.0
     # evaluate 𝓐(DDᵀ)
     DD_dt = @elapsed begin
-        C_DD = 𝒜!(SDP.A_DD, SDP.UVt, SDP, D, D; same=true)
+        C_DD = 𝒜!(aux.A_DD, aux.UVt, aux, D, D; same=true)
     end
     @debug "RD_dt, DD_dt" RD_dt, DD_dt
 
     biquadratic = zeros(5)
     cubic = zeros(4)
 
-    # p0 = ⟨ C, RRᵀ⟩           = SDP.obj 
+    # p0 = ⟨ C, RRᵀ⟩           = var.obj[] 
     # p1 = ⟨ C, (RDᵀ + DRᵀ)⟩   = C_RD
     # p2 = ⟨ C, DDᵀ⟩           = C_DD
-    # (-q0) = 𝓐(RRᵀ) - b      = SDP.primal_vio
+    # (-q0) = 𝓐(RRᵀ) - b      = aux.primal_vio
     # q1 = 𝓐(RDᵀ + DRᵀ)       = 𝓐_RD
     # q2 = 𝓐(DDᵀ)             = 𝓐_DD
      
@@ -37,23 +38,22 @@ function linesearch!(
     # d = p1 - λᵀ * q1 + σ (-q0)ᵀ * q1
     # e = p0 - λᵀ * (-q0) + σ / 2 * ||-q0||²
 
-    m = SDP.m
-    biquadratic[1] = (SDP.obj - dot(SDP.λ, SDP.primal_vio) + 
-        0.5 * SDP.σ * dot(SDP.primal_vio, SDP.primal_vio))
+    biquadratic[1] = (var.obj[] - dot(var.λ, aux.primal_vio) + 
+        0.5 * var.σ[] * dot(aux.primal_vio, aux.primal_vio))
     
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
-    biquadratic[2] = (C_RD - dot(SDP.λ, SDP.A_RD) + 
-        SDP.σ * dot(SDP.primal_vio, SDP.A_RD))  
+    biquadratic[2] = (C_RD - dot(var.λ, aux.A_RD) + 
+        var.σ[] * dot(aux.primal_vio, aux.A_RD))  
     
-    biquadratic[3] = (C_DD - dot(SDP.λ, SDP.A_DD) + 
-        SDP.σ * dot(SDP.primal_vio, SDP.A_DD) + 
-        0.5 * SDP.σ * dot(SDP.A_RD, SDP.A_RD))
+    biquadratic[3] = (C_DD - dot(var.λ, aux.A_DD) + 
+        var.σ[] * dot(aux.primal_vio, aux.A_DD) + 
+        0.5 * var.σ[] * dot(aux.A_RD, aux.A_RD))
 
-    biquadratic[4] = SDP.σ * dot(SDP.A_DD, SDP.A_RD)
+    biquadratic[4] = var.σ[] * dot(aux.A_DD, aux.A_RD)
 
-    biquadratic[5] = 0.5 * SDP.σ * dot(SDP.A_DD, SDP.A_DD)
+    biquadratic[5] = 0.5 * var.σ[] * dot(aux.A_DD, aux.A_DD)
 
     cubic[1] = 1.0 * biquadratic[2]
 
@@ -102,8 +102,8 @@ function linesearch!(
         # notice that 
         # 𝓐((R + αD)(R + αD)ᵀ) =   
         # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-        @. SDP.primal_vio += α_star * (α_star * SDP.A_DD + SDP.A_RD)
-        SDP.obj += α_star * (α_star * C_DD + C_RD)
+        @. aux.primal_vio += α_star * (α_star * aux.A_DD + aux.A_RD)
+        var.obj[] += α_star * (α_star * C_DD + C_RD)
     end
 
     return α_star, f_star 

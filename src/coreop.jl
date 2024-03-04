@@ -1,17 +1,20 @@
 """
-    f!(SDP)
+    f!(data, aux, res)
 
 Update the objective value, primal violence and compute 
 the augmented Lagrangian value, 
     𝓛(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝓐(RRᵀ) - b) + σ/2 ||𝓐(RRᵀ) - b||^2
 """
-function f!(SDP::SDPProblem{Ti, Tv, TC}
-    ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+function f!(
+    data::SDPData{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     # apply the operator 𝓐 to RRᵀ and compute the objective value
-    SDP.obj = 𝒜!(SDP.primal_vio, SDP.UVt, SDP, SDP.R, SDP.R; same=true)
-    SDP.primal_vio .-= SDP.b 
-    return (SDP.obj - dot(SDP.λ, SDP.primal_vio)
-           + SDP.σ * dot(SDP.primal_vio, SDP.primal_vio) / 2) 
+    var.obj[] = 𝒜!(aux.primal_vio, aux.UVt, aux, var.R, var.R; same=true)
+    aux.primal_vio .-= data.b 
+    return (var.obj[] - dot(var.λ, aux.primal_vio)
+           + var.σ[] * dot(aux.primal_vio, aux.primal_vio) / 2) 
 end
 
 
@@ -26,56 +29,56 @@ obj  : whether to compute the objective function value
 function 𝒜!(
     𝓐_UV::Vector{Tv},
     UVt::Vector{Tv},
-    SDP::SDPProblem{Ti, Tv, TC},
+    aux::SolverAuxiliary{Ti, Tv},
     U::Matrix{Tv},
     V::Matrix{Tv};
     same::Bool=true,
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv <: AbstractFloat}
     fill!(𝓐_UV, zero(eltype(𝓐_UV)))
     obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
     # store results of 𝓐(UVᵀ + VUᵀ)/2
-    if SDP.n_sparse_matrices > 0
-        Aoper_formUVt!(UVt, SDP, U, V; same=same) 
-        for i = 1:SDP.n_sparse_matrices
-            res = zero(Tv) 
-            for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
-                res += SDP.agg_A_nzval_two[j] * UVt[SDP.agg_A_nzind[j]]
+    if aux.n_sparse_matrices > 0
+        Aoper_formUVt!(UVt, aux, U, V; same=same) 
+        for i = 1:aux.n_sparse_matrices
+            val = zero(Tv) 
+            for j = aux.agg_sparse_A_matptr[i]:(aux.agg_sparse_A_matptr[i+1]-1)
+                val += aux.agg_sparse_A_nzval_two[j] * UVt[aux.agg_sparse_A_nzind[j]]
             end
-            if SDP.sparse_As_global_inds[i] == 0
-                obj = res
+            if aux.sparse_As_global_inds[i] == 0
+                obj = val
             else
-                𝓐_UV[SDP.sparse_As_global_inds[i]] = res
+                𝓐_UV[aux.sparse_As_global_inds[i]] = val
             end
         end
     end
     # then deal with low-rank matrices
-    if SDP.n_symlowrank_matrices > 0
+    if aux.n_symlowrank_matrices > 0
         if same
-            for i = 1:SDP.n_symlowrank_matrices
-                mul!(SDP.BtUs[i], SDP.symlowrank_As[i].Bt, U)
-                @. SDP.BtUs[i] = SDP.BtUs[i]^2
-                lmul!(SDP.symlowrank_As[i].D, SDP.BtUs[i])
-                res = sum(SDP.BtUs[i])
+            for i = 1:aux.n_symlowrank_matrices
+                mul!(aux.BtUs[i], aux.symlowrank_As[i].Bt, U)
+                @. aux.BtUs[i] = aux.BtUs[i]^2
+                lmul!(aux.symlowrank_As[i].D, aux.BtUs[i])
+                val = sum(aux.BtUs[i])
 
-                if SDP.symlowrank_As_global_inds[i] == 0
-                    obj = res
+                if aux.symlowrank_As_global_inds[i] == 0
+                    obj = val
                 else
-                    𝓐_UV[SDP.symlowrank_As_global_inds[i]] = res 
+                    𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
                 end
             end
         else
-            for i = 1:SDP.n_symlowrank_matrices
-                mul!(SDP.BtUs[i], SDP.symlowrank_As[i].Bt, U)
-                mul!(SDP.BtVs[i], SDP.symlowrank_As[i].Bt, V)
-                @. SDP.BtUs[i] *= SDP.BtVs[i]
-                lmul!(SDP.symlowrank_As[i].D, SDP.BtUs[i])
-                res = sum(SDP.BtUs[i])
+            for i = 1:aux.n_symlowrank_matrices
+                mul!(aux.BtUs[i], aux.symlowrank_As[i].Bt, U)
+                mul!(aux.BtVs[i], aux.symlowrank_As[i].Bt, V)
+                @. aux.BtUs[i] *= aux.BtVs[i]
+                lmul!(aux.symlowrank_As[i].D, aux.BtUs[i])
+                val = sum(aux.BtUs[i])
 
-                if SDP.symlowrank_As_global_inds[i] == 0
-                    obj = res
+                if aux.symlowrank_As_global_inds[i] == 0
+                    obj = val
                 else
-                    𝓐_UV[SDP.symlowrank_As_global_inds[i]] = res 
+                    𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
                 end
             end
         end
@@ -86,25 +89,26 @@ end
 
 function Aoper_formUVt!(
     UVt::Vector{Tv},
-    SDP::SDPProblem{Ti, Tv, TC},
+    aux::SolverAuxiliary{Ti, Tv},
     U::Matrix{Tv},
     V::Matrix{Tv};
     same::Bool=true,
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv <: AbstractFloat}
     fill!(UVt, zero(eltype(UVt)))
     Ut = U' 
+    n = size(U, 1)
     if same
-        @inbounds @simd for col in 1:SDP.n
-            for nzind in SDP.XS_colptr[col]:(SDP.XS_colptr[col + 1] - 1)
-                row = SDP.XS_rowval[nzind]
+        @inbounds @simd for col in 1:n
+            for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
+                row = aux.triu_sparse_S.rowval[nzind]
                 UVt[nzind] = dot(@view(Ut[:, col]), @view(Ut[:, row]))
             end
         end
     else
         Vt = V'
-        @inbounds @simd for col in 1:SDP.n
-            for nzind in SDP.XS_colptr[col]:(SDP.XS_colptr[col + 1] - 1)
-                row = SDP.XS_rowval[nzind]
+        @inbounds @simd for col in 1:n
+            for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
+                row = aux.triu_sparse_S.rowval[nzind]
                 UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
                 UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
                 UVt[nzind] /= Tv(2)
@@ -114,63 +118,61 @@ function Aoper_formUVt!(
 end
 
 
-"""
-    AToper!(o, triu_o_nzval, v, SDP)
-"""
 function AToper_preprocess_sparse!(
-    o::SparseMatrixCSC{Tv, Ti},
-    triu_o_nzval::Vector{Tv},
+    sparse_S::SparseMatrixCSC{Tv, Ti},
+    triu_sparse_S_nzval::Vector{Tv},
     v::Vector{Tv},
-    SDP::SDPProblem{Ti, Tv, TC},
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    fill!(triu_o_nzval, zero(Tv))
-    for i = 1:SDP.n_sparse_matrices
-        ind = SDP.sparse_As_global_inds[i]
+    aux::SolverAuxiliary{Ti, Tv},
+) where{Ti <: Integer, Tv <: AbstractFloat}
+    fill!(triu_sparse_S_nzval, zero(Tv))
+    for i = 1:aux.n_sparse_matrices
+        ind = aux.sparse_As_global_inds[i]
         coeff = ind == 0 ? one(Tv) : v[ind]
-        for j = SDP.agg_A_ptr[i]:(SDP.agg_A_ptr[i + 1] - 1)
-            triu_o_nzval[SDP.agg_A_nzind[j]] += SDP.agg_A_nzval_one[j] * coeff
+        for j = aux.agg_sparse_A_matptr[i]:(aux.agg_sparse_A_matptr[i+1] - 1)
+            triu_sparse_S_nzval[aux.agg_sparse_A_nzind[j]] += aux.agg_sparse_A_nzval_one[j] * coeff
         end
     end
 
-    @inbounds @simd for i = 1:length(SDP.full_S_triu_S_inds)
-        o.nzval[i] = triu_o_nzval[SDP.full_S_triu_S_inds[i]]
+    @inbounds @simd for i = 1:length(aux.agg_sparse_A_mappedto_triu)
+        sparse_S.nzval[i] = triu_sparse_S_nzval[aux.agg_sparse_A_mappedto_triu[i]]
     end
 end
 
 
 function AToper_preprocess!(
-    SDP::SDPProblem{Ti, Tv, TC},
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+) where {Ti <: Integer, Tv <: AbstractFloat}
     # update auxiliary vector y based on primal violence and λ
     # and then update the sparse matrix
-    @. SDP.y = -(SDP.λ - SDP.σ * SDP.primal_vio)
-    if SDP.n_sparse_matrices > 0
-        AToper_preprocess_sparse!(SDP.full_S, SDP.S_nzval, SDP.y, SDP)
+    @. aux.y = -(var.λ - var.σ[] * aux.primal_vio)
+    if aux.n_sparse_matrices > 0
+        AToper_preprocess_sparse!(aux.sparse_S, aux.triu_sparse_S.nzval, aux.y, aux)
     end
 end
 
 
 function AToper!(
     y::Tx,
-    SDP::SDPProblem{Ti, Tv, TC},
-    Btvs::Vector{Tx},
+    aux::SolverAuxiliary{Ti, Tv},
+    Btxs::Vector{Tx},
     x::Tx, 
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}, Tx <: AbstractArray{Tv}}
+) where{Ti <: Integer, Tv <: AbstractFloat, Tx <: AbstractArray{Tv}}
     # zero out output vector
     fill!(y, zero(Tv))
 
     # deal with sparse and diagonal constraints first
-    if SDP.n_sparse_matrices > 0
-        y .= SDP.full_S * x
+    if aux.n_sparse_matrices > 0
+        y .= aux.sparse_S * x
     end
 
     # then deal with low-rank matrices 
-    if SDP.n_symlowrank_matrices > 0
-        for i = 1:SDP.n_symlowrank_matrices
-            mul!(Btvs[i], SDP.symlowrank_As[i].Bt, x)
-            lmul!(SDP.symlowrank_As[i].D, Btvs[i])
-            coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
-            mul!(y, SDP.symlowrank_As[i].B, Btvs[i], coeff, one(Tv))
+    if aux.n_symlowrank_matrices > 0
+        for i = 1:aux.n_symlowrank_matrices
+            mul!(Btxs[i], aux.symlowrank_As[i].Bt, x)
+            lmul!(aux.symlowrank_As[i].D, Btxs[i])
+            coeff = aux.symlowrank_As_global_inds[i] == 0 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
+            mul!(y, aux.symlowrank_As[i].B, Btxs[i], coeff, one(Tv))
         end 
     end
 end
@@ -180,11 +182,12 @@ end
 This function computes the gradient of the augmented Lagrangian
 """
 function g!(
-    SDP::SDPProblem{Ti, Tv, TC},
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    AToper_preprocess!(SDP)
-    AToper!(SDP.G, SDP, SDP.BtUs, SDP.R)
-    BLAS.scal!(Tv(2), SDP.G)
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+) where{Ti <: Integer, Tv <: AbstractFloat}
+    AToper_preprocess!(var, aux)
+    AToper!(var.G, aux, aux.BtUs, var.R)
+    BLAS.scal!(Tv(2), var.G)
     return 0
 end
 
@@ -197,19 +200,21 @@ val : Lagrangian value
 ρ_f_val : primal feasibility
 """
 function fg!(
-    SDP::SDPProblem{Ti, Tv, TC},
+    data::SDPData{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     f_dt = @elapsed begin
-        𝓛_val = f!(SDP)
+        𝓛_val = f!(data, var, aux)
     end
     g_dt = @elapsed begin
-        g!(SDP)
+        g!(var, aux)
     end
     @debug "f dt, g dt" f_dt, g_dt
-    grad_norm = norm(SDP.G, 2) / (1.0 + normC)
-    primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
+    grad_norm = norm(var.G, 2) / (1.0 + normC)
+    primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
 
@@ -218,26 +223,27 @@ end
 
 """
 function SDP_S_eigval(
-    SDP::SDPProblem{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
     nevs::Ti,
     preprocessed::Bool=false;
     kwargs...
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv <: AbstractFloat}
     if !preprocessed
-        AToper_preprocess!(SDP)
+        AToper_preprocess!(var, aux)
     end
-    n = size(SDP.full_S, 1)
+    n = size(aux.sparse_S, 1)
     GenericArpack_dt = @elapsed begin
         op = ArpackSimpleFunctionOp(
             (y, x) -> begin
                 fill!(y, zero(Tv))
-                if SDP.n_sparse_matrices > 0
-                    y .= SDP.full_S * x 
+                if aux.n_sparse_matrices > 0
+                    y .= aux.sparse_S * x 
                 end
-                if SDP.n_symlowrank_matrices > 0
-                    for i = 1:SDP.n_symlowrank_matrices
-                        coeff = SDP.symlowrank_As_global_inds[i] == 0 ? one(Tv) : SDP.y[SDP.symlowrank_As_global_inds[i]]
-                        mul!(y, SDP.symlowrank_As[i], x, coeff, one(Tv))
+                if aux.n_symlowrank_matrices > 0
+                    for i = 1:aux.n_symlowrank_matrices
+                        coeff = aux.symlowrank_As_global_inds[i] == 0 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
+                        mul!(y, aux.symlowrank_As[i], x, coeff, one(Tv))
                     end 
                 end
                 # shift the matrix by I
@@ -253,26 +259,27 @@ end
 
 
 function surrogate_duality_gap(
-    SDP::SDPProblem{Ti, Tv, TC}, 
+    data::SDPData{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
     trace_bound::Tv, 
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    AX = SDP.primal_vio + SDP.b
-    AToper_preprocess!(SDP)
-    n = size(SDP.full_S, 1)
+    AX = aux.primal_vio + data.b
+    AToper_preprocess!(var, aux)
     lanczos_dt = @elapsed begin
-        lanczos_eigenval = approx_mineigval_lanczos(SDP, iter)
+        lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
     end
     res = lanczos_eigenval
     if highprecision
-        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(SDP, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(var, aux, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
         res = GenericArpack_evs[1]
     end
 
-    duality_gap = (SDP.obj - dot(SDP.λ, SDP.b) + SDP.σ/2 * dot(SDP.primal_vio, AX + SDP.b)
-           - max(trace_bound, norm(SDP.R)^2) * min(res[1], 0.0))     
-    rel_duality_gap = duality_gap / max(one(Tv), abs(SDP.obj)) 
+    duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
+           - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
+    rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
 end
 
@@ -287,18 +294,19 @@ Function for computing six DIMACS_errors
     error6 = <X, Z> / (1 + |<C, X>| + |b^T y|)
 """
 function DIMACS_errors(
-    SDP::SDPProblem{Ti, Tv, TC},
+    data::SDPData{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    err1 = norm(SDP.primal_vio, 2) / (1.0 + norm(SDP.b, 2))       
+    err1 = norm(aux.primal_vio, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
-    AToper_preprocess!(SDP)
-    n = size(SDP.full_S, 1)
+    AToper_preprocess!(var, aux)
 
-    GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(SDP, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
-    err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(SDP.C, 2))
-    err5 = (SDP.obj - dot(SDP.λ, SDP.b)) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
-    err6 = dot(SDP.R, SDP.full_S, SDP.R) / (1.0 + abs(SDP.obj) + abs(dot(SDP.λ, SDP.b)))
+    GenericArpack_evs, _ = SDP_S_eigval(var, aux, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+    err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(data.C, 2))
+    err5 = (var.obj[] - dot(var.λ, data.b)) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
+    err6 = dot(var.R, aux.sparse_S, var.R) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
     return [err1, err2, err3, err4, err5, err6]
 end
 
@@ -310,10 +318,10 @@ Perform `q` Lanczos iterations with *a random start vector* to approximate
 the minimum eigenvalue of `A`.
 """
 function approx_mineigval_lanczos(
-    SDP::SDPProblem{Ti, Tv, TC},
+    aux::SolverAuxiliary{Ti, Tv},
     q::Ti,
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    n::Ti = size(SDP.full_S, 1)
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    n::Ti = size(aux.sparse_S, 1)
     q = min(q, n - 1)
 
     # allocate lanczos vectors
@@ -330,9 +338,15 @@ function approx_mineigval_lanczos(
     
     iter = 0
 
+    Btvs = Vector{Tv}[]
+    for _ = 1:aux.n_symlowrank_matrices
+        s = size(aux.symlowrank_As[1].B, 2)
+        push!(Btvs, zeros(Tv, s))
+    end
+
     for i = 1:q
         iter += 1
-        AToper!(Av, SDP, SDP.Btvs, v)
+        AToper!(Av, aux, Btvs, v)
         alpha[i] = v' * Av
 
         if i == 1

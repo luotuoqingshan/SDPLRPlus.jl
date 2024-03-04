@@ -23,7 +23,6 @@ function sdplr(
     # for low-rank matrix evaluations
     BtVs = Matrix{Tv}[]
     BtUs = Matrix{Tv}[]
-    Btvs = Vector{Tv}[]
     for (i, A) in enumerate(As)
         if isa(A, SparseMatrixCSC)
             push!(sparse_cons, A)
@@ -38,7 +37,6 @@ function sdplr(
             # s and r are usually really small compared with n
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
-            push!(Btvs, zeros(Tv, s))
         else
             @error "Currently only sparse/symmetric low-rank/diagonal constraints are supported."
         end
@@ -57,80 +55,85 @@ function sdplr(
         # s and r are usually really small compared with n
         push!(BtVs, zeros(Tv, (s, r)))
         push!(BtUs, zeros(Tv, (s, r)))
-        push!(Btvs, zeros(Tv, s))
     else
         @error "Currently only sparse/lowrank/diagonal objectives are supported."
     end
-
-    triu_sum_A, agg_A_ptr, agg_A_nzind, agg_A_nzval_one, agg_A_nzval_two,
-        sum_A, sum_A_to_triu_A_inds = preprocess_sparsecons(sparse_cons)
+    preprocess_dt = @elapsed begin
+    triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
+    agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+    agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
     
     n = size(C, 1)
     m = length(As)
-    nnz_sum_A = length(sum_A.rowval)
+    nnz_agg_sparse_A = length(agg_sparse_A.rowval)
 
     n = size(C, 1)
     # randomly initialize primal and dual variables
     R0 = 2 .* rand(n, r) .- 1
     λ0 = randn(m)
 
-    # TODO: deal with indicies
-    SDP = SDPProblem(n, m, # size of X, number of constraints
-                    C, # objective matrix
-                    b, # right-hand-side vector of constraints 
-                    triu_sum_A.colptr, 
-                    triu_sum_A.rowval, # (colptr, rowval) for aggregated triu(A)
-                    length(sparse_cons), 
-                    agg_A_ptr, 
-                    agg_A_nzind,
-                    agg_A_nzval_one, 
-                    agg_A_nzval_two, 
-                    sparse_As_global_inds,
-                    zeros(Tv, nnz_sum_A), 
-                    sum_A,
-                    sum_A_to_triu_A_inds, 
-                    zeros(Tv, nnz_sum_A), 
-                    zeros(Tv, m), zeros(Tv, m),
-                    length(symlowrank_cons),
-                    symlowrank_cons, 
-                    symlowrank_As_global_inds,
-                    BtVs,
-                    BtUs,
-                    Btvs,
-                    R0, 
-                    zeros(Tv, size(R0)), 
-                    λ0, 
-                    zeros(Tv, m), 
-                    zeros(Tv, m),
-                    r,         #rank
-                    2.0,      #sigma
-                    zero(Tv),         #obj, will be initialized later
-                    time(),           #starttime
-                    zero(Tv),         #endtime 
-                    zero(Tv),         #time spent on computing dual bound
-                    zero(Tv),
-                    Ti[],
-                    Tv[],
-                    Tv[],
-                    zero(Tv),         #time spend on primal computation
-                    zero(Tv),
-                    )
+    data = SDPData(n, m, C, As, b)
+    var = SolverVars(
+        R0,
+        zeros(Tv, size(R0)),
+        λ0,
+        Ref(r),
+        Ref(2.0),
+        Ref(zero(Tv)),
+    )
+    aux = SolverAuxiliary(
+        length(sparse_cons),
+        agg_sparse_A_matptr,
+        agg_sparse_A_nzind,
+        agg_sparse_A_nzval_one,
+        agg_sparse_A_nzval_two,
+        agg_sparse_A_mappedto_triu,
+        sparse_As_global_inds,
 
-    res = _sdplr(SDP, config)
-    return res 
+        triu_agg_sparse_A,
+        agg_sparse_A,
+        zeros(Tv, nnz_agg_sparse_A), 
+        zeros(Tv, m), zeros(Tv, m),
+
+        length(symlowrank_cons),
+        symlowrank_cons, 
+        symlowrank_As_global_inds,
+        BtVs,
+        BtUs,
+
+        zeros(Tv, m), 
+        zeros(Tv, m),
+    )
+    stats = SolverStats(
+        Ref(zero(Tv)),
+        Ref(zero(Tv)),
+        Ref(zero(Tv)),
+        Ref(zero(Tv)),
+        Ti[],
+        Tv[],
+        Tv[],
+        Ref(zero(Tv)),
+        Ref(zero(Tv)),
+    )
+    end
+    @debug "preprocess dt" preprocess_dt
+    ans = _sdplr(data, var, aux, stats, config)
+    return ans 
 end
 
 
 function _sdplr(
-    SDP::SDPProblem{Ti, Tv, TC},
+    data::SDPData{Ti, Tv, TC},
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+    stats::SolverStats{Ti, Tv},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
-    n = size(SDP.R, 1)
-    bestinfeas = 1.0e10
-    SDP.starttime = time()
-    lastprint = SDP.starttime # timestamp of last print
-    R0 = deepcopy(SDP.R) 
-    λ0 = deepcopy(SDP.λ)
+    n = data.n 
+    stats.starttime[] = time()
+    lastprint = stats.starttime[] # timestamp of last print
+    R0 = deepcopy(var.R) 
+    λ0 = deepcopy(var.λ)
 
     # TODO setup printing
     if config.printlevel > 0
@@ -139,27 +142,30 @@ function _sdplr(
 
 
     # set up algorithm parameters
-    normb = norm(SDP.b, 2)
-    normC = norm(SDP.C, 2)
+    normb = norm(data.b, 2)
+    normC = norm(data.C, 2)
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
-    lbfgshis = lbfgs_init(SDP.R, config.numlbfgsvecs)
+    lbfgshis = lbfgs_init(var.R, config.numlbfgsvecs)
 
-    cur_gtol = 1.0 / SDP.σ     # stationarity tolerance
-    cur_ptol = 1.0 / SDP.σ^0.1   # primal violation tolerance
+    cur_gtol = 1.0 / var.σ[]     # stationarity tolerance
+    cur_ptol = 1.0 / var.σ[]^0.1   # primal violation tolerance
 
-    𝓛_val, grad_norm , primal_vio_norm = fg!(SDP, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     iter = 0 # total number of iterations
-    origval = 𝓛_val 
 
-    dir = similar(SDP.R)
+    dir = similar(var.R)
     majoriter = 0
 
     last_rel_duality_bound = 1e20
     for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
+
+        #
+        #
+        #
         while grad_norm > cur_gtol 
             # update iteration counters
             localiter += 1     
@@ -167,31 +173,31 @@ function _sdplr(
             # find the lbfgs direction
             # the return direction has been negated
             lbfgs_dir_dt = @elapsed begin
-                lbfgs_dir!(dir, lbfgshis, SDP.G, negate=true)
+                lbfgs_dir!(dir, lbfgshis, var.G, negate=true)
             end
             @debug "lbfgs dir dt" lbfgs_dir_dt
 
-            descent = dot(dir, SDP.G)
+            descent = dot(dir, var.G)
             if isnan(descent) || descent >= 0 # not a descent direction
-                BLAS.scal!(-one(Tv), SDP.G)
-                copyto!(dir, SDP.G) # reverse back to gradient direction
+                BLAS.scal!(-one(Tv), var.G)
+                copyto!(dir, var.G) # reverse back to gradient direction
             end
 
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α ,𝓛_val = linesearch!(SDP, dir, α_max=1.0, update=true) 
+                α ,𝓛_val = linesearch!(var, aux, dir, α_max=1.0, update=true) 
             end
             @debug "line search time" linesearch_dt
 
             # update R and update gradient, stationarity, primal violence
-            axpy!(α, dir, SDP.R)
+            axpy!(α, dir, var.R)
             g_dt = @elapsed begin
-                g!(SDP)
+                g!(var, aux)
             end
             @debug "g time" g_dt
-            grad_norm = norm(SDP.G, 2) / (1.0 + normC)
-            primal_vio_norm = norm(SDP.primal_vio, 2) / (1.0 + normb)
+            grad_norm = norm(var.G, 2) / (1.0 + normC)
+            primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
@@ -200,7 +206,7 @@ function _sdplr(
             end
             # update lbfgs vectors
             if config.numlbfgsvecs > 0 
-                lbfgs_update!(dir, lbfgshis, SDP.G, α)
+                lbfgs_update!(dir, lbfgshis, var.G, α)
             end
 
             current_time = time()
@@ -208,11 +214,11 @@ function _sdplr(
                 lastprint = current_time
                 if config.printlevel > 0
                     printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                              SDP.obj, grad_norm, primal_vio_norm, best_dualbd)
+                              var.obj[], grad_norm, primal_vio_norm, best_dualbd)
                 end
             end   
 
-            if (current_time - SDP.starttime > config.maxtime
+            if (current_time - stats.starttime[] > config.maxtime
                 || iter > config.maxiter)
                 break
             end
@@ -220,10 +226,10 @@ function _sdplr(
 
 
         printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                  SDP.obj, grad_norm, primal_vio_norm, best_dualbd)
+                  var.obj[], grad_norm, primal_vio_norm, best_dualbd)
 
         current_time = time()
-        if current_time - SDP.starttime > config.maxtime
+        if current_time - stats.starttime[] > config.maxtime
             @warn "Time limit exceeded. Stop optimizing."
             break
         end
@@ -237,13 +243,13 @@ function _sdplr(
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
                 eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
-                SDP.dual_lanczos_time += lanczos_dt
-                SDP.dual_GenericArpack_time += GenericArpack_dt
-                push!(SDP.checkdualbd_iters, iter)
-                push!(SDP.lanczos_eigvals, lanczos_eigval)
-                push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
-                @info rel_duality_bound
+                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=true)  
+                stats.dual_lanczos_time[] += lanczos_dt
+                stats.dual_GenericArpack_time[] += GenericArpack_dt
+                push!(stats.checkdualbd_iters, iter)
+                push!(stats.lanczos_eigvals, lanczos_eigval)
+                push!(stats.GenericArpack_eigvals, GenericArpack_eigval)
+                @info "rel_duality_bound" rel_duality_bound
                 if rel_duality_bound <= config.objtol
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
                     break
@@ -254,73 +260,75 @@ function _sdplr(
                     else
                         last_rel_duality_bound = rel_duality_bound
                     end
-                    axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
-                    cur_ptol = cur_ptol / SDP.σ^0.9
-                    cur_gtol = cur_gtol / SDP.σ
+                    axpy!(-var.σ[], aux.primal_vio, var.λ)
+                    cur_ptol = cur_ptol / var.σ[]^0.9
+                    cur_gtol = cur_gtol / var.σ[]
                 end
             else
-                axpy!(-SDP.σ, SDP.primal_vio, SDP.λ)
-                cur_ptol = cur_ptol / SDP.σ^0.9
-                cur_gtol = cur_gtol / SDP.σ
+                axpy!(-var.σ[], aux.primal_vio, var.λ)
+                cur_ptol = cur_ptol / var.σ[]^0.9
+                cur_gtol = cur_gtol / var.σ[]
             end
         else 
-            SDP.σ *= config.σfac 
-            cur_ptol = 1 / SDP.σ^0.1
-            cur_gtol = 1 / SDP.σ 
+            var.σ[] *= config.σfac 
+            cur_ptol = 1 / var.σ[]^0.1
+            cur_gtol = 1 / var.σ[] 
         end
 
         cur_ptol = max(cur_ptol, config.ptol)
-        @info cur_ptol, cur_gtol
+        @info "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
 
-        𝓛_val, grad_norm, primal_vio_norm = fg!(SDP, normC, normb)
+        𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
 
         # clear lbfgs vectors for next major iteration
-        for i = 1:lbfgshis.m
-            lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(zero(Tv)), Ref(zero(Tv)))
-        end
+        #for i = 1:lbfgshis.m
+        #    lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(zero(Tv)), Ref(zero(Tv)))
+        #end
+        lbfgs_clear!(lbfgshis)
+
 
         if majoriter == config.maxmajoriter
             @warn "Major iteration limit exceeded. Stop optimizing."
         end
     end
     
-    𝓛_val, grad_norm, primal_vio_norm = fg!(SDP, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     println("Done")
     eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(SDP, Tv(n), eig_iter;highprecision=true)  
-    SDP.dual_lanczos_time += lanczos_dt
-    SDP.dual_GenericArpack_time += GenericArpack_dt
-    push!(SDP.checkdualbd_iters, iter)
-    push!(SDP.lanczos_eigvals, lanczos_eigval)
-    push!(SDP.GenericArpack_eigvals, GenericArpack_eigval)
+    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=true)  
+    stats.dual_lanczos_time[] += lanczos_dt
+    stats.dual_GenericArpack_time[] += GenericArpack_dt
+    push!(stats.checkdualbd_iters, iter)
+    push!(stats.lanczos_eigvals, lanczos_eigval)
+    push!(stats.GenericArpack_eigvals, GenericArpack_eigval)
 
-    SDP.endtime = time()
-    totaltime = SDP.endtime - SDP.starttime
-    SDP.primal_time = totaltime - SDP.dual_lanczos_time - SDP.dual_GenericArpack_time
-    SDP.DIMACS_time = @elapsed begin
-        DIMACS_errs = DIMACS_errors(SDP)
+    stats.endtime[] = time()
+    totaltime = stats.endtime[] - stats.starttime[]
+    stats.primal_time[] = totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
+    stats.DIMACS_time[] = @elapsed begin
+        DIMACS_errs = DIMACS_errors(data, var, aux)
     end
     #@show normb, normC
     @show rel_duality_bound
     @show DIMACS_errs
     return Dict([
-        "R" => SDP.R,
-        "lambda" => SDP.λ,
+        "R" => var.R,
+        "lambda" => var.λ,
         "R0" => R0,
         "lambda0" => λ0,
-        "sigma" => SDP.σ,
+        "sigma" => var.σ[],
         "grad_norm" => grad_norm,
         "primal_vio" => primal_vio_norm,
-        "obj" => SDP.obj,
+        "obj" => var.obj[],
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
         "totaltime" => totaltime,
-        "dual_lanczos_time" => SDP.dual_lanczos_time,
-        "dual_GenericArpack_time" => SDP.dual_GenericArpack_time,
-        "checkdualbd_iters" => SDP.checkdualbd_iters,
-        "lanczos_eigvals" => SDP.lanczos_eigvals,
-        "GenericArpack_eigvals" => SDP.GenericArpack_eigvals,
-        "primaltime" => SDP.primal_time,
+        "dual_lanczos_time" => stats.dual_lanczos_time[],
+        "dual_GenericArpack_time" => stats.dual_GenericArpack_time[],
+        "checkdualbd_iters" => stats.checkdualbd_iters,
+        "lanczos_eigvals" => stats.lanczos_eigvals,
+        "GenericArpack_eigvals" => stats.GenericArpack_eigvals,
+        "primaltime" => stats.primal_time[],
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,

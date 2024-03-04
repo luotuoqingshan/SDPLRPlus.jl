@@ -83,7 +83,7 @@ function preprocess_sparsecons(
     # combine all entries of As
     agg_sparse_A = sparse(all_I, all_J, all_V, n, n)
 
-    agg_sparse_A_matrixptr = zeros(Ti, nA + 1)
+    agg_sparse_A_matptr = zeros(Ti, nA + 1)
     agg_sparse_A_nzind = zeros(Ti, total_nnz)
     agg_sparse_A_nzval_one = zeros(Tv, total_nnz)
     agg_sparse_A_nzval_two = zeros(Tv, total_nnz)
@@ -92,7 +92,7 @@ function preprocess_sparsecons(
     for i in eachindex(As)
         # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
         # correspond to the i-th sparse constraint/objective matrix
-        agg_sparse_A_matrixptr[i] = cumul_nnz + 1
+        agg_sparse_A_matptr[i] = cumul_nnz + 1
         triu_I = triu_I_list[i]
         triu_J = triu_J_list[i]
         triu_V = triu_V_list[i]
@@ -122,7 +122,7 @@ function preprocess_sparsecons(
         end
         cumul_nnz += length(triu_I)
     end
-    agg_sparse_A_matrixptr[end] = total_nnz + 1
+    agg_sparse_A_matptr[end] = total_nnz + 1
     agg_sparse_A_mappedto_triu = zeros(Ti, length(agg_sparse_A.rowval))
     for col = 1:n
         for nzi = agg_sparse_A.colptr[col]:agg_sparse_A.colptr[col+1]-1
@@ -145,7 +145,7 @@ function preprocess_sparsecons(
             end
         end
     end
-    return (triu_agg_sparse_A, agg_sparse_A_matrixptr, agg_sparse_A_nzind, 
+    return (triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
            agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
            agg_sparse_A_mappedto_triu)
 end
