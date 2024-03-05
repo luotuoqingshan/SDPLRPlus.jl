@@ -368,3 +368,43 @@ function approx_mineigval_lanczos(
     min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=1000000, tol=1e-6)
     return real.(min_eigval)[1]
 end
+
+
+function rank_update!(
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+    noise_scale=1e-2,
+) where {Ti <: Integer, Tv <: AbstractFloat}
+    n = size(var.R, 1)
+    r = var.r[]
+    newr = r * 2
+    newR = zeros(Tv, n, newr)
+    newR[:, 1:r] .= var.R
+    newR[:, r+1:newr] .= var.R
+    newR ./= sqrt(2)
+    noise = randn(n, newr)  
+    scale = noise_scale * norm(newR) / norm(noise)
+    @. newR += scale * noise
+
+    # clear pre-allocated structures for the old rank
+    for _ = 1:aux.n_symlowrank_matrices
+        pop!(aux.BtUs)
+        pop!(aux.BtVs)
+    end
+
+    # allocate new structures for the new rank
+    for _ = 1:aux.n_symlowrank_matrices
+        s = size(aux.symlowrank_As[1].B, 2)
+        push!(aux.BtUs, zeros(Tv, (s, newr)))
+        push!(aux.BtVs, zeros(Tv, (s, newr)))
+    end
+
+    return SolverVars(
+        newR, 
+        zeros(Tv, size(newR)), 
+        var.λ, 
+        Ref(Ti(newr)),
+        Ref(Tv(2.0)),
+        Ref(Tv(0.0))
+    )
+end

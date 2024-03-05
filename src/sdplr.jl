@@ -239,6 +239,7 @@ function _sdplr(
             break
         end
 
+        rank_double = false
 
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
@@ -255,14 +256,13 @@ function _sdplr(
                     break
                 else
                     if last_rel_duality_bound - rel_duality_bound < config.objtol
-                        @error "Duality gap is not decreasing. Stop optimizing."
-                        break
+                        rank_double = true
                     else
                         last_rel_duality_bound = rel_duality_bound
+                        axpy!(-var.σ[], aux.primal_vio, var.λ)
+                        cur_ptol = cur_ptol / var.σ[]^0.9
+                        cur_gtol = cur_gtol / var.σ[]
                     end
-                    axpy!(-var.σ[], aux.primal_vio, var.λ)
-                    cur_ptol = cur_ptol / var.σ[]^0.9
-                    cur_gtol = cur_gtol / var.σ[]
                 end
             else
                 axpy!(-var.σ[], aux.primal_vio, var.λ)
@@ -278,14 +278,20 @@ function _sdplr(
         cur_ptol = max(cur_ptol, config.ptol)
         @info "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
 
+        # when objective gap doesn't improve, we double the rank
+        if rank_double 
+            var = rank_update!(var, aux)
+            cur_ptol = 1 / var.σ[]^0.1
+            cur_gtol = 1 / var.σ[]
+            lbfgshis = lbfgs_init(var.R, config.numlbfgsvecs)
+            dir = similar(var.R)
+            last_rel_duality_bound = 1e20
+            @info "rank doubled."
+        else
+            lbfgs_clear!(lbfgshis)
+        end
+
         𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
-
-        # clear lbfgs vectors for next major iteration
-        #for i = 1:lbfgshis.m
-        #    lbfgshis.vecs[i] = LBFGSVector(zeros(size(SDP.R)), zeros(size(SDP.R)), Ref(zero(Tv)), Ref(zero(Tv)))
-        #end
-        lbfgs_clear!(lbfgshis)
-
 
         if majoriter == config.maxmajoriter
             @warn "Major iteration limit exceeded. Stop optimizing."
