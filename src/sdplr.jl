@@ -13,111 +13,113 @@ function sdplr(
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
 ) where{Ti <: Integer, Tv <: AbstractFloat}
-    sparse_cons = SparseMatrixCSC{Tv, Ti}[]
-    symlowrank_cons = SymLowRankMatrix{Tv}[]
-    # treat diagonal matrices as sparse matrices
-    sparse_As_global_inds = Ti[]
-    symlowrank_As_global_inds = Ti[]
+    preprocess_dt = @elapsed begin
+        sparse_cons = SparseMatrixCSC{Tv, Ti}[]
+        symlowrank_cons = SymLowRankMatrix{Tv}[]
+        # treat diagonal matrices as sparse matrices
+        sparse_As_global_inds = Ti[]
+        symlowrank_As_global_inds = Ti[]
     
-    # pre-allocate intermediate variables
-    # for low-rank matrix evaluations
-    BtVs = Matrix{Tv}[]
-    BtUs = Matrix{Tv}[]
-    for (i, A) in enumerate(As)
-        if isa(A, SparseMatrixCSC)
-            push!(sparse_cons, A)
-            push!(sparse_As_global_inds, i)
-        elseif isa(A, Diagonal)
-            push!(sparse_cons, sparse(A))
-            push!(sparse_As_global_inds, i)
-        elseif isa(A, SymLowRankMatrix)
-            push!(symlowrank_cons, A)
-            push!(symlowrank_As_global_inds, i)
-            s = size(A.B, 2)
+        # pre-allocate intermediate variables
+        # for low-rank matrix evaluations
+        BtVs = Matrix{Tv}[]
+        BtUs = Matrix{Tv}[]
+        for (i, A) in enumerate(As)
+            if isa(A, SparseMatrixCSC)
+                push!(sparse_cons, A)
+                push!(sparse_As_global_inds, i)
+            elseif isa(A, Diagonal)
+                push!(sparse_cons, sparse(A))
+                push!(sparse_As_global_inds, i)
+            elseif isa(A, SymLowRankMatrix)
+                push!(symlowrank_cons, A)
+                push!(symlowrank_As_global_inds, i)
+                s = size(A.B, 2)
+                # s and r are usually really small compared with n
+                push!(BtVs, zeros(Tv, (s, r)))
+                push!(BtUs, zeros(Tv, (s, r)))
+            else
+                @error "Currently only sparse/symmetric low-rank/diagonal constraints are supported."
+            end
+        end
+
+        if isa(C, SparseMatrixCSC) 
+            push!(sparse_cons, C)
+            push!(sparse_As_global_inds, 0)
+        elseif isa(C, Diagonal)
+            push!(sparse_cons, sparse(C))
+            push!(sparse_As_global_inds, 0)
+        elseif isa(C, SymLowRankMatrix)
+            push!(symlowrank_cons, C)
+            push!(symlowrank_As_global_inds, 0)
+            s = size(C.B, 2)
             # s and r are usually really small compared with n
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
         else
-            @error "Currently only sparse/symmetric low-rank/diagonal constraints are supported."
+            @error "Currently only sparse/lowrank/diagonal objectives are supported."
         end
-    end
-
-    if isa(C, SparseMatrixCSC) 
-        push!(sparse_cons, C)
-        push!(sparse_As_global_inds, 0)
-    elseif isa(C, Diagonal)
-        push!(sparse_cons, sparse(C))
-        push!(sparse_As_global_inds, 0)
-    elseif isa(C, SymLowRankMatrix)
-        push!(symlowrank_cons, C)
-        push!(symlowrank_As_global_inds, 0)
-        s = size(C.B, 2)
-        # s and r are usually really small compared with n
-        push!(BtVs, zeros(Tv, (s, r)))
-        push!(BtUs, zeros(Tv, (s, r)))
-    else
-        @error "Currently only sparse/lowrank/diagonal objectives are supported."
-    end
-    preprocess_dt = @elapsed begin
-    triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
-    agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
-    agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+        triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
+        agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+        agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
     
-    n = size(C, 1)
-    m = length(As)
-    nnz_agg_sparse_A = length(agg_sparse_A.rowval)
+        n = size(C, 1)
+        m = length(As)
+        nnz_agg_sparse_A = length(agg_sparse_A.rowval)
 
-    n = size(C, 1)
-    # randomly initialize primal and dual variables
-    R0 = 2 .* rand(n, r) .- 1
-    λ0 = randn(m)
+        n = size(C, 1)
+        # randomly initialize primal and dual variables
+        R0 = 2 .* rand(n, r) .- 1
+        λ0 = randn(m)
 
-    data = SDPData(n, m, C, As, b)
-    var = SolverVars(
-        R0,
-        zeros(Tv, size(R0)),
-        λ0,
-        Ref(r),
-        Ref(2.0),
-        Ref(zero(Tv)),
-    )
-    aux = SolverAuxiliary(
-        length(sparse_cons),
-        agg_sparse_A_matptr,
-        agg_sparse_A_nzind,
-        agg_sparse_A_nzval_one,
-        agg_sparse_A_nzval_two,
-        agg_sparse_A_mappedto_triu,
-        sparse_As_global_inds,
+        data = SDPData(n, m, C, As, b)
+        var = SolverVars(
+            R0,
+            zeros(Tv, size(R0)),
+            λ0,
+            Ref(r),
+            Ref(2.0),
+            Ref(zero(Tv)),
+        )
+        aux = SolverAuxiliary(
+            length(sparse_cons),
+            agg_sparse_A_matptr,
+            agg_sparse_A_nzind,
+            agg_sparse_A_nzval_one,
+            agg_sparse_A_nzval_two,
+            agg_sparse_A_mappedto_triu,
+            sparse_As_global_inds,
 
-        triu_agg_sparse_A,
-        agg_sparse_A,
-        zeros(Tv, nnz_agg_sparse_A), 
-        zeros(Tv, m), zeros(Tv, m),
+            triu_agg_sparse_A,
+            agg_sparse_A,
+            zeros(Tv, nnz_agg_sparse_A), 
+            zeros(Tv, m), zeros(Tv, m),
 
-        length(symlowrank_cons),
-        symlowrank_cons, 
-        symlowrank_As_global_inds,
-        BtVs,
-        BtUs,
+            length(symlowrank_cons),
+            symlowrank_cons, 
+            symlowrank_As_global_inds,
+            BtVs,
+            BtUs,
 
-        zeros(Tv, m), 
-        zeros(Tv, m),
-    )
-    stats = SolverStats(
-        Ref(zero(Tv)),
-        Ref(zero(Tv)),
-        Ref(zero(Tv)),
-        Ref(zero(Tv)),
-        Ti[],
-        Tv[],
-        Tv[],
-        Ref(zero(Tv)),
-        Ref(zero(Tv)),
-    )
+            zeros(Tv, m), 
+            zeros(Tv, m),
+        )
+        stats = SolverStats(
+            Ref(zero(Tv)),
+            Ref(zero(Tv)),
+            Ref(zero(Tv)),
+            Ref(zero(Tv)),
+            Ti[],
+            Tv[],
+            Tv[],
+            Ref(zero(Tv)),
+            Ref(zero(Tv)),
+        )
     end
     @debug "preprocess dt" preprocess_dt
     ans = _sdplr(data, var, aux, stats, config)
+    ans["preprocess_time"] = preprocess_dt
+    ans["totaltime"] += preprocess_dt
     return ans 
 end
 
@@ -158,7 +160,9 @@ function _sdplr(
     dir = similar(var.R)
     majoriter = 0
 
-    last_rel_duality_bound = 1e20
+
+    rankupd_tol_cnt = config.rankupd_tol
+    min_rel_duality_gap = 1e20
     for _ = 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
@@ -225,10 +229,11 @@ function _sdplr(
         end
 
 
+        current_time = time()
         printintermediate(majoriter, localiter, iter, 𝓛_val, 
                   var.obj[], grad_norm, primal_vio_norm, best_dualbd)
+        lastprint = current_time
 
-        current_time = time()
         if current_time - stats.starttime[] > config.maxtime
             @warn "Time limit exceeded. Stop optimizing."
             break
@@ -243,8 +248,9 @@ function _sdplr(
 
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
+                @info "primal vio is small enough, checking duality bound."
                 eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=true)  
+                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=false)  
                 stats.dual_lanczos_time[] += lanczos_dt
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
                 push!(stats.checkdualbd_iters, iter)
@@ -255,14 +261,19 @@ function _sdplr(
                     @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
                     break
                 else
-                    if last_rel_duality_bound - rel_duality_bound < config.objtol
-                        rank_double = true
+                    if min_rel_duality_gap - rel_duality_bound < config.objtol
+                        rankupd_tol_cnt -= 1
                     else
-                        last_rel_duality_bound = rel_duality_bound
-                        axpy!(-var.σ[], aux.primal_vio, var.λ)
-                        cur_ptol = cur_ptol / var.σ[]^0.9
-                        cur_gtol = cur_gtol / var.σ[]
+                        rankupd_tol_cnt = config.rankupd_tol
                     end
+                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
+                    if rankupd_tol_cnt == 0
+                        rank_double = true
+                    end
+                    #last_rel_duality_bound = rel_duality_bound
+                    axpy!(-var.σ[], aux.primal_vio, var.λ)
+                    cur_ptol = cur_ptol / var.σ[]^0.9
+                    cur_gtol = cur_gtol / var.σ[]
                 end
             else
                 axpy!(-var.σ[], aux.primal_vio, var.λ)
@@ -275,8 +286,8 @@ function _sdplr(
             cur_gtol = 1 / var.σ[] 
         end
 
-        cur_ptol = max(cur_ptol, config.ptol)
-        @debug "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
+        #cur_ptol = max(cur_ptol, config.ptol)
+        #@info "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
@@ -285,8 +296,9 @@ function _sdplr(
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.R, config.numlbfgsvecs)
             dir = similar(var.R)
-            last_rel_duality_bound = 1e20
-            @info "rank doubled."
+            min_rel_duality_gap = 1e20
+            rankupd_tol_cnt = config.rankupd_tol
+            @info "rank doubled." "newrank is $(size(var.R, 2))."
         else
             lbfgs_clear!(lbfgshis)
         end

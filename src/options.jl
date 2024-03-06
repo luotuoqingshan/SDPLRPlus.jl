@@ -10,4 +10,5 @@
     maxmajoriter::Ti = 10^5
     maxiter::Ti = 10^7
     fprec::Tv = 1e3
+    rankupd_tol::Ti = 3
 end

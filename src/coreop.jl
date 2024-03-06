@@ -273,8 +273,12 @@ function surrogate_duality_gap(
     end
     res = lanczos_eigenval
     if highprecision
-        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(var, aux, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+        n = size(aux.sparse_S, 1)
+        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(var, aux, 1, true; which=:SA, ncv=min(100, n), tol=1e-6, maxiter=1000000)
         res = GenericArpack_evs[1]
+    else
+        GenericArpack_dt = 0.0
+        GenericArpack_evs = [0.0]
     end
 
     duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
@@ -283,6 +287,7 @@ function surrogate_duality_gap(
     val2 = - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0)     
     val3 = sum(var.λ .* aux.primal_vio)
     val4 = - var.σ[] / 2 * sum(aux.primal_vio .* aux.primal_vio)
+    @show norm(var.λ)
     @show val1, val2, val3, val4
     @show duality_gap, val1 + val2 + val3 + val4
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
@@ -304,12 +309,13 @@ function DIMACS_errors(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+    n = size(aux.sparse_S, 1)
     err1 = norm(aux.primal_vio, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
     AToper_preprocess!(var, aux)
 
-    GenericArpack_evs, _ = SDP_S_eigval(var, aux, 1, true; which=:SA, tol=1e-6, maxiter=1000000)
+    GenericArpack_evs, _ = SDP_S_eigval(var, aux, 1, true; which=:SA, ncv=min(100, n), maxiter=1000000)
     err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(data.C, 2))
     err5 = (var.obj[] - dot(var.λ, data.b)) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
     err6 = dot(var.R, aux.sparse_S, var.R) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
@@ -370,9 +376,12 @@ function approx_mineigval_lanczos(
         copyto!(v_pre, v)
         copyto!(v, Av)
     end
+    # shift the matrix by I
+    alpha .+= 1
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
-    min_eigval, _ = symeigs(B, 1; which=:SA, maxiter=1000000, tol=1e-6)
-    return real.(min_eigval)[1]
+    @info "Symmetric tridiagonal matrix formed."
+    min_eigval, _ = symeigs(B, 1; which=:SA, ncv=min(100, n), maxiter=1000000, tol=1e-6)
+    return real.(min_eigval)[1] - 1 # cancel the shift
 end
 
 
@@ -383,7 +392,8 @@ function rank_update!(
     n = size(var.R, 1)
     m = size(var.λ, 1)
     r = var.r[]
-    newr = r * 2
+    max_r = barvinok_pataki(size(var.R, 1), aux.n_symlowrank_matrices + aux.n_sparse_matrices-1)
+    newr = min(max_r, r * 2)
     newR = 2 * rand(Tv, n, newr) .- 1
     newλ = randn(m)
 

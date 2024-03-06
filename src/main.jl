@@ -32,6 +32,7 @@ function batch_eval_minimum_bisection(i, filename::String)
     @info "Running minimum bisection on G$i."
     A = read_graph("G$i")
     C, As, bs = minimum_bisection(A)
+    r = barvinok_pataki(size(A, 1), length(As))
     res = sdplr(C, As, bs, 5)
 
     output_folder = homedir()*"/SDPLR-jl/output/MinimumBisection/"
@@ -74,8 +75,10 @@ end
 #@timed res = sdplr(C, As, bs, 5)
 
 batch_eval_minimum_bisection(1, "Mar-5-2024")
+batch_eval_minimum_bisection(50, "Mar-5-2024")
 
-for i = 1:67
-    batch_eval_minimum_bisection(i, "Mar-5-2024") 
-end
+
+#for i = 51:67
+#    batch_eval_minimum_bisection(i, "Mar-5-2024") 
+#end
 
