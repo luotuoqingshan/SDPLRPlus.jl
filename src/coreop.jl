@@ -279,6 +279,12 @@ function surrogate_duality_gap(
 
     duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
            - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
+    val1 = sum(var.G .* var.R)
+    val2 = - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0)     
+    val3 = sum(var.λ .* aux.primal_vio)
+    val4 = - var.σ[] / 2 * sum(aux.primal_vio .* aux.primal_vio)
+    @show val1, val2, val3, val4
+    @show duality_gap, val1 + val2 + val3 + val4
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
 end
@@ -373,18 +379,13 @@ end
 function rank_update!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-    noise_scale=1e-2,
 ) where {Ti <: Integer, Tv <: AbstractFloat}
     n = size(var.R, 1)
+    m = size(var.λ, 1)
     r = var.r[]
     newr = r * 2
-    newR = zeros(Tv, n, newr)
-    newR[:, 1:r] .= var.R
-    newR[:, r+1:newr] .= var.R
-    newR ./= sqrt(2)
-    noise = randn(n, newr)  
-    scale = noise_scale * norm(newR) / norm(noise)
-    @. newR += scale * noise
+    newR = 2 * rand(Tv, n, newr) .- 1
+    newλ = randn(m)
 
     # clear pre-allocated structures for the old rank
     for _ = 1:aux.n_symlowrank_matrices
@@ -402,7 +403,7 @@ function rank_update!(
     return SolverVars(
         newR, 
         zeros(Tv, size(newR)), 
-        var.λ, 
+        newλ, 
         Ref(Ti(newr)),
         Ref(Tv(2.0)),
         Ref(Tv(0.0))

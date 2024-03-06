@@ -1,8 +1,8 @@
 @with_kw struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
     gtol::Tv = 1e-3
-    ptol::Tv = 1e-3
+    ptol::Tv = 1e-2
     objtol::Tv = 1e-2
-    σfac::Tv = 10.0 
+    σfac::Tv = 2.0 
     maxtime::Tv = 3600.0
     printlevel::Ti = 1
     printfreq::Tv = 60.0

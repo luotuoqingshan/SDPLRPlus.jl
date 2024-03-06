@@ -276,7 +276,7 @@ function _sdplr(
         end
 
         cur_ptol = max(cur_ptol, config.ptol)
-        @info "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
+        @debug "cur_ptol, cur_gtol:" cur_ptol, cur_gtol
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
