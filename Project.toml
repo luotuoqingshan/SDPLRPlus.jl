@@ -1,4 +1,5 @@
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
@@ -21,4 +22,5 @@ Polynomials = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
 ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SCS = "c946c3f1-0d1f-5ce8-9dea-7daa1f7e2d13"
+SNAPDatasets = "fc66bc1b-447b-53fc-8f09-bc9cfb0b0c10"
 Scanf = "6ef1bc8b-493b-44e1-8d40-549aa65c4b41"

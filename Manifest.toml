@@ -2,7 +2,7 @@
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "9b56494759f4ad00e21f8286ce5ffb146a0b98dd"
+project_hash = "4ac0a113d36e8899b084a53ce958866fab3b87e6"
 
 [[deps.AMD]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse_jll"]
@@ -41,6 +41,12 @@ weakdeps = ["StaticArrays"]
 
     [deps.Adapt.extensions]
     AdaptStaticArraysExt = "StaticArrays"
+
+[[deps.ArgParse]]
+deps = ["Logging", "TextWrap"]
+git-tree-sha1 = "d4eccacaa3a632e8717556479d45502af44b4c17"
+uuid = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+version = "1.1.5"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -1173,6 +1179,12 @@ version = "3.2.4+0"
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
 
+[[deps.SNAPDatasets]]
+deps = ["Graphs"]
+git-tree-sha1 = "6c163282a557ac00ce86a37f605b7b8b8fa3124d"
+uuid = "fc66bc1b-447b-53fc-8f09-bc9cfb0b0c10"
+version = "0.2.0"
+
 [[deps.Scanf]]
 deps = ["BufferedStreams"]
 git-tree-sha1 = "cd8f9da92f751a1fc421120c66971d008d695cdb"
@@ -1326,6 +1338,11 @@ version = "0.1.1"
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[deps.TextWrap]]
+git-tree-sha1 = "9250ef9b01b66667380cf3275b3f7488d0e25faf"
+uuid = "b718987f-49a8-5099-9789-dcd902bef87d"
+version = "1.0.1"
 
 [[deps.TranscodingStreams]]
 git-tree-sha1 = "54194d92959d8ebaa8e26227dbe3cdefcdcd594f"
