@@ -1,5 +1,4 @@
-@with_kw struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
-    gtol::Tv = 1e-3
+@with_kw mutable struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
     ptol::Tv = 1e-2
     objtol::Tv = 1e-2
     σfac::Tv = 2.0 
@@ -10,5 +9,6 @@
     maxmajoriter::Ti = 10^5
     maxiter::Ti = 10^7
     fprec::Tv = 1e3
-    rankupd_tol::Ti = 3
+    rankupd_tol::Ti = 2
+    prior_trace_bound::Tv = 1e18
 end

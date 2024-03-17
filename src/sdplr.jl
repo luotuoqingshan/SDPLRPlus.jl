@@ -12,7 +12,17 @@ function sdplr(
     b::Vector{Tv},
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
+    kwargs...
 ) where{Ti <: Integer, Tv <: AbstractFloat}
+
+    for (key, value) in kwargs
+        if hasfield(BurerMonteiroConfig, Symbol(key))
+            setfield!(config, Symbol(key), value)
+        else
+            @warn "Ignoring unrecognized keyword argument $key"
+        end
+    end
+
     preprocess_dt = @elapsed begin
         sparse_cons = SparseMatrixCSC{Tv, Ti}[]
         symlowrank_cons = SymLowRankMatrix{Tv}[]
@@ -39,7 +49,9 @@ function sdplr(
                 push!(BtVs, zeros(Tv, (s, r)))
                 push!(BtUs, zeros(Tv, (s, r)))
             else
-                @error "Currently only sparse/symmetric low-rank/diagonal constraints are supported."
+                @error "Currently only sparse\
+                /symmetric low-rank\
+                /diagonal constraints are supported."
             end
         end
 
@@ -57,7 +69,8 @@ function sdplr(
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
         else
-            @error "Currently only sparse/lowrank/diagonal objectives are supported."
+            @error "Currently only sparse\
+            /lowrank/diagonal objectives are supported."
         end
         triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
         agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
@@ -205,7 +218,8 @@ function _sdplr(
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
-            if (lastval - 𝓛_val) / max(1.0, abs(𝓛_val), lastval) < config.fprec * eps()
+            rel_delta = (lastval - 𝓛_val) / max(1.0, abs(𝓛_val), abs(lastval))
+            if rel_delta < config.fprec * eps()
                 break
             end
             # update lbfgs vectors
@@ -218,7 +232,8 @@ function _sdplr(
                 lastprint = current_time
                 if config.printlevel > 0
                     printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                              var.obj[], grad_norm, primal_vio_norm, best_dualbd)
+                              var.obj[], grad_norm, primal_vio_norm, 
+                              best_dualbd)
                 end
             end   
 
@@ -250,7 +265,9 @@ function _sdplr(
             if primal_vio_norm <= config.ptol 
                 @info "primal vio is small enough, checking duality bound."
                 eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=false)  
+                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = 
+                    surrogate_duality_gap(data, var, aux, 
+                    config.prior_trace_bound, eig_iter;highprecision=false)  
                 stats.dual_lanczos_time[] += lanczos_dt
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
                 push!(stats.checkdualbd_iters, iter)
@@ -313,7 +330,7 @@ function _sdplr(
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     println("Done")
     eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(data, var, aux, Tv(n), eig_iter;highprecision=true)  
+    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(data, var, aux, config.prior_trace_bound, eig_iter;highprecision=true)  
     stats.dual_lanczos_time[] += lanczos_dt
     stats.dual_GenericArpack_time[] += GenericArpack_dt
     push!(stats.checkdualbd_iters, iter)
@@ -350,9 +367,11 @@ function _sdplr(
         "iter" => iter,
         "majoriter" => majoriter,
         "DIMACS_errs" => DIMACS_errs,
-        "gtol" => config.gtol,
         "ptol" => config.ptol,
-        "dtol" => config.objtol,
+        "objtol" => config.objtol,
+        "fprec" => config.fprec,
+        "rankupd_tol" => config.rankupd_tol,
+        "r" => size(var.R, 2),
     ])
 end
 
