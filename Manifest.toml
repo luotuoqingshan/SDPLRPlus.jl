@@ -2,7 +2,7 @@
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "4ac0a113d36e8899b084a53ce958866fab3b87e6"
+project_hash = "30d3487747ac6598114a8361ad8af0ade5f75a48"
 
 [[deps.AMD]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse_jll"]
@@ -406,6 +406,12 @@ git-tree-sha1 = "b080a592525632d287aee4637a62682576b7f5e4"
 uuid = "77ec8976-b24b-556a-a1bf-49a033a670a6"
 version = "3.24.31+0"
 
+[[deps.GZip]]
+deps = ["Libdl", "Zlib_jll"]
+git-tree-sha1 = "0085ccd5ec327c077ec5b91a5f937b759810ba62"
+uuid = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
+version = "0.6.2"
+
 [[deps.GenericArpack]]
 deps = ["LinearAlgebra"]
 git-tree-sha1 = "1520a695ba9cdeaa0da775a14a0a48c25e110831"
@@ -727,6 +733,12 @@ deps = ["JuliaInterpreter"]
 git-tree-sha1 = "20ce1091ba18bcdae71ad9b71ee2367796ba6c48"
 uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
 version = "2.4.4"
+
+[[deps.LuxurySparse]]
+deps = ["LinearAlgebra", "Random", "SparseArrays", "StaticArrays"]
+git-tree-sha1 = "84ce2a2a25c8a4561ef19a1a8be3c9305661fa08"
+uuid = "d05aeea4-b7d4-55ac-b691-9e7fabb07ba2"
+version = "0.7.4"
 
 [[deps.MAT]]
 deps = ["BufferedStreams", "CodecZlib", "HDF5", "SparseArrays"]
@@ -1514,6 +1526,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "e92a1a012a10506618f10b7047e478403a046c77"
 uuid = "c5fb5394-a638-5e4d-96e5-b29de1b5cf10"
 version = "1.5.0+0"
+
+[[deps.ZipFile]]
+deps = ["Libdl", "Printf", "Zlib_jll"]
+git-tree-sha1 = "f492b7fe1698e623024e873244f10d89c95c340a"
+uuid = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
+version = "0.10.1"
 
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
