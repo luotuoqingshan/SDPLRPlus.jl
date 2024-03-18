@@ -1,3 +1,6 @@
+super_sparse(I, J, V, n, m) = SparseMatrixCOO(I, J, V, n, m)
+
+
 """
 Maxcut SDP:              
 
@@ -16,9 +19,10 @@ function maxcut(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     As = []
     bs = Tv[] 
     for i in eachindex(d)
-        push!(As, sparse(Ti[i], Ti[i], [one(Tv)], n, n))
+        push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
         push!(bs, one(Tv))
     end
+    @info "Max Cut SDP is formed."
     return L, As, bs
 end
 
@@ -43,15 +47,16 @@ function lovasz_theta(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     bs = Tv[]
     for (i, j, _) in zip(findnz(A)...)
         if i < j
-            push!(As, sparse(Ti[i, j], Ti[j, i], [one(Tv), one(Tv)], n, n))
+            push!(As, super_sparse(Ti[i, j], Ti[j, i], [one(Tv), one(Tv)], n, n))
             push!(bs, zero(Tv))
         elseif i == j
-            push!(As, sparse(Ti[i], Ti[i], [one(Tv)], n, n))
+            push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
             push!(bs, zero(Tv))
         end
     end
     push!(As, sparse(Matrix{Tv}(I, n, n)))
     push!(bs, one(Tv))
+    @info "Lovasz Theta SDP is formed."
     return C, As, bs
 end
 
@@ -76,11 +81,12 @@ function minimum_bisection(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     As = []
     bs = Tv[]
     for i in eachindex(d)
-        push!(As, sparse(Ti[i], Ti[i], [one(Tv)], n, n))
+        push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
         push!(bs, one(Tv))
     end
     push!(As, SymLowRankMatrix(Diagonal(ones(Tv, 1)), ones(Tv, n, 1)))
     push!(bs, zero(Tv))
+    @info "Minimum Bisection SDP is formed." 
     return Tv.(L) , As, bs
 end
 

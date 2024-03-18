@@ -2,6 +2,7 @@ using Random, Test, Printf
 
 # linear algebra
 using SparseArrays
+using LuxurySparse
 using LinearAlgebra
 import LinearAlgebra: dot, size, show, norm
 using MKLSparse # to speed up sparse matrix multiplication
@@ -34,5 +35,4 @@ include("options.jl")
 include("preprocess.jl")
 include("sdplr.jl")
 include("optprograms.jl")
-include("othersolvers.jl")
 include("utils.jl")

@@ -14,7 +14,7 @@ function sdplr(
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
     kwargs...
 ) where{Ti <: Integer, Tv <: AbstractFloat}
-
+    println("SDPLR started.")
     for (key, value) in kwargs
         if hasfield(BurerMonteiroConfig, Symbol(key))
             setfield!(config, Symbol(key), value)
@@ -35,7 +35,7 @@ function sdplr(
         BtVs = Matrix{Tv}[]
         BtUs = Matrix{Tv}[]
         for (i, A) in enumerate(As)
-            if isa(A, SparseMatrixCSC)
+            if isa(A, SparseMatrixCSC) || isa(A, SparseMatrixCOO)
                 push!(sparse_cons, A)
                 push!(sparse_As_global_inds, i)
             elseif isa(A, Diagonal)
@@ -66,15 +66,20 @@ function sdplr(
             push!(symlowrank_As_global_inds, 0)
             s = size(C.B, 2)
             # s and r are usually really small compared with n
+            @show s, r
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
         else
             @error "Currently only sparse\
             /lowrank/diagonal objectives are supported."
         end
-        triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
-        agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
-        agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+        @show "Done classifying constraints."
+        res = @timed begin
+            triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
+            agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+            agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+        end
+        @show res.bytes
     
         n = size(C, 1)
         m = length(As)
