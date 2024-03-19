@@ -42,8 +42,8 @@ function 𝒜!(
         Aoper_formUVt!(UVt, aux, U, V; same=same) 
         for i = 1:aux.n_sparse_matrices
             val = zero(Tv) 
-            for j = aux.agg_sparse_A_matptr[i]:(aux.agg_sparse_A_matptr[i+1]-1)
-                val += aux.agg_sparse_A_nzval_two[j] * UVt[aux.agg_sparse_A_nzind[j]]
+            for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1]-1)
+                val += aux.triu_agg_sparse_A_nzval_two[j] * UVt[aux.triu_agg_sparse_A_nzind[j]]
             end
             if aux.sparse_As_global_inds[i] == 0
                 obj = val
@@ -128,8 +128,8 @@ function AToper_preprocess_sparse!(
     for i = 1:aux.n_sparse_matrices
         ind = aux.sparse_As_global_inds[i]
         coeff = ind == 0 ? one(Tv) : v[ind]
-        for j = aux.agg_sparse_A_matptr[i]:(aux.agg_sparse_A_matptr[i+1] - 1)
-            triu_sparse_S_nzval[aux.agg_sparse_A_nzind[j]] += aux.agg_sparse_A_nzval_one[j] * coeff
+        for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
+            triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j] * coeff
         end
     end
 

@@ -75,8 +75,8 @@ function sdplr(
         end
         @show "Done classifying constraints."
         res = @timed begin
-            triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
-            agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+            triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, 
+            triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, 
             agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
         end
         @show res.bytes
@@ -101,10 +101,10 @@ function sdplr(
         )
         aux = SolverAuxiliary(
             length(sparse_cons),
-            agg_sparse_A_matptr,
-            agg_sparse_A_nzind,
-            agg_sparse_A_nzval_one,
-            agg_sparse_A_nzval_two,
+            triu_agg_sparse_A_matptr,
+            triu_agg_sparse_A_nzind,
+            triu_agg_sparse_A_nzval_one,
+            triu_agg_sparse_A_nzval_two,
             agg_sparse_A_mappedto_triu,
             sparse_As_global_inds,
 

@@ -131,10 +131,10 @@ end
 struct SolverAuxiliary{Ti <: Integer, Tv <: AbstractFloat}
     # sparse constraints
     n_sparse_matrices::Ti
-    agg_sparse_A_matptr::Vector{Ti}
-    agg_sparse_A_nzind::Vector{Ti}
-    agg_sparse_A_nzval_one::Vector{Tv}
-    agg_sparse_A_nzval_two::Vector{Tv}
+    triu_agg_sparse_A_matptr::Vector{Ti}
+    triu_agg_sparse_A_nzind::Vector{Ti}
+    triu_agg_sparse_A_nzval_one::Vector{Tv}
+    triu_agg_sparse_A_nzval_two::Vector{Tv}
     agg_sparse_A_mappedto_triu::Vector{Ti} 
     sparse_As_global_inds::Vector{Ti}
 

@@ -60,16 +60,16 @@ function preprocess_sparsecons(
     # combine all entries of As
     agg_sparse_A = sparse(all_I, all_J, all_V, n, n)
 
-    agg_sparse_A_matptr = zeros(Ti, nA + 1)
-    agg_sparse_A_nzind = zeros(Ti, total_triu_nnz)
-    agg_sparse_A_nzval_one = zeros(Tv, total_triu_nnz)
-    agg_sparse_A_nzval_two = zeros(Tv, total_triu_nnz)
+    triu_agg_sparse_A_matptr = zeros(Ti, nA + 1)
+    triu_agg_sparse_A_nzind = zeros(Ti, total_triu_nnz)
+    triu_agg_sparse_A_nzval_one = zeros(Tv, total_triu_nnz)
+    triu_agg_sparse_A_nzval_two = zeros(Tv, total_triu_nnz)
 
     cumul_nnz = 0
     for i in eachindex(As)
         # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
         # correspond to the i-th sparse constraint/objective matrix
-        agg_sparse_A_matptr[i] = cumul_nnz + 1
+        triu_agg_sparse_A_matptr[i] = cumul_nnz + 1
         triu_I, triu_J, triu_V = findnz(triu(As[i]))
         for j in eachindex(triu_I)
             row, col = triu_I[j], triu_J[j]
@@ -78,7 +78,7 @@ function preprocess_sparsecons(
             while low <= high
                 mid = (low + high) ÷ 2
                 if triu_agg_sparse_A.rowval[mid] == row 
-                    agg_sparse_A_nzind[cumul_nnz+j] = mid 
+                    triu_agg_sparse_A_nzind[cumul_nnz+j] = mid 
                     break
                 elseif triu_agg_sparse_A.rowval[mid] < row 
                     low = mid + 1
@@ -86,18 +86,18 @@ function preprocess_sparsecons(
                     high = mid - 1
                 end
             end
-            agg_sparse_A_nzval_one[cumul_nnz+j] = triu_V[j] 
+            triu_agg_sparse_A_nzval_one[cumul_nnz+j] = triu_V[j] 
             if row == col
-                agg_sparse_A_nzval_two[cumul_nnz+j] = triu_V[j]
+                triu_agg_sparse_A_nzval_two[cumul_nnz+j] = triu_V[j]
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
-                agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
+                triu_agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
             end
         end
         cumul_nnz += length(triu_I)
     end
-    agg_sparse_A_matptr[end] = total_triu_nnz + 1
+    triu_agg_sparse_A_matptr[end] = total_triu_nnz + 1
     agg_sparse_A_mappedto_triu = zeros(Ti, length(agg_sparse_A.rowval))
     for col = 1:n
         for nzi = agg_sparse_A.colptr[col]:agg_sparse_A.colptr[col+1]-1
@@ -120,7 +120,7 @@ function preprocess_sparsecons(
             end
         end
     end
-    return (triu_agg_sparse_A, agg_sparse_A_matptr, agg_sparse_A_nzind, 
-           agg_sparse_A_nzval_one, agg_sparse_A_nzval_two, agg_sparse_A, 
+    return (triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, 
+           triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, 
            agg_sparse_A_mappedto_triu)
 end
