@@ -26,11 +26,11 @@ struct SymLowRankMatrix{T} <: AbstractMatrix{T}
 end
 
 
-size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
+LinearAlgebra.size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
 Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
 
 
-function show(io::IO, mime::MIME{Symbol("text/plain")}, A::SymLowRankMatrix)
+function LinearAlgebra.show(io::IO, mime::MIME{Symbol("text/plain")}, A::SymLowRankMatrix)
     summary(io, A) 
     println(io)
     println(io, "SymLowRankMatrix of form BDBᵀ.")
@@ -47,7 +47,7 @@ end
 Compute the `p`-norm of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
 Currently support `p` ∈ [2, Inf]. 
 """
-function norm(
+function LinearAlgebra.norm(
     A::SymLowRankMatrix{Tv},
     p::Real,
 ) where {Tv <: AbstractFloat}
