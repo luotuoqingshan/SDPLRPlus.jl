@@ -1,3 +1,14 @@
+function LinearAlgebra.triu(coo::SparseMatrixCOO{Tv, Ti}) where {Tv, Ti}
+    I = Ti[]; J = Ti[]; V = Tv[];
+    for (i, j, v) in zip(coo.is, coo.js, coo.vs)
+        if i <= j
+            push!(I, i); push!(J, j); push!(V, v)
+        end
+    end
+    return SparseMatrixCOO(I, J, V, coo.m, coo.n);
+end
+
+
 """
     preprocess_sparsecons(As)
 
@@ -5,7 +16,7 @@ Preprocess the sparse constraints to initialize necessary
 data structures for BurerMonteiro algorithm.
 """
 function preprocess_sparsecons(
-    As::Vector{SparseMatrixCSC{Tv, Ti}}
+    As::Vector{Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}}
 ) where {Tv <: AbstractFloat, Ti <: Integer}
     # aggregate all constraints into one sparse matrix
 
@@ -18,7 +29,6 @@ function preprocess_sparsecons(
         total_triu_nnz += nnz(triu(A))
     end
     
-
     # (all_triu_I, all_triu_J, all_triu_V) stores 
     # combined upper triangular part of all constraint matrices A
     all_triu_I = zeros(Ti, total_triu_nnz)

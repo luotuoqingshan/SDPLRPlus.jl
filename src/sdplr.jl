@@ -21,10 +21,11 @@ function sdplr(
         else
             @warn "Ignoring unrecognized keyword argument $key"
         end
-    end
+    end 
+    println("Parameters Updated.")
 
     preprocess_dt = @elapsed begin
-        sparse_cons = SparseMatrixCSC{Tv, Ti}[]
+        sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
         symlowrank_cons = SymLowRankMatrix{Tv}[]
         # treat diagonal matrices as sparse matrices
         sparse_As_global_inds = Ti[]
@@ -35,7 +36,7 @@ function sdplr(
         BtVs = Matrix{Tv}[]
         BtUs = Matrix{Tv}[]
         for (i, A) in enumerate(As)
-            if isa(A, SparseMatrixCSC) || isa(A, SparseMatrixCOO)
+            if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
                 push!(sparse_cons, A)
                 push!(sparse_As_global_inds, i)
             elseif isa(A, Diagonal)
@@ -55,7 +56,7 @@ function sdplr(
             end
         end
 
-        if isa(C, SparseMatrixCSC) 
+        if isa(C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
             push!(sparse_cons, C)
             push!(sparse_As_global_inds, 0)
         elseif isa(C, Diagonal)
@@ -66,7 +67,6 @@ function sdplr(
             push!(symlowrank_As_global_inds, 0)
             s = size(C.B, 2)
             # s and r are usually really small compared with n
-            @show s, r
             push!(BtVs, zeros(Tv, (s, r)))
             push!(BtUs, zeros(Tv, (s, r)))
         else
