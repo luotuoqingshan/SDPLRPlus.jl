@@ -6,83 +6,11 @@ Gset format and smat format are supported.
 """
 function read_graph(
     filename::String;
-    filefolder::String=homedir()*"/Gset/",
-    extension::String="",
+    filefolder::String=homedir()*"/datasets/graphs/",
 )::SparseMatrixCSC
-    I = Int32[] 
-    J = Int32[]
-    V = Float64[]
-    n = 0
-    filepath = filefolder*filename*extension
-    @assert extension in ["", ".smat"] "Currently we only support Gset and smat formats."   
-    open(filepath) do file
-        lines = readlines(file)
-        if extension == ""
-            n, _ = split(lines[1], ' ')
-        else
-            n, _, _ = split(lines[1], ' ')
-        end
-        n = parse(Int, n)
-        for line in lines[2:end]
-            u, v, w = split(line, ' ')
-            u = parse(Int, u)
-            v = parse(Int, v)
-            w = parse(Float64, w)
-            # Turn it into an undirected graph
-            if extension == ""
-                push!(I, u); push!(J, v); push!(V, w)
-                push!(J, u); push!(I, v); push!(V, w)
-            elseif extension == ".smat"
-                push!(I, u+1)
-                push!(J, v+1)
-                push!(V, w)
-            end
-        end
-    end
-    A = sparse(I, J, V, n, n)
-    # remove self-loops
-    A[diagind(A)] .= 0
-    dropzeros!(A)
-    return A
-end
-
-
-"""
-    write_graph_smat(filename; [filefolder])
-
-Write one adjacency matrix to the file FILEFOLDER/FILENAME
-in the Gset/smat format.
-"""
-function write_graph(
-    A::SparseMatrixCSC{Tv, Ti},
-    filename::String;
-    filefolder::String=homedir()*"/Gset/",
-    extension::String="",
-)where {Tv <: AbstractFloat, Ti <: Integer}
-    filepath = filefolder*filename*extension
-
-    @assert A == A' "Only undirected graphs are supported."
-    @assert extension in ["", ".smat"] "Currently we only support Gset and smat formats."
-
-    open(filepath, "w") do f
-        n = size(A, 1)
-        m = div(nnz(A), 2)
-        nnz_A = nnz(A)
-        if extension == ""
-            write(f, "$n $m\n")
-        else
-            write(f, "$n $n $nnz_A\n")
-        end
-        for (i, j, v) in zip(findnz(A)...)
-            if extension == ""
-                if i <= j
-                    write(f, "$i $j $(Int(v))\n")
-                end
-            else
-                write(f, "$(i-1) $(j-1) $(Int(v))\n")
-            end
-        end
-    end
+    filepath = filefolder*filename*".mat"
+    data = matread(filepath) 
+    return data 
 end
 
 
@@ -126,7 +54,7 @@ end
 
 
 function write_matrix_sdplr(
-    A::SparseMatrixCSC{Tv, Ti},
+    A::Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}},
     id::Ti, 
     f::IOStream,
 ) where {Tv <: AbstractFloat, Ti <: Integer}
@@ -251,7 +179,7 @@ function gset_sdp_preprocess_data(
     sdp_format="sdpa",  
 )
     for i = [1:67; 70; 72; 77; 81]
-        A = load_gset("G$i"; filefolder=gset_folder)
+        A = _gset("G$i"; filefolder=gset_folder)
         if program == "maxcut"
             C, As, bs = maxcut(A)
         elseif program == "lovasz_theta"
