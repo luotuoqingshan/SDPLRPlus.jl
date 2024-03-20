@@ -7,7 +7,7 @@ Gset format and smat format are supported.
 function read_graph(
     filename::String;
     filefolder::String=homedir()*"/datasets/graphs/",
-)::SparseMatrixCSC
+)
     filepath = filefolder*filename*".mat"
     data = matread(filepath) 
     return data 
