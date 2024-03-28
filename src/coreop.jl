@@ -86,6 +86,26 @@ function 𝒜!(
     return obj
 end
 
+function mydot(Rt, row, col)
+    m = size(Rt, 1)
+    rval = zero(eltype(Rt))
+    @simd for i in 1:m
+      @inbounds rval += Rt[i, row] * Rt[i, col]
+    end 
+    return rval 
+end
+
+function mydot(Ut, Vt, row, col)
+    m = size(Ut, 1)
+    rval = zero(eltype(Ut))
+    @simd for i in 1:m
+      @inbounds rval += Ut[i, row] * Vt[i, col]
+    end
+    @simd for i in 1:m
+      @inbounds rval += Vt[i, row] * Ut[i, col]
+    end
+    return rval / 2
+end
 
 function Aoper_formUVt!(
     UVt::Vector{Tv},
@@ -101,7 +121,7 @@ function Aoper_formUVt!(
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
-                UVt[nzind] = dot(@view(Ut[:, col]), @view(Ut[:, row]))
+                UVt[nzind] = mydot(Ut, col, row) 
             end
         end
     else
@@ -109,9 +129,10 @@ function Aoper_formUVt!(
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
-                UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
-                UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
-                UVt[nzind] /= Tv(2)
+                #UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
+                #UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
+                #UVt[nzind] /= Tv(2)
+                UVt[nzind] = mydot(Ut, Vt, col, row)
             end
         end
     end
@@ -212,7 +233,7 @@ function fg!(
     g_dt = @elapsed begin
         g!(var, aux)
     end
-    @debug "f dt, g dt" f_dt, g_dt
+    @info "f dt, g dt" f_dt, g_dt
     grad_norm = norm(var.G, 2) / (1.0 + normC)
     primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
@@ -281,6 +302,7 @@ function surrogate_duality_gap(
         GenericArpack_evs = [0.0]
     end
 
+    @show res[1]
     duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
            - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
     val1 = sum(var.G .* var.R)
