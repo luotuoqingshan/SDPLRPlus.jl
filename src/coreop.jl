@@ -86,6 +86,26 @@ function 𝒜!(
     return obj
 end
 
+function mydot(Rt, row, col)
+    m = size(Rt, 1)
+    rval = zero(eltype(Rt))
+    @simd for i in 1:m
+      @inbounds rval += Rt[i, row] * Rt[i, col]
+    end 
+    return rval 
+end
+
+function mydot(Ut, Vt, row, col)
+    m = size(Ut, 1)
+    rval = zero(eltype(Ut))
+    @simd for i in 1:m
+      @inbounds rval += Ut[i, row] * Vt[i, col]
+    end
+    @simd for i in 1:m
+      @inbounds rval += Vt[i, row] * Ut[i, col]
+    end
+    return rval / 2
+end
 
 function Aoper_formUVt!(
     UVt::Vector{Tv},
@@ -101,7 +121,7 @@ function Aoper_formUVt!(
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
-                UVt[nzind] = dot(@view(Ut[:, col]), @view(Ut[:, row]))
+                UVt[nzind] = mydot(Ut, col, row) 
             end
         end
     else
@@ -109,9 +129,10 @@ function Aoper_formUVt!(
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
-                UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
-                UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
-                UVt[nzind] /= Tv(2)
+                #UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
+                #UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
+                #UVt[nzind] /= Tv(2)
+                UVt[nzind] = mydot(Ut, Vt, col, row)
             end
         end
     end
@@ -127,9 +148,15 @@ function AToper_preprocess_sparse!(
     fill!(triu_sparse_S_nzval, zero(Tv))
     for i = 1:aux.n_sparse_matrices
         ind = aux.sparse_As_global_inds[i]
-        coeff = ind == 0 ? one(Tv) : v[ind]
-        for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
-            triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j] * coeff
+        if ind == 0
+            @simd for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
+                @inbounds triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j]
+            end
+        else
+            coeff = v[ind]
+            @simd for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
+                @inbounds triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j]*coeff
+            end
         end
     end
 
@@ -163,7 +190,7 @@ function AToper!(
 
     # deal with sparse and diagonal constraints first
     if aux.n_sparse_matrices > 0
-        y .= aux.sparse_S * x
+        mul!(y, aux.sparse_S, x)
     end
 
     # then deal with low-rank matrices 
@@ -185,8 +212,13 @@ function g!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 ) where{Ti <: Integer, Tv <: AbstractFloat}
-    AToper_preprocess!(var, aux)
-    AToper!(var.G, aux, aux.BtUs, var.R)
+    AToper_preprocess_dt = @elapsed begin
+        AToper_preprocess!(var, aux)
+    end
+    densesparse_dt = @elapsed begin
+        AToper!(var.G, aux, aux.BtUs, var.R)
+    end
+    @debug "AToperprocess_dt: $AToper_preprocess_dt, densesparse_dt: $densesparse_dt"
     BLAS.scal!(Tv(2), var.G)
     return 0
 end
@@ -281,6 +313,7 @@ function surrogate_duality_gap(
         GenericArpack_evs = [0.0]
     end
 
+    @show res[1]
     duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
            - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
     val1 = sum(var.G .* var.R)

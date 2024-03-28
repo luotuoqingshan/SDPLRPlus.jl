@@ -2,7 +2,7 @@ module SDPLR
     using Random                      
 
     # linear algebra
-    using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse
+    using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse, MKL
 
     # eig computation
     using GenericArpack

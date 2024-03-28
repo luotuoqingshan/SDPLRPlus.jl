@@ -14,7 +14,6 @@ function sdplr(
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
     kwargs...
 ) where{Ti <: Integer, Tv <: AbstractFloat}
-    println("SDPLR started.")
     for (key, value) in kwargs
         if hasfield(BurerMonteiroConfig, Symbol(key))
             setfield!(config, Symbol(key), value)
@@ -22,7 +21,10 @@ function sdplr(
             @warn "Ignoring unrecognized keyword argument $key"
         end
     end 
-    println("Parameters Updated.")
+
+    if config.printlevel > 0
+        printheading(1)
+    end
 
     preprocess_dt = @elapsed begin
         sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
@@ -73,13 +75,13 @@ function sdplr(
             @error "Currently only sparse\
             /lowrank/diagonal objectives are supported."
         end
-        @show "Done classifying constraints."
+        @info "Finish classifying constraints."
         res = @timed begin
             triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, 
             triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, 
             agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
         end
-        @show res.bytes
+        @info "$(res.bytes) bytes allocated during preprocessing sparse constraints." 
     
         n = size(C, 1)
         m = length(As)
@@ -154,12 +156,6 @@ function _sdplr(
     lastprint = stats.starttime[] # timestamp of last print
     R0 = deepcopy(var.R) 
     λ0 = deepcopy(var.λ)
-
-    # TODO setup printing
-    if config.printlevel > 0
-        printheading(1)
-    end
-
 
     # set up algorithm parameters
     normb = norm(data.b, 2)
