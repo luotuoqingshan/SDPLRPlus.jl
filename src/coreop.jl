@@ -244,7 +244,7 @@ function fg!(
     g_dt = @elapsed begin
         g!(var, aux)
     end
-    @debug "f dt, g dt" f_dt, g_dt
+    @info "f dt, g dt" f_dt, g_dt
     grad_norm = norm(var.G, 2) / (1.0 + normC)
     primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
