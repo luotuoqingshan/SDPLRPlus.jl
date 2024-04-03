@@ -244,7 +244,7 @@ function fg!(
     g_dt = @elapsed begin
         g!(var, aux)
     end
-    @info "f dt, g dt" f_dt, g_dt
+    @debug "f dt, g dt" f_dt, g_dt
     grad_norm = norm(var.G, 2) / (1.0 + normC)
     primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
@@ -316,7 +316,7 @@ function surrogate_duality_gap(
     @show res[1]
     duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
            - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
-    val1 = sum(var.G .* var.R)
+    val1 = sum(var.G .* var.R) / 2 
     val2 = - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0)     
     val3 = sum(var.λ .* aux.primal_vio)
     val4 = - var.σ[] / 2 * sum(aux.primal_vio .* aux.primal_vio)
