@@ -7,7 +7,7 @@ function linesearch!(
     D::Matrix{Tv};
     α_max = one(Tv),
     update = true,
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv}
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
         C_RD = 𝒜!(aux.A_RD, aux.UVt, aux, var.R, D; same=false)

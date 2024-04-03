@@ -50,7 +50,7 @@ Currently support `p` ∈ [2, Inf].
 function LinearAlgebra.norm(
     A::SymLowRankMatrix{Tv},
     p::Real,
-) where {Tv <: AbstractFloat}
+) where {Tv}
     # norm is usually not performance critical
     # so we don't do too much preallocation
     n = size(A.B, 1)
@@ -83,7 +83,7 @@ function LinearAlgebra.mul!(
     Y::AbstractVector{Tv}, 
     A::SymLowRankMatrix{Tv},
     X::AbstractVector{Tv},
-) where {Tv <: AbstractFloat}
+) where {Tv}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX)
@@ -101,14 +101,14 @@ function LinearAlgebra.mul!(
     X::AbstractVector{Tv},
     α::Tv,
     β::Tv,
-) where{Tv <: AbstractFloat}
+) where{Tv}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX, α, β)
 end
 
 
-struct SDPData{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     C::TC                               # cost matrix
@@ -117,7 +117,7 @@ struct SDPData{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
 end
 
 
-struct SolverVars{Ti <: Integer, Tv <: AbstractFloat}
+struct SolverVars{Ti <: Integer,Tv}
     R::Matrix{Tv}               # primal variables X = RR^T
     G::Matrix{Tv}               # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
@@ -128,7 +128,7 @@ struct SolverVars{Ti <: Integer, Tv <: AbstractFloat}
 end
 
 
-struct SolverAuxiliary{Ti <: Integer, Tv <: AbstractFloat}
+struct SolverAuxiliary{Ti <: Integer, Tv}
     # sparse constraints
     n_sparse_matrices::Ti
     triu_agg_sparse_A_matptr::Vector{Ti}
@@ -156,7 +156,7 @@ struct SolverAuxiliary{Ti <: Integer, Tv <: AbstractFloat}
 end
 
 
-struct SolverStats{Ti <: Integer, Tv <: AbstractFloat}
+struct SolverStats{Ti <: Integer, Tv}
     starttime::Base.RefValue{Tv}               # timing
     endtime::Base.RefValue{Tv}
     dual_lanczos_time::Base.RefValue{Tv}

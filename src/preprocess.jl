@@ -17,7 +17,7 @@ data structures for BurerMonteiro algorithm.
 """
 function preprocess_sparsecons(
     As::Vector{Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}}
-) where {Tv <: AbstractFloat, Ti <: Integer}
+) where {Ti <: Integer, Tv}
     # aggregate all constraints into one sparse matrix
 
     n = size(As[1], 1)

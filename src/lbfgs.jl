@@ -1,7 +1,7 @@
 """
 Vector of L-BFGS
 """
-struct LBFGSVector{T <: AbstractFloat}
+struct LBFGSVector{T}
     # notice that we use matrix instead 
     # of vector to store s and y because our
     # decision variables are matrices
@@ -18,7 +18,7 @@ end
 """
 History of L-BFGS vectors
 """
-struct LBFGSHistory{Ti <: Integer, Tv <: AbstractFloat}
+struct LBFGSHistory{Ti <: Integer, Tv}
     # number of l-bfgs vectors
     m::Ti
     vecs::Vector{LBFGSVector{Tv}}
@@ -38,7 +38,7 @@ Initialization of L-BFGS history
 function lbfgs_init(
     R::Matrix{Tv},
     numlbfgsvecs::Ti,
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     lbfgsvecs = LBFGSVector{Tv}[]
     for _ = 1:numlbfgsvecs
         push!(lbfgsvecs, 
@@ -58,7 +58,7 @@ end
 
 function lbfgs_clear!(
     lbfgshis::LBFGSHistory{Ti, Tv}
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     for i = 1:lbfgshis.m
         lbfgshis.vecs[i].s .= zero(Tv)
         lbfgshis.vecs[i].y .= zero(Tv)
@@ -89,7 +89,7 @@ function lbfgs_dir!(
     lbfgshis::LBFGSHistory{Ti, Tv},
     grad::Matrix{Tv};
     negate::Bool=true,
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv}
     # we store l-bfgs vectors as a cyclic array
     copyto!(dir, grad)
     m = lbfgshis.m
@@ -137,7 +137,7 @@ function lbfgs_update!(
     lbfgshis::LBFGSHistory{Ti, Tv},
     grad::Matrix{Tv},
     stepsize::Tv,
-)where {Ti<:Integer, Tv <: AbstractFloat}
+)where {Ti<:Integer, Tv}
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
 

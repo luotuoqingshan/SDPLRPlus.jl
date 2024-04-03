@@ -1,4 +1,4 @@
-@with_kw mutable struct BurerMonteiroConfig{Ti <: Integer, Tv <: AbstractFloat}
+@with_kw mutable struct BurerMonteiroConfig{Ti <: Integer, Tv}
     ptol::Tv = 1e-2
     objtol::Tv = 1e-2
     σfac::Tv = 2.0 

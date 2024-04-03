@@ -1,3 +1,5 @@
+using LuxurySparse, SparseArrays, LinearAlgebra
+
 super_sparse(I, J, V, n, m) = SparseMatrixCOO(I, J, V, n, m)
 
 
@@ -91,3 +93,19 @@ function minimum_bisection(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
 end
 
 
+function bipartite_matrix(A::SparseMatrixCSC)
+    m, n = size(A)
+    B = [spzeros(m, m) A; A' spzeros(n, n)]
+end
+
+function cutnorm(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
+    C = bipartite_matrix(A) ./ 2
+    As = []
+    bs = Tv[]
+    for i in 1:size(C, 1) 
+        push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], size(C)...))
+        push!(bs, one(Tv))
+    end
+    @info "Cut Norm SDP is formed."
+    return -Tv.(C), As, bs 
+end

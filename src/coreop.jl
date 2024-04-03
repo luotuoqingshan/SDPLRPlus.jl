@@ -9,7 +9,7 @@ function f!(
     data::SDPData{Ti, Tv, TC},
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     # apply the operator 𝓐 to RRᵀ and compute the objective value
     var.obj[] = 𝒜!(aux.primal_vio, aux.UVt, aux, var.R, var.R; same=true)
     aux.primal_vio .-= data.b 
@@ -33,7 +33,7 @@ function 𝒜!(
     U::Matrix{Tv},
     V::Matrix{Tv};
     same::Bool=true,
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     fill!(𝓐_UV, zero(eltype(𝓐_UV)))
     obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
@@ -113,7 +113,7 @@ function Aoper_formUVt!(
     U::Matrix{Tv},
     V::Matrix{Tv};
     same::Bool=true,
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     fill!(UVt, zero(eltype(UVt)))
     Ut = U' 
     n = size(U, 1)
@@ -129,9 +129,6 @@ function Aoper_formUVt!(
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
-                #UVt[nzind] = dot(@view(Ut[:, col]), @view(Vt[:, row]))
-                #UVt[nzind] += dot(@view(Vt[:, col]), @view(Ut[:, row]))
-                #UVt[nzind] /= Tv(2)
                 UVt[nzind] = mydot(Ut, Vt, col, row)
             end
         end
@@ -144,7 +141,7 @@ function AToper_preprocess_sparse!(
     triu_sparse_S_nzval::Vector{Tv},
     v::Vector{Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv}
     fill!(triu_sparse_S_nzval, zero(Tv))
     for i = 1:aux.n_sparse_matrices
         ind = aux.sparse_As_global_inds[i]
@@ -169,7 +166,7 @@ end
 function AToper_preprocess!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     # update auxiliary vector y based on primal violence and λ
     # and then update the sparse matrix
     @. aux.y = -(var.λ - var.σ[] * aux.primal_vio)
@@ -184,7 +181,7 @@ function AToper!(
     aux::SolverAuxiliary{Ti, Tv},
     Btxs::Vector{Tx},
     x::Tx, 
-) where{Ti <: Integer, Tv <: AbstractFloat, Tx <: AbstractArray{Tv}}
+) where{Ti <: Integer, Tv, Tx <: AbstractArray{Tv}}
     # zero out output vector
     fill!(y, zero(Tv))
 
@@ -211,7 +208,7 @@ This function computes the gradient of the augmented Lagrangian
 function g!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv}
     AToper_preprocess_dt = @elapsed begin
         AToper_preprocess!(var, aux)
     end
@@ -237,7 +234,7 @@ function fg!(
     aux::SolverAuxiliary{Ti, Tv},
     normC::Tv,
     normb::Tv,
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     f_dt = @elapsed begin
         𝓛_val = f!(data, var, aux)
     end
@@ -260,7 +257,7 @@ function SDP_S_eigval(
     nevs::Ti,
     preprocessed::Bool=false;
     kwargs...
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     if !preprocessed
         AToper_preprocess!(var, aux)
     end
@@ -297,7 +294,7 @@ function surrogate_duality_gap(
     trace_bound::Tv, 
     iter::Ti;
     highprecision::Bool=false,
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     AX = aux.primal_vio + data.b
     AToper_preprocess!(var, aux)
     lanczos_dt = @elapsed begin
@@ -341,7 +338,7 @@ function DIMACS_errors(
     data::SDPData{Ti, Tv, TC},
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n = size(aux.sparse_S, 1)
     err1 = norm(aux.primal_vio, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
@@ -365,7 +362,7 @@ the minimum eigenvalue of `A`.
 function approx_mineigval_lanczos(
     aux::SolverAuxiliary{Ti, Tv},
     q::Ti,
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     n::Ti = size(aux.sparse_S, 1)
     q = min(q, n - 1)
 
@@ -421,7 +418,7 @@ end
 function rank_update!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv <: AbstractFloat}
+) where {Ti <: Integer, Tv}
     n = size(var.R, 1)
     m = size(var.λ, 1)
     r = var.r[]

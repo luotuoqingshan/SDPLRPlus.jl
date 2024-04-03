@@ -13,7 +13,7 @@ function sdplr(
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
     kwargs...
-) where{Ti <: Integer, Tv <: AbstractFloat}
+) where{Ti <: Integer, Tv}
     for (key, value) in kwargs
         if hasfield(BurerMonteiroConfig, Symbol(key))
             setfield!(config, Symbol(key), value)
@@ -150,7 +150,7 @@ function _sdplr(
     aux::SolverAuxiliary{Ti, Tv},
     stats::SolverStats{Ti, Tv},
     config::BurerMonteiroConfig{Ti, Tv},
-) where{Ti <: Integer, Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
+) where{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n = data.n 
     stats.starttime[] = time()
     lastprint = stats.starttime[] # timestamp of last print
