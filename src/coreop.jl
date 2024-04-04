@@ -10,11 +10,18 @@ function f!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+    m = data.m # number of constraints
+
     # apply the operator 𝓐 to RRᵀ and compute the objective value
-    var.obj[] = 𝒜!(aux.primal_vio, aux.UVt, aux, var.R, var.R; same=true)
-    aux.primal_vio .-= data.b 
-    return (var.obj[] - dot(var.λ, aux.primal_vio)
-           + var.σ[] * dot(aux.primal_vio, aux.primal_vio) / 2) 
+    𝒜!(aux.primal_vio, aux.UVt, aux, var.Rt, var.Rt; same=true)
+    var.obj[] = aux.primal_vio[m+1]
+
+    @inbounds @simd for i = 1:m
+        aux.primal_vio[i] -= data.b[i]
+    end
+
+    v = @view aux.primal_vio[1:m]
+    return (var.obj[] - dot(var.λ, v) + var.σ[] * dot(v, v) / 2) 
 end
 
 
@@ -30,26 +37,21 @@ function 𝒜!(
     𝓐_UV::Vector{Tv},
     UVt::Vector{Tv},
     aux::SolverAuxiliary{Ti, Tv},
-    U::Matrix{Tv},
-    V::Matrix{Tv};
+    Ut::Matrix{Tv},
+    Vt::Matrix{Tv};
     same::Bool=true,
 ) where {Ti <: Integer, Tv}
     fill!(𝓐_UV, zero(eltype(𝓐_UV)))
-    obj = zero(Tv) 
     # deal with sparse and diagonal constraints first
     # store results of 𝓐(UVᵀ + VUᵀ)/2
     if aux.n_sparse_matrices > 0
-        Aoper_formUVt!(UVt, aux, U, V; same=same) 
+        Aoper_formUVt!(UVt, aux, Ut, Vt; same=same) 
         for i = 1:aux.n_sparse_matrices
             val = zero(Tv) 
             for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1]-1)
                 val += aux.triu_agg_sparse_A_nzval_two[j] * UVt[aux.triu_agg_sparse_A_nzind[j]]
             end
-            if aux.sparse_As_global_inds[i] == 0
-                obj = val
-            else
-                𝓐_UV[aux.sparse_As_global_inds[i]] = val
-            end
+            𝓐_UV[aux.sparse_As_global_inds[i]] = val
         end
     end
     # then deal with low-rank matrices
@@ -61,11 +63,7 @@ function 𝒜!(
                 lmul!(aux.symlowrank_As[i].D, aux.BtUs[i])
                 val = sum(aux.BtUs[i])
 
-                if aux.symlowrank_As_global_inds[i] == 0
-                    obj = val
-                else
-                    𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
-                end
+                𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
             end
         else
             for i = 1:aux.n_symlowrank_matrices
@@ -75,16 +73,12 @@ function 𝒜!(
                 lmul!(aux.symlowrank_As[i].D, aux.BtUs[i])
                 val = sum(aux.BtUs[i])
 
-                if aux.symlowrank_As_global_inds[i] == 0
-                    obj = val
-                else
-                    𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
-                end
+                𝓐_UV[aux.symlowrank_As_global_inds[i]] = val 
             end
         end
     end
-    return obj
 end
+
 
 function mydot(Rt, row, col)
     m = size(Rt, 1)
@@ -110,13 +104,12 @@ end
 function Aoper_formUVt!(
     UVt::Vector{Tv},
     aux::SolverAuxiliary{Ti, Tv},
-    U::Matrix{Tv},
-    V::Matrix{Tv};
+    Ut::Matrix{Tv},
+    Vt::Matrix{Tv};
     same::Bool=true,
 ) where {Ti <: Integer, Tv}
     fill!(UVt, zero(eltype(UVt)))
-    Ut = U' 
-    n = size(U, 1)
+    n = size(Ut, 2)
     if same
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
@@ -125,7 +118,6 @@ function Aoper_formUVt!(
             end
         end
     else
-        Vt = V'
         @inbounds @simd for col in 1:n
             for nzind in aux.triu_sparse_S.colptr[col]:(aux.triu_sparse_S.colptr[col+1]-1)
                 row = aux.triu_sparse_S.rowval[nzind]
@@ -145,15 +137,9 @@ function AToper_preprocess_sparse!(
     fill!(triu_sparse_S_nzval, zero(Tv))
     for i = 1:aux.n_sparse_matrices
         ind = aux.sparse_As_global_inds[i]
-        if ind == 0
-            @simd for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
-                @inbounds triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j]
-            end
-        else
-            coeff = v[ind]
-            @simd for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
-                @inbounds triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j]*coeff
-            end
+        coeff = v[ind]
+        @simd for j = aux.triu_agg_sparse_A_matptr[i]:(aux.triu_agg_sparse_A_matptr[i+1] - 1)
+            @inbounds triu_sparse_S_nzval[aux.triu_agg_sparse_A_nzind[j]] += aux.triu_agg_sparse_A_nzval_one[j]*coeff
         end
     end
 
@@ -169,7 +155,12 @@ function AToper_preprocess!(
 ) where {Ti <: Integer, Tv}
     # update auxiliary vector y based on primal violence and λ
     # and then update the sparse matrix
-    @. aux.y = -(var.λ - var.σ[] * aux.primal_vio)
+    m = length(aux.primal_vio)-1
+    @inbounds @simd for i = 1:m
+        aux.y[i] = -(var.λ[i] - var.σ[] * aux.primal_vio[i])
+    end 
+    aux.y[m+1] = one(Tv)
+
     if aux.n_sparse_matrices > 0
         AToper_preprocess_sparse!(aux.sparse_S, aux.triu_sparse_S.nzval, aux.y, aux)
     end
@@ -184,6 +175,34 @@ function AToper!(
 ) where{Ti <: Integer, Tv, Tx <: AbstractArray{Tv}}
     # zero out output vector
     fill!(y, zero(Tv))
+    m = length(aux.primal_vio)-1
+
+    # deal with sparse and diagonal constraints first
+    if aux.n_sparse_matrices > 0
+        mul!(y, x, aux.sparse_S)
+    end
+
+    # then deal with low-rank matrices 
+    if aux.n_symlowrank_matrices > 0
+        for i = 1:aux.n_symlowrank_matrices
+            mul!(Btxs[i], aux.symlowrank_As[i].Bt, x)
+            lmul!(aux.symlowrank_As[i].D, Btxs[i])
+            coeff = aux.symlowrank_As_global_inds[i] == m+1 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
+            mul!(y, aux.symlowrank_As[i].B, Btxs[i], coeff, one(Tv))
+        end 
+    end
+end
+
+
+function AToperR!(
+    y::Tx,
+    aux::SolverAuxiliary{Ti, Tv},
+    Btxs::Vector{Tx},
+    x::Tx, 
+) where{Ti <: Integer, Tv, Tx <: AbstractArray{Tv}}
+    # zero out output vector
+    fill!(y, zero(Tv))
+    m = length(aux.primal_vio)-1
 
     # deal with sparse and diagonal constraints first
     if aux.n_sparse_matrices > 0
@@ -195,7 +214,7 @@ function AToper!(
         for i = 1:aux.n_symlowrank_matrices
             mul!(Btxs[i], aux.symlowrank_As[i].Bt, x)
             lmul!(aux.symlowrank_As[i].D, Btxs[i])
-            coeff = aux.symlowrank_As_global_inds[i] == 0 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
+            coeff = aux.symlowrank_As_global_inds[i] == m+1 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
             mul!(y, aux.symlowrank_As[i].B, Btxs[i], coeff, one(Tv))
         end 
     end
@@ -213,10 +232,10 @@ function g!(
         AToper_preprocess!(var, aux)
     end
     densesparse_dt = @elapsed begin
-        AToper!(var.G, aux, aux.BtUs, var.R)
+        AToper!(var.Gt, aux, aux.BtUs, var.Rt)
     end
     @debug "AToperprocess_dt: $AToper_preprocess_dt, densesparse_dt: $densesparse_dt"
-    BLAS.scal!(Tv(2), var.G)
+    BLAS.scal!(Tv(2), var.Gt)
     return 0
 end
 
@@ -235,6 +254,7 @@ function fg!(
     normC::Tv,
     normb::Tv,
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+    m = data.m
     f_dt = @elapsed begin
         𝓛_val = f!(data, var, aux)
     end
@@ -242,8 +262,10 @@ function fg!(
         g!(var, aux)
     end
     @debug "f dt, g dt" f_dt, g_dt
-    grad_norm = norm(var.G, 2) / (1.0 + normC)
-    primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
+    grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+
+    v = @view aux.primal_vio[1:m]
+    primal_vio_norm = norm(v, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
 
@@ -262,6 +284,7 @@ function SDP_S_eigval(
         AToper_preprocess!(var, aux)
     end
     n = size(aux.sparse_S, 1)
+    m = length(aux.primal_vio) - 1
     GenericArpack_dt = @elapsed begin
         op = ArpackSimpleFunctionOp(
             (y, x) -> begin
@@ -271,7 +294,7 @@ function SDP_S_eigval(
                 end
                 if aux.n_symlowrank_matrices > 0
                     for i = 1:aux.n_symlowrank_matrices
-                        coeff = aux.symlowrank_As_global_inds[i] == 0 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
+                        coeff = aux.symlowrank_As_global_inds[i] == m+1 ? one(Tv) : aux.y[aux.symlowrank_As_global_inds[i]]
                         mul!(y, aux.symlowrank_As[i], x, coeff, one(Tv))
                     end 
                 end
@@ -295,7 +318,8 @@ function surrogate_duality_gap(
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    AX = aux.primal_vio + data.b
+    v = @view aux.primal_vio[1:data.m]
+    AX = v + data.b
     AToper_preprocess!(var, aux)
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
@@ -311,12 +335,12 @@ function surrogate_duality_gap(
     end
 
     @show res[1]
-    duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(aux.primal_vio, AX + data.b)
-           - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0))     
-    val1 = sum(var.G .* var.R) / 2 
-    val2 = - max(trace_bound, sum((var.R).^2)) * min(res[1], 0.0)     
-    val3 = sum(var.λ .* aux.primal_vio)
-    val4 = - var.σ[] / 2 * sum(aux.primal_vio .* aux.primal_vio)
+    duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(v, AX + data.b)
+           - max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0))     
+    val1 = sum(var.Gt .* var.Rt) / 2 
+    val2 = - max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0)     
+    val3 = sum(var.λ .* v)
+    val4 = - var.σ[] / 2 * sum(v .* v)
     @show norm(var.λ)
     @show val1, val2, val3, val4
     @show duality_gap, val1 + val2 + val3 + val4
@@ -340,7 +364,8 @@ function DIMACS_errors(
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n = size(aux.sparse_S, 1)
-    err1 = norm(aux.primal_vio, 2) / (1.0 + norm(data.b, 2))       
+    v = @view aux.primal_vio[1:data.m] 
+    err1 = norm(v, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
     AToper_preprocess!(var, aux)
@@ -348,7 +373,7 @@ function DIMACS_errors(
     GenericArpack_evs, _ = SDP_S_eigval(var, aux, 1, true; which=:SA, ncv=min(100, n), maxiter=1000000)
     err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(data.C, 2))
     err5 = (var.obj[] - dot(var.λ, data.b)) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
-    err6 = dot(var.R, aux.sparse_S, var.R) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
+    err6 = dot(var.Rt, var.Rt * aux.sparse_S) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
     return [err1, err2, err3, err4, err5, err6]
 end
 
@@ -388,7 +413,7 @@ function approx_mineigval_lanczos(
 
     for i = 1:q
         iter += 1
-        AToper!(Av, aux, Btvs, v)
+        AToperR!(Av, aux, Btvs, v)
         alpha[i] = v' * Av
 
         if i == 1
@@ -419,10 +444,10 @@ function rank_update!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv}
-    n = size(var.R, 1)
+    n = size(var.Rt, 1)
     m = size(var.λ, 1)
     r = var.r[]
-    max_r = barvinok_pataki(size(var.R, 1), aux.n_symlowrank_matrices + aux.n_sparse_matrices-1)
+    max_r = barvinok_pataki(size(var.Rt, 1), aux.n_symlowrank_matrices + aux.n_sparse_matrices-1)
     newr = min(max_r, r * 2)
     newR = 2 * rand(Tv, n, newr) .- 1
     newλ = randn(m)

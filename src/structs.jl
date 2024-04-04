@@ -118,8 +118,8 @@ end
 
 
 struct SolverVars{Ti <: Integer,Tv}
-    R::Matrix{Tv}               # primal variables X = RR^T
-    G::Matrix{Tv}               # gradient w.r.t. R
+    Rt::Matrix{Tv}               # primal variables X = RR^T
+    Gt::Matrix{Tv}               # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
 
     r::Base.RefValue{Ti}                       # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ

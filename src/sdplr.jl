@@ -27,6 +27,7 @@ function sdplr(
     end
 
     preprocess_dt = @elapsed begin
+        m = length(As)
         sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
         symlowrank_cons = SymLowRankMatrix{Tv}[]
         # treat diagonal matrices as sparse matrices
@@ -60,13 +61,13 @@ function sdplr(
 
         if isa(C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
             push!(sparse_cons, C)
-            push!(sparse_As_global_inds, 0)
+            push!(sparse_As_global_inds, m+1)
         elseif isa(C, Diagonal)
             push!(sparse_cons, sparse(C))
-            push!(sparse_As_global_inds, 0)
+            push!(sparse_As_global_inds, m+1)
         elseif isa(C, SymLowRankMatrix)
             push!(symlowrank_cons, C)
-            push!(symlowrank_As_global_inds, 0)
+            push!(symlowrank_As_global_inds, m+1)
             s = size(C.B, 2)
             # s and r are usually really small compared with n
             push!(BtVs, zeros(Tv, (s, r)))
@@ -84,18 +85,16 @@ function sdplr(
         @info "$(res.bytes) bytes allocated during preprocessing sparse constraints." 
     
         n = size(C, 1)
-        m = length(As)
         nnz_agg_sparse_A = length(agg_sparse_A.rowval)
 
-        n = size(C, 1)
         # randomly initialize primal and dual variables
-        R0 = 2 .* rand(n, r) .- 1
+        Rt0 = 2 .* rand(r, n) .- 1
         λ0 = randn(m)
 
         data = SDPData(n, m, C, As, b)
         var = SolverVars(
-            R0,
-            zeros(Tv, size(R0)),
+            Rt0,
+            zeros(Tv, size(Rt0)),
             λ0,
             Ref(r),
             Ref(2.0),
@@ -113,7 +112,7 @@ function sdplr(
             triu_agg_sparse_A,
             agg_sparse_A,
             zeros(Tv, nnz_agg_sparse_A), 
-            zeros(Tv, m), zeros(Tv, m),
+            zeros(Tv, m+1), zeros(Tv, m+1),
 
             length(symlowrank_cons),
             symlowrank_cons, 
@@ -121,8 +120,8 @@ function sdplr(
             BtVs,
             BtUs,
 
-            zeros(Tv, m), 
-            zeros(Tv, m),
+            zeros(Tv, m+1), 
+            zeros(Tv, m+1),
         )
         stats = SolverStats(
             Ref(zero(Tv)),
@@ -151,10 +150,11 @@ function _sdplr(
     stats::SolverStats{Ti, Tv},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    n = data.n 
+    n = data.n # size of decision variables 
+    m = data.m # number of constraints
     stats.starttime[] = time()
     lastprint = stats.starttime[] # timestamp of last print
-    R0 = deepcopy(var.R) 
+    Rt0 = deepcopy(var.Rt) 
     λ0 = deepcopy(var.λ)
 
     # set up algorithm parameters
@@ -163,7 +163,7 @@ function _sdplr(
     best_dualbd = -1.0e20
 
     # initialize lbfgs datastructures
-    lbfgshis = lbfgs_init(var.R, config.numlbfgsvecs)
+    lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
 
     cur_gtol = 1.0 / var.σ[]     # stationarity tolerance
     cur_ptol = 1.0 / var.σ[]^0.1   # primal violation tolerance
@@ -171,7 +171,7 @@ function _sdplr(
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     iter = 0 # total number of iterations
 
-    dir = similar(var.R)
+    dirt = similar(var.Rt)
     majoriter = 0
 
 
@@ -191,31 +191,32 @@ function _sdplr(
             # find the lbfgs direction
             # the return direction has been negated
             lbfgs_dir_dt = @elapsed begin
-                lbfgs_dir!(dir, lbfgshis, var.G, negate=true)
+                lbfgs_dir!(dirt, lbfgshis, var.Gt, negate=true)
             end
             @debug "lbfgs dir dt" lbfgs_dir_dt
 
-            descent = dot(dir, var.G)
+            descent = dot(dirt, var.Gt)
             if isnan(descent) || descent >= 0 # not a descent direction
-                BLAS.scal!(-one(Tv), var.G)
-                copyto!(dir, var.G) # reverse back to gradient direction
+                BLAS.scal!(-one(Tv), var.Gt)
+                copyto!(dirt, var.Gt) # reverse back to gradient direction
             end
 
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α ,𝓛_val = linesearch!(var, aux, dir, α_max=1.0, update=true) 
+                α ,𝓛_val = linesearch!(var, aux, dirt, α_max=1.0, update=true) 
             end
             @debug "line search time" linesearch_dt
 
             # update R and update gradient, stationarity, primal violence
-            axpy!(α, dir, var.R)
+            axpy!(α, dirt, var.Rt)
             g_dt = @elapsed begin
                 g!(var, aux)
             end
             @debug "g time" g_dt
-            grad_norm = norm(var.G, 2) / (1.0 + normC)
-            primal_vio_norm = norm(aux.primal_vio, 2) / (1.0 + normb)
+            grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+            v = @view aux.primal_vio[1:m]
+            primal_vio_norm = norm(v, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
@@ -225,7 +226,7 @@ function _sdplr(
             end
             # update lbfgs vectors
             if config.numlbfgsvecs > 0 
-                lbfgs_update!(dir, lbfgshis, var.G, α)
+                lbfgs_update!(dirt, lbfgshis, var.Gt, α)
             end
 
             current_time = time()
@@ -289,12 +290,14 @@ function _sdplr(
                         rank_double = true
                     end
                     #last_rel_duality_bound = rel_duality_bound
-                    axpy!(-var.σ[], aux.primal_vio, var.λ)
+                    v = @view aux.primal_vio[1:m]
+                    axpy!(-var.σ[], v, var.λ)
                     cur_ptol = cur_ptol / var.σ[]^0.9
                     cur_gtol = cur_gtol / var.σ[]
                 end
             else
-                axpy!(-var.σ[], aux.primal_vio, var.λ)
+                v = @view aux.primal_vio[1:m]
+                axpy!(-var.σ[], v, var.λ)
                 cur_ptol = cur_ptol / var.σ[]^0.9
                 cur_gtol = cur_gtol / var.σ[]
             end
@@ -312,11 +315,11 @@ function _sdplr(
             var = rank_update!(var, aux)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
-            lbfgshis = lbfgs_init(var.R, config.numlbfgsvecs)
-            dir = similar(var.R)
+            lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
+            dirt = similar(var.Rt)
             min_rel_duality_gap = 1e20
             rankupd_tol_cnt = config.rankupd_tol
-            @info "rank doubled." "newrank is $(size(var.R, 2))."
+            @info "rank doubled." "newrank is $(size(var.Rt, 2))."
         else
             lbfgs_clear!(lbfgshis)
         end
@@ -348,9 +351,9 @@ function _sdplr(
     @show rel_duality_bound
     @show DIMACS_errs
     return Dict([
-        "R" => var.R,
+        "Rt" => var.Rt,
         "lambda" => var.λ,
-        "R0" => R0,
+        "Rt0" => Rt0,
         "lambda0" => λ0,
         "sigma" => var.σ[],
         "grad_norm" => grad_norm,
@@ -372,7 +375,7 @@ function _sdplr(
         "objtol" => config.objtol,
         "fprec" => config.fprec,
         "rankupd_tol" => config.rankupd_tol,
-        "r" => size(var.R, 2),
+        "r" => size(var.Rt, 1),
     ])
 end
 
