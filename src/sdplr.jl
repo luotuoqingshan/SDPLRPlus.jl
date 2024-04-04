@@ -204,7 +204,7 @@ function _sdplr(
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α ,𝓛_val = linesearch!(var, aux, dirt, α_max=1.0, update=true) 
+                α ,𝓛_val = linesearch!(var, aux, dirt, α_max=1.0) 
             end
             @debug "line search time" linesearch_dt
 

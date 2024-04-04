@@ -6,7 +6,6 @@ function linesearch!(
     aux::SolverAuxiliary{Ti, Tv},
     Dt::Matrix{Tv};
     α_max = one(Tv),
-    update = true,
 ) where{Ti <: Integer, Tv}
     m = length(aux.primal_vio)-1
     # evaluate 𝓐(RDᵀ + DRᵀ)
@@ -102,13 +101,12 @@ function linesearch!(
         end
     end
 
-    if update == true 
-        # notice that 
-        # 𝓐((R + αD)(R + αD)ᵀ) =   
-        # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-        @. aux.primal_vio += α_star * (α_star * aux.A_DD + aux.A_RD)
-        var.obj[] = aux.primal_vio[m+1]
-    end
+    # update the primal violation and function value
+    # notice that 
+    # 𝓐((R + αD)(R + αD)ᵀ) =   
+    # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
+    @. aux.primal_vio += α_star * (α_star * aux.A_DD + aux.A_RD)
+    var.obj[] = aux.primal_vio[m+1]
 
     return α_star, f_star 
 end
