@@ -130,7 +130,8 @@ function preprocess_sparsecons(
             end
         end
     end
-    return (triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, 
-           triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, 
-           agg_sparse_A_mappedto_triu)
+    return (triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
+            triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
+            triu_agg_sparse_A_nzval_two, agg_sparse_A, 
+            agg_sparse_A_mappedto_triu)
 end

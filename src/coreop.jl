@@ -112,7 +112,11 @@ function tr_UtAU(A::SymLowRankMatrix{Tv}, Ut::Matrix{Tv}) where {Tv}
     return sum(UtB)
 end
 
-function tr_UtAV(A::SymLowRankMatrix{Tv}, Ut::Matrix{Tv}, Vt::Matrix{Tv}) where {Tv}
+function tr_UtAV(
+    A::SymLowRankMatrix{Tv}, 
+    Ut::Matrix{Tv}, 
+    Vt::Matrix{Tv}
+) where {Tv}
     UtB = Ut * A.B
     VtB = Vt * A.B
     @. UtB *= VtB
@@ -300,14 +304,16 @@ function g!(
     densesparse_dt = @elapsed begin
         𝒜t!(var.Gt, var.Rt, aux)
     end
-    @debug "𝒜t_preprocess_dt: $𝒜t_preprocess_dt, densesparse_dt: $densesparse_dt"
+    @debug ("𝒜t_preprocess_dt: $𝒜t_preprocess_dt, 
+        densesparse_dt: $densesparse_dt")
     BLAS.scal!(Tv(2), var.Gt)
     return 0
 end
 
 
 """
-Function for computing Lagrangian value, stationary condition and primal feasibility
+Function for computing Lagrangian value, stationary condition 
+and primal feasibility.
 """
 function fg!(
     data::SDPData{Ti, Tv, TC},
@@ -376,7 +382,9 @@ function surrogate_duality_gap(
     res = lanczos_eigenval
     if highprecision
         n = size(aux.sparse_S, 1)
-        GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(var, aux, 1, true; which=:SA, ncv=min(100, n), tol=1e-6, maxiter=1000000)
+        GenericArpack_evs, GenericArpack_dt = 
+            SDP_S_eigval(var, aux, 1, true; which=:SA,
+                         ncv=min(100, n), tol=1e-6, maxiter=1000000)
         res = GenericArpack_evs[1]
     else
         GenericArpack_dt = 0.0
@@ -384,8 +392,9 @@ function surrogate_duality_gap(
     end
 
     @show res[1]
-    duality_gap = (var.obj[] - dot(var.λ, data.b) + var.σ[]/2 * dot(v, AX + data.b)
-           - max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0))     
+    duality_gap = (var.obj[] - dot(var.λ, data.b) + 
+             var.σ[]/2 * dot(v, AX + data.b) - 
+             max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0))     
     val1 = sum(var.Gt .* var.Rt) / 2 
     val2 = - max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0)     
     val3 = sum(var.λ .* v)
@@ -394,7 +403,8 @@ function surrogate_duality_gap(
     @show val1, val2, val3, val4
     @show duality_gap, val1 + val2 + val3 + val4
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
-    return lanczos_dt, lanczos_eigenval, GenericArpack_dt, GenericArpack_evs[1], duality_gap, rel_duality_gap 
+    return lanczos_dt, lanczos_eigenval, GenericArpack_dt, 
+           GenericArpack_evs[1], duality_gap, rel_duality_gap
 end
 
 
@@ -419,10 +429,15 @@ function DIMACS_errors(
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
     𝒜t_preprocess!(var, aux)
 
-    GenericArpack_evs, _ = SDP_S_eigval(var, aux, 1, true; which=:SA, ncv=min(100, n), maxiter=1000000)
-    err4 = max(zero(Tv), -real.(GenericArpack_evs[1])) / (1.0 + norm(data.C, 2))
-    err5 = (var.obj[] - dot(var.λ, data.b)) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
-    err6 = dot(var.Rt, var.Rt * aux.sparse_S) / (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b)))
+    GenericArpack_evs, _ = 
+        SDP_S_eigval(var, aux, 1, true; 
+                    which=:SA, ncv=min(100, n), maxiter=1000000)
+    err4 = (max(zero(Tv), -real.(GenericArpack_evs[1])) 
+            / (1.0 + norm(data.C, 2)))
+    err5 = ((var.obj[] - dot(var.λ, data.b)) / 
+            (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b))))
+    err6 = (dot(var.Rt, var.Rt * aux.sparse_S) / 
+            (1.0 + abs(var.obj[]) + abs(dot(var.λ, data.b))))
     return [err1, err2, err3, err4, err5, err6]
 end
 
@@ -484,7 +499,8 @@ function approx_mineigval_lanczos(
     alpha .+= 1
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
     @info "Symmetric tridiagonal matrix formed."
-    min_eigval, _ = symeigs(B, 1; which=:SA, ncv=min(100, n), maxiter=1000000, tol=1e-6)
+    min_eigval, _ = 
+        symeigs(B, 1; which=:SA, ncv=min(100, n), maxiter=1000000, tol=1e-6)
     return real.(min_eigval)[1] - 1 # cancel the shift
 end
 

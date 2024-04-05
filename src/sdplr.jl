@@ -28,7 +28,8 @@ function sdplr(
 
     preprocess_dt = @elapsed begin
         m = length(As)
-        sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
+        (sparse_cons = 
+            Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[])
         symlowrank_cons = SymLowRankMatrix{Tv}[]
         # treat diagonal matrices as sparse matrices
         sparse_As_global_inds = Ti[]
@@ -66,11 +67,12 @@ function sdplr(
         end
         @info "Finish classifying constraints."
         res = @timed begin
-            triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, 
-            triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, 
+            triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
+            triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
+            triu_agg_sparse_A_nzval_two, agg_sparse_A, 
             agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
         end
-        @info "$(res.bytes) bytes allocated during preprocessing sparse constraints." 
+        @debug "$(res.bytes)B allocated during preprocessing constraints." 
     
         n = size(C, 1)
         nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
@@ -99,26 +101,26 @@ function sdplr(
 
             triu_agg_sparse_A,
             agg_sparse_A,
-            zeros(Tv, nnz_triu_agg_sparse_A), 
-            zeros(Tv, m+1), zeros(Tv, m+1),
+            zeros(Tv, nnz_triu_agg_sparse_A), # UVt
+            zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
 
-            length(symlowrank_cons),
+            length(symlowrank_cons), #n_symlowrank_matrices
             symlowrank_cons, 
             symlowrank_As_global_inds,
 
-            zeros(Tv, m+1), 
-            zeros(Tv, m+1),
+            zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
+            zeros(Tv, m+1), # primal_vio
         )
         stats = SolverStats(
-            Ref(zero(Tv)),
-            Ref(zero(Tv)),
-            Ref(zero(Tv)),
-            Ref(zero(Tv)),
+            Ref(zero(Tv)), # starttime
+            Ref(zero(Tv)), # endtime
+            Ref(zero(Tv)), # time spent on lanczos with random start
+            Ref(zero(Tv)), # time spent on GenericArpack
             Ti[],
             Tv[],
             Tv[],
-            Ref(zero(Tv)),
-            Ref(zero(Tv)),
+            Ref(zero(Tv)), # primal time
+            Ref(zero(Tv)), # DIMACS time
         )
     end
     @debug "preprocess dt" preprocess_dt
@@ -253,7 +255,8 @@ function _sdplr(
             if primal_vio_norm <= config.ptol 
                 @info "primal vio is small enough, checking duality bound."
                 eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-                lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, _, rel_duality_bound = 
+                lanczos_dt, lanczos_eigval, GenericArpack_dt, 
+                GenericArpack_eigval, _, rel_duality_bound = 
                     surrogate_duality_gap(data, var, aux, 
                     config.prior_trace_bound, eig_iter;highprecision=false)  
                 stats.dual_lanczos_time[] += lanczos_dt
@@ -263,7 +266,8 @@ function _sdplr(
                 push!(stats.GenericArpack_eigvals, GenericArpack_eigval)
                 @info "rel_duality_bound" rel_duality_bound
                 if rel_duality_bound <= config.objtol
-                    @info "Duality gap and primal violence are small enough." primal_vio_norm rel_duality_bound grad_norm
+                    @info "Duality gap and primal violence are small enough." 
+                    @info  primal_vio_norm rel_duality_bound grad_norm
                     break
                 else
                     if min_rel_duality_gap - rel_duality_bound < config.objtol
@@ -271,7 +275,8 @@ function _sdplr(
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
-                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
+                    (min_rel_duality_gap = 
+                        min(min_rel_duality_gap, rel_duality_bound))
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
@@ -320,7 +325,13 @@ function _sdplr(
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     println("Done")
     eig_iter = Ti(ceil(2*max(iter, 1.0/config.objtol)^0.5*log(n))) 
-    lanczos_dt, lanczos_eigval, GenericArpack_dt, GenericArpack_eigval, duality_bound, rel_duality_bound = surrogate_duality_gap(data, var, aux, config.prior_trace_bound, eig_iter;highprecision=true)  
+
+    lanczos_dt, lanczos_eigval, GenericArpack_dt, 
+        GenericArpack_eigval, duality_bound, 
+        rel_duality_bound = surrogate_duality_gap(
+            data, var, aux, config.prior_trace_bound, eig_iter;
+            highprecision=true)
+
     stats.dual_lanczos_time[] += lanczos_dt
     stats.dual_GenericArpack_time[] += GenericArpack_dt
     push!(stats.checkdualbd_iters, iter)
@@ -329,7 +340,8 @@ function _sdplr(
 
     stats.endtime[] = time()
     totaltime = stats.endtime[] - stats.starttime[]
-    stats.primal_time[] = totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
+    (stats.primal_time[] = 
+        totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[])
     stats.DIMACS_time[] = @elapsed begin
         DIMACS_errs = DIMACS_errors(data, var, aux)
     end

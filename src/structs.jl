@@ -4,7 +4,8 @@
 Symmetric low-rank matrix of the form BDBᵀ with elements of type `T`.
 Besides the diagonal matrix `D` and the thin matrix `B`,
 we also store the transpose of `B` as `Bt`.
-It's because usually `B` is really thin, storing `Bt` doesn't cost too much more storage
+It's because usually `B` is really thin, 
+storing `Bt` doesn't cost too much more storage
 but will save allocation during computation.
 """
 struct SymLowRankMatrix{T} <: AbstractMatrix{T}
@@ -27,10 +28,15 @@ end
 
 
 LinearAlgebra.size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
-Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
+(Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) 
+    = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j]))
 
 
-function LinearAlgebra.show(io::IO, mime::MIME{Symbol("text/plain")}, A::SymLowRankMatrix)
+function LinearAlgebra.show(
+    io::IO, 
+    mime::MIME{Symbol("text/plain")}, 
+    A::SymLowRankMatrix,
+)
     summary(io, A) 
     println(io)
     println(io, "SymLowRankMatrix of form BDBᵀ.")
@@ -77,7 +83,8 @@ end
 """
     mul!(Y, A, X)
 
-Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` with an AbstractArray `X`.
+Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` 
+with an AbstractArray `X`.
 """
 function LinearAlgebra.mul!(
     Y::AbstractVecOrMat{Tv}, 
@@ -103,7 +110,8 @@ end
 """
     mul!(Y, A, X, α, β)
 
-Compute `Y = α * A * X + β * Y` where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
+Compute `Y = α * A * X + β * Y` 
+where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
     Y::AbstractVecOrMat{Tv}, 
@@ -145,9 +153,9 @@ struct SolverVars{Ti <: Integer,Tv}
     Gt::Matrix{Tv}               # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
 
-    r::Base.RefValue{Ti}                       # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
-    σ::Base.RefValue{Tv}                       # penalty parameter
-    obj::Base.RefValue{Tv}                     # objective
+    r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
+    σ::Base.RefValue{Tv}        # penalty parameter
+    obj::Base.RefValue{Tv}      # objective
 end
 
 
