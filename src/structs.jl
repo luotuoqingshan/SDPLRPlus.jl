@@ -77,16 +77,26 @@ end
 """
     mul!(Y, A, X)
 
-Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` with an AbstractVector `X`.
+Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` with an AbstractArray `X`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractVector{Tv}, 
+    Y::AbstractArray{Tv}, 
     A::SymLowRankMatrix{Tv},
-    X::AbstractVector{Tv},
+    X::AbstractArray{Tv},
 ) where {Tv}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX)
+end
+
+function LinearAlgebra.mul!(
+    Y::AbstractArray{Tv}, 
+    X::AbstractArray{Tv},
+    A::SymLowRankMatrix{Tv},
+) where {Tv}
+    XB = X * A.B 
+    rmul!(XB, A.D)
+    mul!(Y, XB, A.Bt)
 end
 
 
@@ -96,15 +106,28 @@ end
 Compute `Y = α * A * X + β * Y` where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractVector{Tv}, 
+    Y::AbstractArray{Tv}, 
     A::SymLowRankMatrix{Tv},
-    X::AbstractVector{Tv},
+    X::AbstractArray{Tv},
     α::Tv,
     β::Tv,
 ) where{Tv}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX, α, β)
+end
+
+
+function LinearAlgebra.mul!(
+    Y::AbstractArray{Tv}, 
+    X::AbstractArray{Tv},
+    A::SymLowRankMatrix{Tv},
+    α::Tv,
+    β::Tv,
+) where{Tv}
+    XB = X * A.B 
+    rmul!(XB, A.D)
+    mul!(Y, XB, A.Bt, α, β)
 end
 
 
@@ -148,8 +171,6 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
-    BtVs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * V
-    BtUs::Vector{Matrix{Tv}}    # pre-allocated to store Bᵀ * U
 
     y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
     primal_vio::Vector{Tv}      # violation of constraints

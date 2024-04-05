@@ -10,13 +10,13 @@ function linesearch!(
     m = length(aux.primal_vio)-1
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
-        𝒜!(aux.A_RD, aux.UVt, aux, var.Rt, Dt; same=false)
+        𝒜!(aux.A_RD, aux.UVt, aux, var.Rt, Dt)
     end
     # remember we divide it by 2 in Aoper, now scale back
     aux.A_RD .*= 2.0
     # evaluate 𝓐(DDᵀ)
     DD_dt = @elapsed begin
-        𝒜!(aux.A_DD, aux.UVt, aux, Dt, Dt; same=true)
+        𝒜!(aux.A_DD, aux.UVt, aux, Dt, Dt)
     end
     @debug "RD_dt, DD_dt" RD_dt, DD_dt
 

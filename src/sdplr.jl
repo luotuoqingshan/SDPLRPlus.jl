@@ -34,10 +34,6 @@ function sdplr(
         sparse_As_global_inds = Ti[]
         symlowrank_As_global_inds = Ti[]
     
-        # pre-allocate intermediate variables
-        # for low-rank matrix evaluations
-        BtVs = Matrix{Tv}[]
-        BtUs = Matrix{Tv}[]
         for (i, A) in enumerate(As)
             if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
                 push!(sparse_cons, A)
@@ -48,10 +44,6 @@ function sdplr(
             elseif isa(A, SymLowRankMatrix)
                 push!(symlowrank_cons, A)
                 push!(symlowrank_As_global_inds, i)
-                s = size(A.B, 2)
-                # s and r are usually really small compared with n
-                push!(BtVs, zeros(Tv, (s, r)))
-                push!(BtUs, zeros(Tv, (s, r)))
             else
                 @error "Currently only sparse\
                 /symmetric low-rank\
@@ -68,10 +60,6 @@ function sdplr(
         elseif isa(C, SymLowRankMatrix)
             push!(symlowrank_cons, C)
             push!(symlowrank_As_global_inds, m+1)
-            s = size(C.B, 2)
-            # s and r are usually really small compared with n
-            push!(BtVs, zeros(Tv, (s, r)))
-            push!(BtUs, zeros(Tv, (s, r)))
         else
             @error "Currently only sparse\
             /lowrank/diagonal objectives are supported."
@@ -85,7 +73,7 @@ function sdplr(
         @info "$(res.bytes) bytes allocated during preprocessing sparse constraints." 
     
         n = size(C, 1)
-        nnz_agg_sparse_A = length(agg_sparse_A.rowval)
+        nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
 
         # randomly initialize primal and dual variables
         Rt0 = 2 .* rand(r, n) .- 1
@@ -111,14 +99,12 @@ function sdplr(
 
             triu_agg_sparse_A,
             agg_sparse_A,
-            zeros(Tv, nnz_agg_sparse_A), 
+            zeros(Tv, nnz_triu_agg_sparse_A), 
             zeros(Tv, m+1), zeros(Tv, m+1),
 
             length(symlowrank_cons),
             symlowrank_cons, 
             symlowrank_As_global_inds,
-            BtVs,
-            BtUs,
 
             zeros(Tv, m+1), 
             zeros(Tv, m+1),
@@ -312,7 +298,7 @@ function _sdplr(
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
-            var = rank_update!(var, aux)
+            var = rank_update!(var)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
