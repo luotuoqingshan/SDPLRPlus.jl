@@ -492,12 +492,12 @@ end
 function rank_update!(
     var::SolverVars{Ti, Tv},
 ) where {Ti <: Integer, Tv}
-    n = size(var.Rt, 1)
+    n = size(var.Rt, 2)
     m = size(var.λ, 1)
     r = var.r[]
     max_r = barvinok_pataki(n, m)
     newr = min(max_r, r * 2)
-    newR = 2 * rand(Tv, n, newr) .- 1
+    newR = 2 * rand(Tv, newr, n) .- 1
     newλ = randn(m)
 
     return SolverVars(
