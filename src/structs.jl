@@ -50,7 +50,7 @@ Currently support `p` ∈ [2, Inf].
 function LinearAlgebra.norm(
     A::SymLowRankMatrix{Tv},
     p::Real,
-) where {Tv}
+) where {Tv <: Number}
     # norm is usually not performance critical
     # so we don't do too much preallocation
     n = size(A.B, 1)
@@ -80,20 +80,20 @@ end
 Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ` with an AbstractArray `X`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractArray{Tv}, 
+    Y::AbstractVecOrMat{Tv}, 
     A::SymLowRankMatrix{Tv},
-    X::AbstractArray{Tv},
-) where {Tv}
+    X::AbstractVecOrMat{Tv},
+) where {Tv <: Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX)
 end
 
 function LinearAlgebra.mul!(
-    Y::AbstractArray{Tv}, 
-    X::AbstractArray{Tv},
+    Y::AbstractMatrix{Tv}, 
+    X::AbstractVecOrMat{Tv},
     A::SymLowRankMatrix{Tv},
-) where {Tv}
+) where {Tv <: Number}
     XB = X * A.B 
     rmul!(XB, A.D)
     mul!(Y, XB, A.Bt)
@@ -106,12 +106,12 @@ end
 Compute `Y = α * A * X + β * Y` where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractArray{Tv}, 
+    Y::AbstractVecOrMat{Tv}, 
     A::SymLowRankMatrix{Tv},
-    X::AbstractArray{Tv},
+    X::AbstractVecOrMat{Tv},
     α::Tv,
     β::Tv,
-) where{Tv}
+) where{Tv <: Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX, α, β)
@@ -119,12 +119,12 @@ end
 
 
 function LinearAlgebra.mul!(
-    Y::AbstractArray{Tv}, 
-    X::AbstractArray{Tv},
+    Y::AbstractMatrix{Tv}, 
+    X::AbstractVecOrMat{Tv},
     A::SymLowRankMatrix{Tv},
     α::Tv,
     β::Tv,
-) where{Tv}
+) where{Tv <: Number}
     XB = X * A.B 
     rmul!(XB, A.D)
     mul!(Y, XB, A.Bt, α, β)
