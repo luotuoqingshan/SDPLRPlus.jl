@@ -1,6 +1,6 @@
-name = "SDPLR-jl"
+name = "SDPLR"
 uuid = "9040bce9-cc75-4a86-9224-0257f72befc6"
-authors = ["luotuoqingshan <2019hyf@gmail.com>"]
+authors = ["Yufan Huang <huan1754@purdue.edu>"]
 version = "0.1.0"
 
 [deps]
