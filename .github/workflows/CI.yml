@@ -66,9 +66,9 @@ jobs:
   #     - run: |
   #         julia --project=docs -e '
   #           using Documenter: doctest
-  #           using SDPLR-jl
-  #           DocMeta.setdocmeta!(SDPLR-jl, :DocTestSetup, :(using SDPLR-jl); recursive=true)
-  #           doctest(SDPLR-jl)'
+  #           using SDPLR
+  #           DocMeta.setdocmeta!(SDPLR, :DocTestSetup, :(using SDPLR); recursive=true)
+  #           doctest(SDPLR)'
   #     - run: julia --project=docs docs/make.jl
   #       env:
   #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

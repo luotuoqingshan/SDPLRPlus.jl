@@ -1,3 +1,3 @@
-# SDPLR-jl
+# SDPLR
 
 *Documentation goes here.*
