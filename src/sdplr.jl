@@ -221,9 +221,9 @@ function _sdplr(
             if current_time - lastprint >= config.printfreq
                 lastprint = current_time
                 if config.printlevel > 0
-                    printintermediate(majoriter, localiter, iter, 𝓛_val, 
-                              var.obj[], grad_norm, primal_vio_norm, 
-                              best_dualbd)
+                    printintermediate(config.dataset, majoriter, 
+                              localiter, iter, 𝓛_val, var.obj[], grad_norm,
+                              primal_vio_norm, best_dualbd)
                 end
             end   
 
@@ -235,7 +235,7 @@ function _sdplr(
 
 
         current_time = time()
-        printintermediate(majoriter, localiter, iter, 𝓛_val, 
+        printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val, 
                   var.obj[], grad_norm, primal_vio_norm, best_dualbd)
         lastprint = current_time
 
@@ -376,5 +376,3 @@ function _sdplr(
         "r" => size(var.Rt, 1),
     ])
 end
-
-

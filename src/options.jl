@@ -11,4 +11,5 @@
     fprec::Tv = 1e3
     rankupd_tol::Ti = 2
     prior_trace_bound::Tv = 1e18
+    dataset::String = ""
 end

@@ -1,42 +1,45 @@
 module SDPLR
-    using Random                      
 
-    # linear algebra
-    using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse, MKL
+export sdplr
 
-    # eig computation
-    using GenericArpack
+using Random                      
 
-    # key data structures defined for the solver 
-    include("structs.jl")
-    export SymLowRankMatrix
+# linear algebra
+using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse, MKL
 
-    # core operations
-    include("coreop.jl")
+# eig computation
+using GenericArpack
 
-    # L-BFGS
-    include("lbfgs.jl")
+# key data structures defined for the solver 
+include("structs.jl")
+export SymLowRankMatrix
 
-    # line search
-    using Polynomials, PolynomialRoots
-    include("linesearch.jl")
+# core operations
+include("coreop.jl")
 
-    # printing functions
-    using Printf
-    include("myprint.jl")
+# L-BFGS
+include("lbfgs.jl")
 
-    # options
-    using Parameters
-    include("options.jl")
+# line search
+using Polynomials, PolynomialRoots
+include("linesearch.jl")
 
-    # preprocessing
-    include("preprocess.jl")
+# printing functions
+using Printf
+include("myprint.jl")
 
-    # utils 
-    include("utils.jl")
+# options
+using Parameters
+include("options.jl")
 
-    # main function
-    include("sdplr.jl")
+# preprocessing
+include("preprocess.jl")
 
-    export sdplr
+# utils 
+include("utils.jl")
+
+# main function
+include("sdplr.jl")
+
+
 end

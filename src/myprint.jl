@@ -1,7 +1,7 @@
 function printheading(start)
     if start == 1 # print start heading
         println("="^121)
-        println((" "^40)*"SDPLR.jl: A julia reimplementation of SDPLR"*(" "^30))
+        println((" "^29)*"SDPLR.jl: a julia implementation of SDPLR with objval gap bound"*(" "^29))
         println("="^121)
     else
         println("="^121)
@@ -11,6 +11,7 @@ function printheading(start)
 end
 
 function printintermediate(
+    dataset::String,
     majoriter::Int,
     localiter::Int,
     iter::Int,
@@ -20,11 +21,11 @@ function printintermediate(
     primal_vio_norm::Float64,
     dual_bound::Float64,
 )
-    println("Major Iter"*(" "^3)*"Local Iter"*(" "^3)*"Total Iter"*(" "^3)
-            *"Lagrangian Val"*(" "^3)*"Objective Val"*(" "^3)*"Stationarity"*(" "^3)
-            *"Primal Feasibility"*(" "^3)*"Duality Bound")
-    @printf("%10d   %10d   %10d   %14e   %13e   %12e   %18e   %13e\n",
-            majoriter, localiter, iter, 𝓛_val,
+    @printf("%12s  %10s  %10s  %10s  %12s  %12s  %12s  %12s  %12s\n",
+            "dataset", "majoriter", "localiter", "totaliter", "Lagranval",
+            "objval", "gradnorm", "pvio val", "objgap")
+    @printf("%12s %10d  %10d  %10d  %12.3e  %12.3e  %12.3e  %12.3e  %12.3e\n",
+            dataset, majoriter, localiter, iter, 𝓛_val,
             obj, grad_norm, primal_vio_norm, dual_bound)
 end
 
