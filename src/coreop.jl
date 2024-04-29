@@ -224,17 +224,35 @@ function 𝒜t_preprocess_sparse!(
 end
 
 
-function 𝒜t_preprocess!(
+function copy2y_λ_sub_pvio!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv}
-    # update auxiliary vector y based on primal violence and λ
-    # and then update the sparse matrix
+)where {Ti <: Integer, Tv}  
     m = length(aux.primal_vio)-1
     @inbounds @simd for i = 1:m
         aux.y[i] = -(var.λ[i] - var.σ[] * aux.primal_vio[i])
     end 
     aux.y[m+1] = one(Tv)
+end
+
+
+function copy2y_λ!(
+    var::SolverVars{Ti, Tv},
+    aux::SolverAuxiliary{Ti, Tv},
+)where {Ti <: Integer, Tv}
+    m = length(aux.primal_vio)-1
+    @inbounds @simd for i = 1:m
+        aux.y[i] = -var.λ[i]
+    end 
+    aux.y[m+1] = one(Tv)
+end
+
+
+function 𝒜t_preprocess!(
+    aux::SolverAuxiliary{Ti, Tv},
+) where {Ti <: Integer, Tv}
+    # update the sparse matrix
+    # compute C - ∑_{i=1}^{m} λ_i A_i for sparse matrices
 
     if aux.n_sparse_matrices > 0
         v = aux.y[aux.sparse_As_global_inds]
@@ -299,7 +317,8 @@ function g!(
     aux::SolverAuxiliary{Ti, Tv},
 ) where{Ti <: Integer, Tv}
     𝒜t_preprocess_dt = @elapsed begin
-        𝒜t_preprocess!(var, aux)
+        copy2y_λ_sub_pvio!(var, aux)
+        𝒜t_preprocess!(aux)
     end
     densesparse_dt = @elapsed begin
         𝒜t!(var.Gt, var.Rt, aux)
@@ -346,7 +365,7 @@ function SDP_S_eigval(
     kwargs...
 ) where {Ti <: Integer, Tv}
     if !preprocessed
-        𝒜t_preprocess!(var, aux)
+        𝒜t_preprocess!(aux)
     end
     n = size(aux.sparse_S, 1)
     GenericArpack_dt = @elapsed begin
@@ -375,7 +394,10 @@ function surrogate_duality_gap(
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     v = @view aux.primal_vio[1:data.m]
     AX = v + data.b
-    𝒜t_preprocess!(var, aux)
+
+    copy2y_λ_sub_pvio!(var, aux)
+
+    𝒜t_preprocess!(aux)
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
     end
@@ -391,20 +413,42 @@ function surrogate_duality_gap(
         GenericArpack_evs = [0.0]
     end
 
+
     @show res[1]
-    duality_gap = (var.obj[] - dot(var.λ, data.b) + 
-             var.σ[]/2 * dot(v, AX + data.b) - 
-             max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0))     
-    val1 = sum(var.Gt .* var.Rt) / 2 
-    val2 = - max(trace_bound, sum((var.Rt).^2)) * min(res[1], 0.0)     
-    val3 = sum(var.λ .* v)
-    val4 = - var.σ[] / 2 * sum(v .* v)
-    @show norm(var.λ)
-    @show val1, val2, val3, val4
-    @show duality_gap, val1 + val2 + val3 + val4
+    m = length(data.b)
+    duality_gap = (var.obj[] + dot(aux.y[1:m], data.b) - 
+             trace_bound * min(res[1], 0.0))     
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
+
+    copy2y_λ!(var, aux)
+    𝒜t_preprocess!(aux)
+    lanczos_dt = @elapsed begin
+        lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
+    end
+    res1 = lanczos_eigenval
+    if highprecision
+        n = size(aux.sparse_S, 1)
+        GenericArpack_evs, GenericArpack_dt = 
+            SDP_S_eigval(var, aux, 1, true; which=:SA,
+                         ncv=min(100, n), tol=1e-6, maxiter=1000000)
+        res1 = GenericArpack_evs[1]
+    else
+        GenericArpack_dt = 0.0
+        GenericArpack_evs = [0.0]
+    end
+
+    dualval1 = dot(var.λ, data.b) + trace_bound * min(res1[1], 0.0)
+    duality_gap1 = (var.obj[] - dualval1)
+    rel_duality_gap1 = duality_gap1 / max(one(Tv), abs(var.obj[]))
+
+    if duality_gap1 < duality_gap
+        duality_gap = duality_gap1
+        rel_duality_gap = rel_duality_gap1
+        res = res1
+    end
+
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, 
-           GenericArpack_evs[1], duality_gap, rel_duality_gap
+           res[1], duality_gap, rel_duality_gap
 end
 
 
@@ -427,7 +471,9 @@ function DIMACS_errors(
     err1 = norm(v, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
-    𝒜t_preprocess!(var, aux)
+
+    copy2y_λ!(var, aux)
+    𝒜t_preprocess!(aux)
 
     GenericArpack_evs, _ = 
         SDP_S_eigval(var, aux, 1, true; 
