@@ -559,12 +559,16 @@ function rank_update!(
     r = var.r[]
     max_r = barvinok_pataki(n, m)
     newr = min(max_r, r * 2)
-    newR = 2 * rand(Tv, newr, n) .- 1
+
+    perturb_level = 1e-5 
+    newRt = [var.Rt; perturb_level * randn(Tv, newr - r, n)] 
+
+    # newR = 2 * rand(Tv, newr, n) .- 1
     newλ = randn(m)
 
     return SolverVars(
-        newR, 
-        zeros(Tv, size(newR)), 
+        newRt, 
+        zeros(Tv, size(newRt)), 
         newλ, 
         Ref(Ti(newr)),
         Ref(Tv(2.0)),
