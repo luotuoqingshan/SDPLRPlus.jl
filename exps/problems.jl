@@ -56,8 +56,8 @@ function lovasz_theta(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
             push!(bs, zero(Tv))
         end
     end
-    push!(As, sparse(Matrix{Tv}(I, n, n)))
-    push!(bs, one(Tv))
+    push!(As, sparse(1.0I, n, n))
+    push!(bs, Tv(1))
     @info "Lovasz Theta SDP is formed."
     return C, As, bs
 end
@@ -96,6 +96,7 @@ end
 function bipartite_matrix(A::SparseMatrixCSC)
     m, n = size(A)
     B = [spzeros(m, m) A; A' spzeros(n, n)]
+    return B
 end
 
 function cutnorm(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
