@@ -8,7 +8,7 @@
     numlbfgsvecs::Ti = 4 
     maxmajoriter::Ti = 10^5
     maxiter::Ti = 10^7
-    fprec::Tv = 1e3
+    fprec::Tv = 1e8 # for moderate accuracy
     rankupd_tol::Ti = 4
     prior_trace_bound::Tv = 1e18
     dataset::String = ""
