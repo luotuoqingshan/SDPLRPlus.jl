@@ -1087,7 +1087,9 @@ version = "0.2.1"
 
 [[deps.SDPLR]]
 deps = ["GenericArpack", "LinearAlgebra", "LuxurySparse", "MKL", "MKLSparse", "Parameters", "PolynomialRoots", "Polynomials", "Printf", "Random", "SparseArrays"]
-path = "/u/subspace_s4/huan1754/SDPLR.jl"
+git-tree-sha1 = "60af47fc6e6486bfeb5c59546a7a4a3375ca61fd"
+repo-rev = "main"
+repo-url = "/u/subspace_s4/huan1754/SDPLR.jl"
 uuid = "9040bce9-cc75-4a86-9224-0257f72befc6"
 version = "0.1.0"
 
