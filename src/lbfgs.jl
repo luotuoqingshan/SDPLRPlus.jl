@@ -94,6 +94,10 @@ function lbfgs_dir!(
     copyto!(dir, grad)
     m = lbfgshis.m
     lst = lbfgshis.latest[]
+
+    if m == 0
+        return
+    end
     # pay attention here, dir, s and y are all matrices
     j = lst
     for _ = 1:m 
@@ -138,6 +142,9 @@ function lbfgs_update!(
     grad::Matrix{Tv},
     stepsize::Tv,
 )where {Ti<:Integer, Tv}
+    if lbfgshis.m == 0
+        return
+    end
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
 

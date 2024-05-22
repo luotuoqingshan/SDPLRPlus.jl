@@ -392,9 +392,6 @@ function surrogate_duality_gap(
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    v = @view aux.primal_vio[1:data.m]
-    AX = v + data.b
-
     copy2y_λ_sub_pvio!(var, aux)
 
     𝒜t_preprocess!(aux)
@@ -413,39 +410,10 @@ function surrogate_duality_gap(
         GenericArpack_evs = [0.0]
     end
 
-
-    @show res[1]
     m = length(data.b)
     duality_gap = (var.obj[] + dot(aux.y[1:m], data.b) - 
              trace_bound * min(res[1], 0.0))     
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
-
-    copy2y_λ!(var, aux)
-    𝒜t_preprocess!(aux)
-    lanczos_dt = @elapsed begin
-        lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
-    end
-    res1 = lanczos_eigenval
-    if highprecision
-        n = size(aux.sparse_S, 1)
-        GenericArpack_evs, GenericArpack_dt = 
-            SDP_S_eigval(var, aux, 1, true; which=:SA,
-                         ncv=min(100, n), tol=1e-6, maxiter=1000000)
-        res1 = GenericArpack_evs[1]
-    else
-        GenericArpack_dt = 0.0
-        GenericArpack_evs = [0.0]
-    end
-
-    dualval1 = dot(var.λ, data.b) + trace_bound * min(res1[1], 0.0)
-    duality_gap1 = (var.obj[] - dualval1)
-    rel_duality_gap1 = duality_gap1 / max(one(Tv), abs(var.obj[]))
-
-    if duality_gap1 < duality_gap
-        duality_gap = duality_gap1
-        rel_duality_gap = rel_duality_gap1
-        res = res1
-    end
 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, 
            res[1], duality_gap, rel_duality_gap
@@ -546,7 +514,7 @@ function approx_mineigval_lanczos(
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
     @info "Symmetric tridiagonal matrix formed."
     min_eigval, _ = 
-        symeigs(B, 1; which=:SA, ncv=min(100, n), maxiter=1000000, tol=1e-6)
+        symeigs(B, 1; which=:SA, ncv=minimum([100, q, n]), maxiter=1000000, tol=1e-4)
     return real.(min_eigval)[1] - 1 # cancel the shift
 end
 
@@ -560,10 +528,7 @@ function rank_update!(
     max_r = barvinok_pataki(n, m)
     newr = min(max_r, r * 2)
 
-    perturb_level = 1e-5 
-    newRt = [var.Rt; perturb_level * randn(Tv, newr - r, n)] 
-
-    # newR = 2 * rand(Tv, newr, n) .- 1
+    newRt = 2 * rand(Tv, newr, n) .- 1
     newλ = randn(m)
 
     return SolverVars(

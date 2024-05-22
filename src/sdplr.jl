@@ -254,12 +254,11 @@ function _sdplr(
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
                 @info "primal vio is small enough, checking duality bound."
-                eig_iter = Ti(ceil(max(iter, 100)^0.33*log(n))) 
+                eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n))) 
                 lanczos_dt, lanczos_eigval, GenericArpack_dt, 
                 GenericArpack_eigval, _, rel_duality_bound = 
                     surrogate_duality_gap(data, var, aux, 
-                    config.prior_trace_bound, eig_iter;highprecision=true)  
-                @show  lanczos_eigval, GenericArpack_eigval
+                    config.prior_trace_bound, eig_iter;highprecision=false)  
                 stats.dual_lanczos_time[] += lanczos_dt
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
                 push!(stats.checkdualbd_iters, iter)
@@ -325,14 +324,13 @@ function _sdplr(
     
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     println("Done")
-    eig_iter = Ti(ceil(max(iter, 100)^0.33*log(n))) 
+    eig_iter = Ti(ceil(2*max(iter, 100)^0.5*log(n))) 
 
     lanczos_dt, lanczos_eigval, GenericArpack_dt, 
         GenericArpack_eigval, duality_bound, 
         rel_duality_bound = surrogate_duality_gap(
             data, var, aux, config.prior_trace_bound, eig_iter;
-            highprecision=true)
-    @show  lanczos_eigval, GenericArpack_eigval
+            highprecision=false)
 
     stats.dual_lanczos_time[] += lanczos_dt
     stats.dual_GenericArpack_time[] += GenericArpack_dt
@@ -345,7 +343,11 @@ function _sdplr(
     (stats.primal_time[] = 
         totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[])
     stats.DIMACS_time[] = @elapsed begin
-        DIMACS_errs = DIMACS_errors(data, var, aux)
+        if config.eval_DIMACS_errs
+            DIMACS_errs = DIMACS_errors(data, var, aux)
+        else
+            DIMACS_errs = zeros(6)
+        end
     end
     #@show normb, normC
     @show rel_duality_bound
