@@ -1,0 +1,5 @@
+[deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+CSDP = "0a46da34-8e4b-519e-b418-48813639ff34"
+LuxurySparse = "d05aeea4-b7d4-55ac-b691-9e7fabb07ba2"
+SDPLR = "9040bce9-cc75-4a86-9224-0257f72befc6"
