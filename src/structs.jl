@@ -26,12 +26,23 @@ struct SymLowRankMatrix{T} <: AbstractMatrix{T}
     end
 end
 
-
+"""
+size of a symmetric low-rank matrix
+"""
 LinearAlgebra.size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
+
+"""
+    getindex(A, i, j)
+
+return the (i, j)-th element of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
+"""
 (Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) 
     = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j]))
 
 
+"""
+display a symmetric low-rank matrix
+"""
 function LinearAlgebra.show(
     io::IO, 
     mime::MIME{Symbol("text/plain")}, 
@@ -96,6 +107,12 @@ function LinearAlgebra.mul!(
     mul!(Y, A.B, BtX)
 end
 
+
+"""
+    mul!(Y, X, A)
+
+Multiply an AbstractArray `X` with a symmetric low-rank matrix `A` of the form `BDBᵀ`.
+"""
 function LinearAlgebra.mul!(
     Y::AbstractMatrix{Tv}, 
     X::AbstractVecOrMat{Tv},
@@ -126,6 +143,12 @@ function LinearAlgebra.mul!(
 end
 
 
+"""
+    mul!(Y, X, A, α, β)
+
+Compute `Y = α * X * A + β * Y` 
+where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
+"""
 function LinearAlgebra.mul!(
     Y::AbstractMatrix{Tv}, 
     X::AbstractVecOrMat{Tv},
@@ -139,6 +162,9 @@ function LinearAlgebra.mul!(
 end
 
 
+"""
+Structure for storing the data of a semidefinite programming problem.
+"""
 struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
@@ -147,10 +173,19 @@ struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     b::Vector{Tv}                       # right-hand side b
 end
 
+# The scalar variables in the following three structures  
+# are stored by RefValue such that we can declare the structures 
+# as unmutable structs.
+# see discussion here:
+# https://discourse.julialang.org/t/question-on-refvalue/53498/2
 
+
+"""
+Structure for storing the variables used in the solver.
+"""
 struct SolverVars{Ti <: Integer,Tv}
-    Rt::Matrix{Tv}               # primal variables X = RR^T
-    Gt::Matrix{Tv}               # gradient w.r.t. R
+    Rt::Matrix{Tv}              # primal variables X = RR^T
+    Gt::Matrix{Tv}              # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
 
     r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
@@ -159,8 +194,14 @@ struct SolverVars{Ti <: Integer,Tv}
 end
 
 
+"""
+Structure for auxiliary variables used in the solver.
+In General, user should not directly interact with this structure.
+"""
 struct SolverAuxiliary{Ti <: Integer, Tv}
-    # sparse constraints
+    # auxiliary variables for sparse constraints
+    # take a look at the preprocess_sparsecons function
+    # for more explanation
     n_sparse_matrices::Ti
     triu_agg_sparse_A_matptr::Vector{Ti}
     triu_agg_sparse_A_nzind::Vector{Ti}
@@ -179,21 +220,28 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
-
-    y::Vector{Tv}               # auxiliary variable y = -λ + σ * primal_vio
-    primal_vio::Vector{Tv}      # violation of constraints
+    
+    # auxiliary variable y = -λ + σ * primal_vio
+    y::Vector{Tv}               
+    # violation of constraints, for convenience, we store
+    # a length (m+1) vector where 
+    # the first m entries correspond to the primal violation
+    # and the last entry corresponds to the objective 
+    primal_vio::Vector{Tv}       
 end
 
 
 struct SolverStats{Ti <: Integer, Tv}
     starttime::Base.RefValue{Tv}               # timing
     endtime::Base.RefValue{Tv}
-    dual_lanczos_time::Base.RefValue{Tv}
+    # time spent on computing eigenvalue using Lanczos with random start
+    dual_lanczos_time::Base.RefValue{Tv}        
+    # time spent on computing eigenvalue using GenericArpack 
     dual_GenericArpack_time::Base.RefValue{Tv}
-    checkdualbd_iters::Vector{Ti}
-    lanczos_eigvals::Vector{Tv}
-    GenericArpack_eigvals::Vector{Tv}
+    # total time - dual_lanczos_time - dual_GenericArpack_time 
     primal_time::Base.RefValue{Tv}
+    # time spent on computing the DIMACS stats
+    # which is not included in the total time
     DIMACS_time::Base.RefValue{Tv}  
 end
 
