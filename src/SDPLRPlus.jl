@@ -1,4 +1,4 @@
-module SDPLR
+module SDPLRPlus
 
 export sdplr
 
