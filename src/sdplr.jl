@@ -324,6 +324,7 @@ function _sdplr(
                 if rel_duality_bound <= config.objtol
                     @debug "Duality gap and primal violence are small enough." 
                     @debug  primal_vio_norm rel_duality_bound grad_norm
+                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
                     break
                 else
                     if min_rel_duality_gap - rel_duality_bound < config.objtol
@@ -331,8 +332,7 @@ function _sdplr(
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
-                    (min_rel_duality_gap = 
-                        min(min_rel_duality_gap, rel_duality_bound))
+                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
@@ -376,6 +376,9 @@ function _sdplr(
     end
     
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+
+    printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val, 
+                var.obj[], grad_norm, primal_vio_norm, min_rel_duality_gap)
 
     println("Done")
 
