@@ -231,18 +231,13 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
 end
 
 
-struct SolverStats{Ti <: Integer, Tv}
+struct SolverStats{Tv}
     starttime::Base.RefValue{Tv}               # timing
-    endtime::Base.RefValue{Tv}
-    # time spent on computing eigenvalue using Lanczos with random start
-    dual_lanczos_time::Base.RefValue{Tv}        
-    # time spent on computing eigenvalue using GenericArpack 
-    dual_GenericArpack_time::Base.RefValue{Tv}
-    # total time - dual_lanczos_time - dual_GenericArpack_time 
+    endtime::Base.RefValue{Tv}                 # time spent on computing eigenvalue using Lanczos with random start
+    dual_lanczos_time::Base.RefValue{Tv}       # time spent on computing eigenvalue using GenericArpack 
+    dual_GenericArpack_time::Base.RefValue{Tv} # total time - dual_lanczos_time - dual_GenericArpack_time 
     primal_time::Base.RefValue{Tv}
-    # time spent on computing the DIMACS stats
-    # which is not included in the total time
-    DIMACS_time::Base.RefValue{Tv}  
+    DIMACS_time::Base.RefValue{Tv}  # time spent on computing the DIMACS stats which is not included in the total time
 end
 
 

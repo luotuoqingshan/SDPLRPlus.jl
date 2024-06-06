@@ -161,6 +161,7 @@ function sdplr(
             zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
             zeros(Tv, m+1), # primal_vio
         )
+        println("haha")
         stats = SolverStats(
             Ref(zero(Tv)), # starttime
             Ref(zero(Tv)), # endtime
@@ -186,7 +187,7 @@ function _sdplr(
     data::SDPData{Ti, Tv, TC},
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
-    stats::SolverStats{Ti, Tv},
+    stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n = data.n # size of decision variables 
