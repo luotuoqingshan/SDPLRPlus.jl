@@ -1,3 +1,6 @@
+"""
+Extract upper triangular part of a sparse matrix in COO format.
+"""
 function LinearAlgebra.triu(coo::SparseMatrixCOO{Tv, Ti}) where {Tv, Ti}
     I = Ti[]; J = Ti[]; V = Tv[];
     for (i, j, v) in zip(coo.is, coo.js, coo.vs)
@@ -18,11 +21,28 @@ data structures for BurerMonteiro algorithm.
 function preprocess_sparsecons(
     As::Vector{Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}}
 ) where {Ti <: Integer, Tv}
-    # aggregate all constraints into one sparse matrix
+    # Following the original SDPLR code, we preprocess all the sparse 
+    # constraints. Because the original code has limited documentation 
+    # for this part, I add some explanation here. 
 
+
+    # According to my understanding, this preprocess has two benefits, 
+    # 1. It may increase the data locality, but this one is not benchmarked 
+    # and the effects on many SDPs should be negligible. Maybe the locality 
+    # is even worse.  
+    # 2. A great part of the SDP solving involves evaluating the constraints/objective,
+    # which is computing many frobenius inner products between symmetric 
+    # matrices, this part can be done efficiently with only considering 
+    # the upper triangular part. However, a full A is still required 
+    # when computing the gradient. That's the reason we have two sets 
+    # of auxiliary variables and also the mapping between them. 
+
+
+    # aggregate all constraints into one sparse matrix
     n = size(As[1], 1)
     nA = length(As)
 
+    # first count the nnz to perform preallocation
     total_nnz = 0; total_triu_nnz = 0
     for A in As
         total_nnz += nnz(A)
@@ -77,7 +97,7 @@ function preprocess_sparsecons(
 
     cumul_nnz = 0
     for i in eachindex(As)
-        # entries from agg_A_ptr[i] to agg_A_ptr[i+1]-1
+        # entries from triu_agg_sparse_A_matptr[i] to triu_agg_sparse_A_matptr[i+1]-1
         # correspond to the i-th sparse constraint/objective matrix
         triu_agg_sparse_A_matptr[i] = cumul_nnz + 1
         triu_I, triu_J, triu_V = findnz(triu(As[i]))
@@ -85,6 +105,8 @@ function preprocess_sparsecons(
             row, col = triu_I[j], triu_J[j]
             low = triu_agg_sparse_A.colptr[col]
             high = triu_agg_sparse_A.colptr[col+1]-1
+            # binary search where the jth entry of triu(As[i])
+            # is located in triu_agg_sparse_A
             while low <= high
                 mid = (low + high) ÷ 2
                 if triu_agg_sparse_A.rowval[mid] == row 
@@ -102,12 +124,15 @@ function preprocess_sparsecons(
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
+                # as we are considering upper triangular part
                 triu_agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
             end
         end
         cumul_nnz += length(triu_I)
     end
     triu_agg_sparse_A_matptr[end] = total_triu_nnz + 1
+
+    # map the entries of agg_sparse_A to the corresponding entries of triu_agg_sparse_A
     agg_sparse_A_mappedto_triu = zeros(Ti, length(agg_sparse_A.rowval))
     for col = 1:n
         for nzi = agg_sparse_A.colptr[col]:agg_sparse_A.colptr[col+1]-1
