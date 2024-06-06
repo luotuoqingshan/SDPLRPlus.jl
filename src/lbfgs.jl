@@ -24,7 +24,6 @@ struct LBFGSHistory{Ti <: Integer, Tv}
     vecs::Vector{LBFGSVector{Tv}}
     # the index of the latest l-bfgs vector
     # we use a cyclic array to store l-bfgs vectors
-    #latest::Base.RefValue{Ti}
     latest::Base.RefValue{Ti}
 end
 
@@ -55,7 +54,9 @@ function lbfgs_init(
     return lbfgshis
 end
 
-
+"""
+Clear L-BFGS history
+"""
 function lbfgs_clear!(
     lbfgshis::LBFGSHistory{Ti, Tv}
 ) where {Ti <: Integer, Tv}
@@ -95,6 +96,7 @@ function lbfgs_dir!(
     m = lbfgshis.m
     lst = lbfgshis.latest[]
 
+    # if m = 0, LBFGS degenerates to gradient descent 
     if m == 0
         return
     end
@@ -142,6 +144,7 @@ function lbfgs_update!(
     grad::Matrix{Tv},
     stepsize::Tv,
 )where {Ti<:Integer, Tv}
+    # if m = 0, LBFGS degenerates to gradient descent
     if lbfgshis.m == 0
         return
     end
