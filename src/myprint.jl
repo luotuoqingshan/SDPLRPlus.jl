@@ -29,8 +29,3 @@ function printintermediate(
             obj, grad_norm, primal_vio_norm, dual_bound)
 end
 
-#printheading(1)
-#printintermediate(1, 1, 1, 1.0, 1.0, 1.0, 1.0, 1.0)
-#printheading(0)
-
-#printheading(1)
