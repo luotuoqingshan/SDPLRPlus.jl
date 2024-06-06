@@ -23,7 +23,7 @@ function printintermediate(
 )
     @printf("%12s  %10s  %10s  %10s  %12s  %12s  %12s  %12s  %12s\n",
             "dataset", "majoriter", "localiter", "totaliter", "Lagranval",
-            "objval", "gradnorm", "pvio val", "objgap")
+            "objval", "gradnorm", "pvio val", "best suboptimality")
     @printf("%12s %10d  %10d  %10d  %12.3e  %12.3e  %12.3e  %12.3e  %12.3e\n",
             dataset, majoriter, localiter, iter, 𝓛_val,
             obj, grad_norm, primal_vio_norm, dual_bound)
