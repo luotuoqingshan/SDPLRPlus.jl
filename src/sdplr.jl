@@ -2,20 +2,27 @@
     sdplr(C, As, b, r)
     sdplr(C, As, b, r; kwargs...)
 
-These functions solve the following semidefinite program 
+These functions solve the following semidefinite program
+
     minimize    ⟨𝐂 , 𝐘𝐘ᵀ⟩
+
     subject to  ⟨𝐀ᵢ, 𝐘𝐘ᵀ⟩ = 𝐛ᵢ
+
                 𝐘 ∈ ℝⁿˣʳ.
 
 Arguments
 ---------
-- `C` is the cost matrix 𝐂 of size n x n.
-- `As` is a vector of m constraint matrices 𝐀ᵢ of size n x n. There are 
-three types of constraint matrices supported:
+- `As` is a vector of m constraint matrices 𝐀ᵢ of size n x n. There are\
+four types of constraint matrices supported:  
+
     + `SparseMatrixCSC` for sparse constraints with nnz Θ(n).
     + `SparseMatrixCOO` for super sparse constraints with nnz o(n).
-    + `SymLowRankMatrix` for low-rank constraints with form `BDBᵀ`. 
+    + `SymLowRankMatrix` for low-rank constraints with form `BDBᵀ`. \
     Type `?SymLowRankMatrix` for more information.
+    + `Diagonal` for diagonal constraints. Consider using `SparseMatrixCOO` \
+    instead if the diagonal matrix is super sparse.
+- `C` is the cost matrix 𝐂 of size n x n. Currently we support four types \
+mentioned above.
 - `b` is a vector of m right-hand side values bᵢ.
 - `r` is the initial rank of the solution matrix Y.
 
@@ -161,7 +168,6 @@ function sdplr(
             zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
             zeros(Tv, m+1), # primal_vio
         )
-        println("haha")
         stats = SolverStats(
             Ref(zero(Tv)), # starttime
             Ref(zero(Tv)), # endtime
