@@ -512,7 +512,7 @@ function approx_mineigval_lanczos(
     # shift the matrix by I
     alpha .+= 1
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
-    @info "Symmetric tridiagonal matrix formed."
+    @debug "Symmetric tridiagonal matrix formed."
     min_eigval, _ = 
         symeigs(B, 1; which=:SA, ncv=minimum([100, q, n]), maxiter=1000000, tol=1e-4)
     return real.(min_eigval)[1] - 1 # cancel the shift

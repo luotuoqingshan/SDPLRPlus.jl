@@ -309,7 +309,7 @@ function _sdplr(
 
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
-                @info "primal vio is small enough, checking duality bound."
+                @debug "primal vio is small enough, checking duality bound."
                 eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n))) 
 
                 # when highprecision=true, then GenericArpack will be used
@@ -322,8 +322,8 @@ function _sdplr(
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
 
                 if rel_duality_bound <= config.objtol
-                    @info "Duality gap and primal violence are small enough." 
-                    @info  primal_vio_norm rel_duality_bound grad_norm
+                    @debug "Duality gap and primal violence are small enough." 
+                    @debug  primal_vio_norm rel_duality_bound grad_norm
                     break
                 else
                     if min_rel_duality_gap - rel_duality_bound < config.objtol
@@ -393,8 +393,8 @@ function _sdplr(
 
     totaltime = stats.endtime[] - stats.starttime[]
 
-    stats.primal_time[] = \
-        totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
+    stats.primal_time[] = (totaltime - stats.dual_lanczos_time[] 
+        - stats.dual_GenericArpack_time[])
     stats.DIMACS_time[] = @elapsed begin
         if config.eval_DIMACS_errs
             DIMACS_errs = DIMACS_errors(data, var, aux)
