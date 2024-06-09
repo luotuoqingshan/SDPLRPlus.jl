@@ -1,7 +1,18 @@
-using SDPLR
+using SDPLRPlus
 using Test
 
+using LuxurySparse, SparseArrays, LinearAlgebra
+
 # write tests here
+include("symlowrank.jl")
+
+include("maxcut.jl")
+
+include("lovasztheta.jl")
+
+include("minimumbisection.jl")
+
+include("cutnorm.jl")
 
 ## NOTE add JET to the test environment, then uncomment
 # using JET
