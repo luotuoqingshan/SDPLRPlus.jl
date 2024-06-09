@@ -18,6 +18,9 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 LuxurySparse = "0.7"
+MKLSparse = "1"
+Parameters = "0.12"
+PolynomialRoots = "1"
 julia = "1"
 
 [extras]
