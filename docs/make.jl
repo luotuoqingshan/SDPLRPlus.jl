@@ -15,10 +15,11 @@ using GenericArpack
 using LinearAlgebra
 using PolynomialRoots
 using Polynomials
+using SparseArrays
 
 
 makedocs(
-    modules = [SDPLRPlus],
+    modules = [SDPLRPlus, SparseArrays, LuxurySparse, LinearAlgebra],
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
     authors = "Yufan Huang and the SDPLR authors",
     sitename = "SDPLRPlus.jl",
