@@ -25,7 +25,7 @@ SDPLRPlus is a pure julia package which integrates the suboptimality bound and d
 Suboptimality bounds for trace-bounded SDPs enable
 a faster and scalable low-rank SDP solver SDPLR+
 ```
-If you feel this package or our paper useful, please consider cite it. 
+If you feel this package or our paper useful for your work, please consider citing it. 
 
 For information with regard to the package, refer to the documentation for more details.  
 
@@ -34,12 +34,10 @@ For more information about experiments in the paper,
 take a look at the README under `exps/`. 
 
 ## Contact
-Feel free to contact via email huan1754 at purdue dot edu or create issues or pull requests (any contribution to the project is welcome).
+The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email huan1754 at purdue dot edu or create issues or pull requests (any contribution to the project is welcome).
 
 ## Acknowledgement
 Part of this project started as a julia reproduction of 
-the solver [SDPLR](https://sburer.github.io/projects.html) and we would like to thank the authors 
-for their effort in developing such an amazing package.  
-Please consider citing their papers if you use 
-this package in your research, see reference section
+the solver [SDPLR](https://sburer.github.io/projects.html) and we would like to thank the authors for their effort in developing such an amazing package. Please consider citing their papers if you use 
+this package in your work, see reference section
 in the documentation for more information.
