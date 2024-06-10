@@ -25,6 +25,12 @@ MKLSparse = "1"
 Parameters = "0.12"
 PolynomialRoots = "1"
 julia = "1"
+Parameters = "0.12"
+MKLSparse = "1"
+MKL = "0.6"
+LuxurySparse = "0.7"
+GenericArpack = "0.2"
+Polynomials = "4"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
