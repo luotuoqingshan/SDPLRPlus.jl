@@ -10,7 +10,7 @@ using DelimitedFiles
 using MAT
 using JSON
 
-using SDPLR
+using SDPLRPlus
 
 include("problems.jl")
 

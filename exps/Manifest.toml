@@ -2,7 +2,7 @@
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "a0fe932be23e3336c43e6c0c285781cc2a30c978"
+project_hash = "f077e7118de2344f2ec2e988a95d3da7dd104978"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -967,9 +967,9 @@ version = "1.0.0"
 
 [[deps.Polynomials]]
 deps = ["LinearAlgebra", "RecipesBase", "Setfield", "SparseArrays"]
-git-tree-sha1 = "89620a0b5458dca4bf9ea96174fa6422b3adf6f9"
+git-tree-sha1 = "25e7f73d679e5214971620886d3416c1f5991ecc"
 uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
-version = "4.0.8"
+version = "4.0.9"
 
     [deps.Polynomials.extensions]
     PolynomialsChainRulesCoreExt = "ChainRulesCore"
@@ -1085,11 +1085,9 @@ git-tree-sha1 = "40b9edad2e5287e05bd413a38f61a8ff55b9557b"
 uuid = "5eaf0fd0-dfba-4ccb-bf02-d820a40db705"
 version = "0.2.1"
 
-[[deps.SDPLR]]
+[[deps.SDPLRPlus]]
 deps = ["GenericArpack", "LinearAlgebra", "LuxurySparse", "MKL", "MKLSparse", "Parameters", "PolynomialRoots", "Polynomials", "Printf", "Random", "SparseArrays"]
-git-tree-sha1 = "60af47fc6e6486bfeb5c59546a7a4a3375ca61fd"
-repo-rev = "main"
-repo-url = "/u/subspace_s4/huan1754/SDPLR.jl"
+path = "/u/subspace_s4/huan1754/SDPLRPlus.jl/"
 uuid = "9040bce9-cc75-4a86-9224-0257f72befc6"
 version = "0.1.0"
 
