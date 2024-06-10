@@ -1,11 +1,26 @@
 # see documentation at https://juliadocs.github.io/Documenter.jl/stable/
 
-using Documenter, SDPLR
+# If your source directory is not accessible through 
+# Julia's LOAD_PATH, you might wish to add the following line 
+# at the top of make.jl
+push!(LOAD_PATH,"../src/")
+
+using Documenter
+using SDPLRPlus
+using LuxurySparse 
+using MKLSparse
+using MKL
+using Parameters
+using GenericArpack
+using LinearAlgebra
+using PolynomialRoots
+using Polynomials
+
 
 makedocs(
     modules = [SDPLRPlus],
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
-    authors = "luotuoqingshan",
+    authors = "Yufan Huang and the SDPLR authors",
     sitename = "SDPLRPlus.jl",
     pages = Any["index.md"]
     # strict = true,
