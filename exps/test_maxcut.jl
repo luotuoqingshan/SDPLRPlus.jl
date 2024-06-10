@@ -97,4 +97,4 @@ if VERSION >= v"1.7"
   @show Threads.nthreads()
 # warmup
 batch_eval_maxcut("G1", "SDPLR-warmup", args["rank"]; maxtime=36000.0, objtol=args["objtol"], ptol=args["ptol"])
-batch_eval_maxcut("$(args["graph"])", "SDPLR-R-$(args["rank"])-seed-$seed-tol-$tol", args["rank"]; maxtime=36000.0, objtol=args["objtol"], ptol=args["ptol"])
+VSCodeServer.@profview batch_eval_maxcut("$(args["graph"])", "SDPLR-R-$(args["rank"])-seed-$seed-tol-$tol", args["rank"]; maxtime=36000.0, objtol=args["objtol"], ptol=args["ptol"])

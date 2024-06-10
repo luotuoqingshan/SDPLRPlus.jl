@@ -137,48 +137,71 @@ function postprocess_graph(A)
     return B 
 end
 
-for dataset in ["ca-AstroPh", "ca-CondMat", "ca-GrQc", "ca-HepPh", "ca-HepTh",
-    "email-Enron"]
-    @info dataset
-    A = read_txt_gz(dataset)
-    B = postprocess_graph(A)
-    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
-end
+#for dataset in ["ca-AstroPh", "ca-CondMat", "ca-GrQc", "ca-HepPh", "ca-HepTh",
+#    "email-Enron"]
+#    @info dataset
+#    A = read_txt_gz(dataset)
+#    B = postprocess_graph(A)
+#    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
+#end
+#
+#for dataset in ["com-amazon", "com-dblp", "com-lj", "com-orkut", "com-youtube"]
+#    @info dataset
+#    A = read_ungraph_txt_gz(dataset)
+#    B = postprocess_graph(A)
+#    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
+#end
+#
+#for dataset in ["deezer_europe", "musae_facebook"]
+#    @info dataset
+#    A = read_zip(dataset)
+#    B = postprocess_graph(A)
+#    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
+#end
+#
+#
+#for dataset in ["web-BerkStan", "web-Google", "web-NotreDame", "web-Stanford"]
+#    @info dataset
+#    A = read_txt_gz(dataset)
+#    A = max.(A, A')
+#    B = postprocess_graph(A)
+#    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
+#end
+#
+#for i in [(1:67)..., 70, 72, 77, 81]
+#    dataset = "G$i" 
+#    @info dataset
+#    A = read_gset(dataset)
+#    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => A))
+#end
+#
+#for (root, dirs, files) in walkdir(homedir()*"/datasets/graphs/")
+#    for file in files
+#        @info file
+#        data = matread(root*"/"*file)
+#        A = data["A"]
+#        A_abs = abs.(A)
+#        A_dummy = A
+#        n = size(A, 1)
+#        if mod(n, 2) == 1
+#            I, J, V = findnz(A)
+#            A_dummy = sparse(I, J, V, n+1, n+1)
+#        end
+#        A_dummy_abs = abs.(A_dummy)
+#        matwrite(root*"/"*file,
+#            Dict("A" => A, "A_abs" => A_abs, "A_dummy" => A_dummy, "A_dummy_abs" => A_dummy_abs)
+#        )
+#    end
+#end
 
-for dataset in ["com-amazon", "com-dblp", "com-lj", "com-orkut", "com-youtube"]
-    @info dataset
-    A = read_ungraph_txt_gz(dataset)
-    B = postprocess_graph(A)
-    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
-end
-
-for dataset in ["deezer_europe", "musae_facebook"]
-    @info dataset
-    A = read_zip(dataset)
-    B = postprocess_graph(A)
-    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
-end
-
-
-for dataset in ["web-BerkStan", "web-Google", "web-NotreDame", "web-Stanford"]
-    @info dataset
-    A = read_txt_gz(dataset)
-    A = max.(A, A')
-    B = postprocess_graph(A)
-    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => B))
-end
-
-for i in [(1:67)..., 70, 72, 77, 81]
-    dataset = "G$i" 
-    @info dataset
-    A = read_gset(dataset)
-    matwrite(homedir()*"/datasets/graphs/"*dataset*".mat", Dict("A" => A))
-end
-
-for (root, dirs, files) in walkdir(homedir()*"/datasets/graphs/")
+for (root, dirs, files) in walkdir(homedir()*"/datasets/DIMACS10/")
+    @show length(files)
     for file in files
-        @info file
-        data = matread(root*"/"*file)
+        ext = split(file, '.')[end]
+        if ext != "mat" # only process .mat files
+            continue
+        end
+        data = matread(root*"/"*file)["Problem"]
         A = data["A"]
         A_abs = abs.(A)
         A_dummy = A
@@ -188,8 +211,43 @@ for (root, dirs, files) in walkdir(homedir()*"/datasets/graphs/")
             A_dummy = sparse(I, J, V, n+1, n+1)
         end
         A_dummy_abs = abs.(A_dummy)
-        matwrite(root*"/"*file,
+        matwrite(homedir()*"/datasets/graphs/"*file,
             Dict("A" => A, "A_abs" => A_abs, "A_dummy" => A_dummy, "A_dummy_abs" => A_dummy_abs)
         )
+        println("$file is processed.")
     end
 end
+
+
+#using MAT    
+#
+#graphs = readlines(homedir()*"/datasets/graphs/all.txt")
+#
+#mkdir(homedir()*"/datasets/graphs/CutNorm/")
+#
+#using Distributed
+#addprocs(28)
+#
+#@everywhere begin
+#    using MAT
+#    function prepare_cutnorm(graph)
+#        data = matread(homedir()*"/datasets/graphs/"*graph*".mat")
+#        A = data["A"]
+#        matwrite(homedir()*"/datasets/graphs/CutNorm/"*graph*".mat",
+#            Dict("A" => A)
+#        )
+#    end
+#end
+#
+#pmap(prepare_cutnorm, graphs)
+
+#graphs = readlines(homedir()*"/datasets/graphs/all_moderate.txt")
+#processed = 0
+#for (i, graph) in enumerate(graphs)
+#    filepath = homedir()*"/datasets/graphs/CutNorm/"*graph*".mat"
+#    if isfile(filepath)
+#        processed += 1
+#    else
+#        println(graph)
+#    end
+#end
