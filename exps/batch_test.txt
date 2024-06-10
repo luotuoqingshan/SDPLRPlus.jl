@@ -1,0 +1,9 @@
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G1" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G2" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G3" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G4" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G5" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G6" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G7" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G8" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
+ulimit -d 16777216; cd ~/SDPLRPlus.jl/exps; /p/mnt/software/julia-1.10/bin/julia --project test.jl --seed 0 --graph "G9" --problem "MaxCut" --ptol 0.01 --objtol 0.01 --rank 10
