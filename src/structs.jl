@@ -1,9 +1,9 @@
-"""
-    SymLowRankMatrix{T}
+@doc raw"""
+    SymLowRankMatrix{T} <: AbstractMatrix{T}
 
-Symmetric low-rank matrix of the form BDBᵀ with elements of type `T`.
-Besides the diagonal matrix `D` and the thin matrix `B`,
-we also store the transpose of `B` as `Bt`.
+Symmetric low-rank matrix of the form ``BDB^T`` with elements of type `T`.
+Besides the diagonal matrix ``D`` and the thin matrix ``B``,
+we also store ``B^T`` as `Bt`.
 It's because usually `B` is really thin, 
 storing `Bt` doesn't cost too much more storage
 but will save allocation during computation.
