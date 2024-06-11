@@ -38,4 +38,5 @@ makedocs(
 deploydocs(;
     repo = "github.com/luotuoqingshan/SDPLRPlus.jl",
     devbranch = "main",
+    push_preview = false,
 )
