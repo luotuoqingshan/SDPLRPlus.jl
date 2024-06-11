@@ -5,25 +5,25 @@
 # at the top of make.jl
 push!(LOAD_PATH,"../src/")
 
-using Documenter
 using SDPLRPlus
+using Documenter
 using LuxurySparse 
-using MKLSparse
-using MKL
-using Parameters
-using GenericArpack
-using LinearAlgebra
-using PolynomialRoots
-using Polynomials
-using SparseArrays
+#using MKLSparse
+#using MKL
+#using Parameters
+#using GenericArpack
+#using LinearAlgebra
+#using PolynomialRoots
+#using Polynomials
+#using SparseArrays
 
 
 makedocs(
-    modules = [SDPLRPlus, SparseArrays, LuxurySparse, LinearAlgebra],
-    format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
+    modules = [SDPLRPlus, LuxurySparse],
     authors = "Yufan Huang and the SDPLR authors",
     sitename = "SDPLRPlus.jl",
     format=Documenter.HTML(;
+        prettyurls = get(ENV, "CI", nothing) == "true",
         canonical="https://luotuoqingshan.github.io/SDPLRPlus.jl",
         assets=String[],
     ),
