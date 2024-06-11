@@ -23,6 +23,10 @@ makedocs(
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
     authors = "Yufan Huang and the SDPLR authors",
     sitename = "SDPLRPlus.jl",
+    format=Documenter.HTML(;
+        canonical="https://luotuoqingshan.github.io/SDPLRPlus.jl",
+        assets=String[],
+    ),
     pages = Any["index.md"]
     # strict = true,
     # clean = true,
@@ -31,7 +35,7 @@ makedocs(
 
 # Some setup is needed for documentation deployment, see “Hosting Documentation” and
 # deploydocs() in the Documenter manual for more information.
-deploydocs(
-    repo = "github.com/luotuoqingshan/SDPLRPlus.jl.git",
-    push_preview = true
+deploydocs(;
+    repo = "github.com/luotuoqingshan/SDPLRPlus.jl",
+    devbranch = "main",
 )
