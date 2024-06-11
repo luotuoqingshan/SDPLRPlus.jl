@@ -7,11 +7,18 @@ sdplr
 
 ## Supported constraint types
 
+As mentioned, `SDPLRPlus` supports semidefinite programs with constraints of type
+- `Diagonal`, 
+- `SparseMatrixCSC`, 
+- `SparseMatrixCOO` and 
+- `SymLowRankMatrix`. 
+`SymLowRankMatrix` is a type for symmetric low-rank matrices defined in `SDPLRPlus`.
 ```@docs
 SymLowRankMatrix
-SparseArrays.SparseMatrixCSC
-LinearAlgebra.Diagonal
-LuxurySparse.SparseMatrixCOO
+```
+Because `SparseMatrixCOO` is less commonly used, here we include its docstring for completeness.
+```@docs
+SparseMatrixCOO
 ```
 
 ## Citing `SDPLRPlus` 
