@@ -8,14 +8,6 @@ push!(LOAD_PATH,"../src/")
 using SDPLRPlus
 using Documenter
 using LuxurySparse 
-#using MKLSparse
-#using MKL
-#using Parameters
-#using GenericArpack
-#using LinearAlgebra
-#using PolynomialRoots
-#using Polynomials
-#using SparseArrays
 
 
 makedocs(
@@ -27,10 +19,7 @@ makedocs(
         canonical="https://luotuoqingshan.github.io/SDPLRPlus.jl",
         assets=String[],
     ),
-    pages = Any["index.md"]
-    # strict = true,
-    # clean = true,
-    # checkdocs = :exports,
+    pages = ["index.md"]
 )
 
 # Some setup is needed for documentation deployment, see “Hosting Documentation” and
@@ -38,5 +27,4 @@ makedocs(
 deploydocs(;
     repo = "github.com/luotuoqingshan/SDPLRPlus.jl",
     devbranch = "main",
-    push_preview = false,
 )
