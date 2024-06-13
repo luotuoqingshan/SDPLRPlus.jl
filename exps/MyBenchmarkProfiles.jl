@@ -66,3 +66,30 @@ function Makie_performance_profile(
     kwargs...,
   )
 end
+
+### Example
+#using Colors
+#
+#plot_height = 300
+#mylabelsize = 9
+#n = 3
+#
+#cols = distinguishable_colors(n, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
+#solvers = ["solver$i" for i=1:n]
+#dts = 10 * abs.(rand(25, n))
+#f=Figure(; size=(plot_height, plot_height), figure_padding=0) # set padding
+#axis = Axis(f[1, 1], 
+#    alignmode=Outside(),
+#    xticklabelsize=mylabelsize,yticklabelsize=mylabelsize,
+#    xticksize=3,yticksize=3,
+#    xlabelsize=mylabelsize, ylabelsize=mylabelsize)
+#hidespines!(axis)
+#rowgap!(f.layout, 0)  
+#
+#Makie_performance_profile(axis, dts, cols, 
+#    L"\tau", 
+#    "Proportions",
+#    solvers,
+#    logscale=true)
+#xlims!(axis, (0, 11))
+#f
