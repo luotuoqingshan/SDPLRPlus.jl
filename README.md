@@ -23,7 +23,13 @@ a faster and scalable low-rank SDP solver SDPLR+
 ```
 If you feel this package or our paper useful for your work, please consider citing it. 
 
-For information with regard to the package, refer to the documentation for more details.  
+## Usage 
+**This package hasn't been registered yet**, to use it, you can add it via github link. 
+```
+]  activate .; add https://github.com/luotuoqingshan/SDPLRPlus.jl 
+```
+
+For information with regard to the interfaces, refer to the documentation for more details.  
 
 ## Experiments 
 For more information about experiments in the paper, 
