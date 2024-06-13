@@ -23,8 +23,10 @@ function Makie_performance_profile_plot!(
         push!(plots, CairoMakie.stairs!(axis, x_plot[i], y_plot[i],
          step=:post, label = labels[i], color=colors[i];))  # add to initial plot
     end
+    # currently only support logscale for x-axis
     if logscale
         if inv
+          # inv = true means for this metric, larger is better 
             axis.xtickformat = values -> ["$(@sprintf("%.2f", 1/2^value))" for value in values] 
         else
             axis.xtickformat = values -> [L"2^{%$(Int64(value))}" for value in values]
