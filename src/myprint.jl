@@ -1,11 +1,11 @@
 function printheading(start)
     if start == 1 # print start heading
         println("="^121)
-        println((" "^29)*"SDPLR.jl: a julia implementation of SDPLR with objval gap bound"*(" "^29))
+        println((" "^29)*"SDPLRPlus.jl: a julia implementation of SDPLR with objval gap bound"*(" "^29))
         println("="^121)
     else
         println("="^121)
-        println(" "^54*"End of SDPLR.jl"*" "^20)
+        println(" "^54*"End of SDPLRPlus.jl"*" "^20)
         println("="^121)
     end
 end

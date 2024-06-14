@@ -195,6 +195,11 @@ function sdplr(
     # record preprocessing time
     ans["preprocess_time"] = preprocess_dt
     ans["totaltime"] += preprocess_dt
+
+    if config.printlevel > 0
+        printheading(0)
+    end
+
     return ans 
 end
 
@@ -395,8 +400,6 @@ function _sdplr(
 
     printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val, 
                 var.obj[], grad_norm, primal_vio_norm, min_rel_duality_gap)
-
-    println("Done")
 
     eig_iter = Ti(ceil(2*max(iter, 100)^0.5*log(n))) 
 
