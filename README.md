@@ -8,7 +8,7 @@
 ![lifecycle](https://img.shields.io/badge/lifecycle-archived-red.svg)
 ![lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg) -->
 [![build](https://github.com/luotuoqingshan/SDPLRPlus.jl/workflows/CI/badge.svg)](https://github.com/luotuoqingshan/SDPLRPlus.jl/actions?query=workflow%3ACI)
-[![codecov.io](http://codecov.io/github/luotuoqingshan/SDPLRPlus.jl/coverage.svg?branch=master)](http://codecov.io/github/luotuoqingshan/SDPLRPlus.jl?branch=master)
+[![codecov.io](http://codecov.io/github/luotuoqingshan/SDPLRPlus.jl/coverage.svg?branch=main)](http://codecov.io/github/luotuoqingshan/SDPLRPlus.jl?branch=main)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://luotuoqingshan.github.io/SDPLRPlus.jl/dev)
 <!-- travis-ci.com badge, uncomment or delete as needed, depending on whether you are using that service. -->
 <!-- [![Build Status](https://travis-ci.com/luotuoqingshan/SDPLRPlus.jl.svg?branch=master)](https://travis-ci.com/luotuoqingshan/SDPLRPlus.jl) -->
@@ -41,5 +41,5 @@ The documentation and examples are quite experimental. If anything is unclear or
 ## Acknowledgement
 Part of this project started as a julia reproduction of 
 the solver [SDPLR](https://sburer.github.io/projects.html) and we would like to thank the authors for their effort in developing such an amazing package. Please consider citing their papers if you use 
-this package in your work, see reference section
+this package in your work, see [reference](https://luotuoqingshan.github.io/SDPLRPlus.jl/dev/#Citing-SDPLRPlus) section
 in the documentation for more information.
