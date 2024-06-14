@@ -10,9 +10,9 @@ include("problem.jl")
 
 include("maxcut.jl")
 
-include("lovasztheta.jl")
-
 include("minimumbisection.jl")
+
+include("lovasztheta.jl")
 
 include("cutnorm.jl")
 
