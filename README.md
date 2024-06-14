@@ -33,7 +33,7 @@ For information with regard to the interfaces, refer to the documentation for mo
 
 ## Experiments 
 For more information about experiments in the paper, 
-take a look at the README under `exps/`. 
+take a look at the [README](https://github.com/luotuoqingshan/SDPLRPlus.jl/blob/main/exps/README.md) under `exps/`. 
 
 ## Contact
 The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email huan1754 at purdue dot edu or create issues or pull requests (any contribution to the project is welcome).
