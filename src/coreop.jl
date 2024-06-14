@@ -467,7 +467,7 @@ function approx_mineigval_lanczos(
     q::Ti,
 ) where {Ti <: Integer, Tv}
     n::Ti = size(aux.sparse_S, 1)
-    q = min(q, n - 1)
+    q = min(q, n-1)
 
     # allocate lanczos vectors
     # alpha is the diagonal of the tridiagonal matrix
@@ -513,8 +513,13 @@ function approx_mineigval_lanczos(
     alpha .+= 1
     B = SymTridiagonal(alpha[1:iter], beta[1:iter-1])
     @debug "Symmetric tridiagonal matrix formed."
-    min_eigval, _ = 
-        symeigs(B, 1; which=:SA, ncv=minimum([100, q, n]), maxiter=1000000, tol=1e-4)
+    if size(B, 1) == 1
+        # special case 
+        return alpha[1] - 1
+    else
+        min_eigval, _ = 
+            symeigs(B, 1; which=:SA, ncv=minimum([100, q, n]), maxiter=1000000, tol=1e-4)
+    end
     return real.(min_eigval)[1] - 1 # cancel the shift
 end
 
