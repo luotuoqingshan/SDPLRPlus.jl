@@ -6,6 +6,8 @@ using LuxurySparse, SparseArrays, LinearAlgebra
 # write tests here
 include("symlowrank.jl")
 
+include("problem.jl")
+
 include("maxcut.jl")
 
 include("lovasztheta.jl")
