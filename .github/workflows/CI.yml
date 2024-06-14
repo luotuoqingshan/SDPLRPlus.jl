@@ -3,16 +3,17 @@
 name: CI
 on:
   pull_request:
-    branches:
-      - master
   push:
     branches:
-      - master
+      - main
     tags: '*'
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      actions: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -27,12 +28,12 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v1
+      - uses: actions/cache@v2
         env:
           cache-name: cache-artifacts
         with:
@@ -45,31 +46,20 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v4
         with:
           file: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
   ## NOTE: uncomment below to generate and deploy docs, also add the relevant deploy key as described
   ## in https://juliadocs.github.io/Documenter.jl/dev/man/hosting/#Authentication:-SSH-Deploy-Keys
-  docs:                        
-     name: Documentation
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v2
-       - uses: julia-actions/setup-julia@v1
-         with:
-           version: '1'
-       - run: |
-           julia --project=docs -e '
-             using Pkg
-             Pkg.develop(PackageSpec(path=pwd()))
-             Pkg.instantiate()'
-       - run: |
-           julia --project=docs -e '
-             using Documenter: doctest
-             using SDPLR
-             DocMeta.setdocmeta!(SDPLR, :DocTestSetup, :(using SDPLR); recursive=true)
-             doctest(SDPLR)'
-       - run: julia --project=docs docs/make.jl
-         env:
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+  Documenter:
+    permissions:
+      contents: write
+      statuses: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/julia-buildpkg@latest
+      - uses: julia-actions/julia-docdeploy@latest 
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # If authenticating with SSH deploy key
