@@ -71,19 +71,32 @@ function linesearch!(
     cubic[4] = 4.0 * biquadratic[5]
 
     if abs(cubic[4]) < eps()
-        error("Error: cubic[4] is zero, got a quadratic function")
+        # got a quadractic function
+        # error("Error: cubic[4] is zero, got a quadratic function")
+        quadratic = cubic[1:3]
+        quadratic ./= quadratic[3]
+        f = Polynomial(biquadratic)
+        df = Polynomial(quadratic)
+
+        f0 = biquadratic[1] # f(α=0) 
+        α_star = 0.0 # optimal α
+        f_star = f0 # optimal f(α)
+
+        Roots = PolynomialRoots.roots(quadratic)
+        push!(Roots, α_max)
+
+    else
+        cubic ./= cubic[4]
+        f = Polynomial(biquadratic)
+        df = Polynomial(cubic)
+
+        f0 = biquadratic[1] # f(α=0) 
+        α_star = 0.0 # optimal α
+        f_star = f0 # optimal f(α)
+
+        Roots = PolynomialRoots.roots(cubic)
+        push!(Roots, α_max)
     end
-
-    cubic ./= cubic[4]
-    f = Polynomial(biquadratic)
-    df = Polynomial(cubic)
-
-    f0 = biquadratic[1] # f(α=0) 
-    α_star = 0.0 # optimal α
-    f_star = f0 # optimal f(α)
-
-    Roots = PolynomialRoots.roots(cubic)
-    push!(Roots, α_max)
 
     for i = eachindex(Roots)
         # only examine real roots in [0, α_max]
@@ -100,6 +113,7 @@ function linesearch!(
             α_star = root 
         end
     end
+
 
     # update the primal violation and function value
     # notice that 
