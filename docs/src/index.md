@@ -22,3 +22,11 @@ SparseMatrixCOO
 ```
 
 ## Citing `SDPLRPlus` 
+`SDPLRPlus` is introduced in our paper [huang2024suboptimality](@cite). If you found it useful in your work, we kindly request you to cite it.
+
+Moreover, `SDPLRPlus` started as a reproduction of the package 
+`SDPLR` which was introduced in [BMNonlinear2003, BMLocal2005, BCComputational2006](@cite). Please consider citing these papers. 
+
+## References
+```@bibliography
+```
