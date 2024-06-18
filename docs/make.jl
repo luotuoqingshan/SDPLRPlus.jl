@@ -5,10 +5,10 @@
 # at the top of make.jl
 push!(LOAD_PATH,"../src/")
 
-using SDPLRPlus
 using Documenter
-using DocumentCitations
+using DocumenterCitations
 using LuxurySparse 
+using SDPLRPlus
 
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
