@@ -7,9 +7,11 @@ push!(LOAD_PATH,"../src/")
 
 using SDPLRPlus
 using Documenter
+using DocumentCitation
 using LuxurySparse 
 
 
+bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 makedocs(
     modules = [SDPLRPlus, LuxurySparse],
     authors = "Yufan Huang and the SDPLR authors",
@@ -19,6 +21,7 @@ makedocs(
         canonical="https://luotuoqingshan.github.io/SDPLRPlus.jl",
         assets=String[],
     ),
+    plugins=[bib],
     pages = ["index.md"]
 )
 
