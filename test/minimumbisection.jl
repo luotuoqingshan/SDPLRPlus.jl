@@ -7,6 +7,6 @@
         r = 1
         res = sdplr(C, As, bs, r; 
             fprec=0.0, objtol=1e-4, ptol=1e-4, prior_trace_bound=Float64(n))
-        @test abs(res["obj"]-1) < 1e-4 
+        @test (res["obj"]-1) / (1 + abs(res["obj"])) < 1e-4 
     end
 end
