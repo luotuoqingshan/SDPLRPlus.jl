@@ -7,7 +7,7 @@ push!(LOAD_PATH,"../src/")
 
 using SDPLRPlus
 using Documenter
-using DocumentCitation
+using DocumentCitations
 using LuxurySparse 
 
 
