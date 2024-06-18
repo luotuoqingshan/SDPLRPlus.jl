@@ -7,13 +7,15 @@ push!(LOAD_PATH,"../src/")
 
 using Documenter
 using DocumenterCitations
-using LuxurySparse 
 using SDPLRPlus
 
 
-bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
+bib = CitationBibliography(
+    joinpath(@__DIR__, "src", "refs.bib");
+    style=:authoryear
+)
 makedocs(
-    modules = [SDPLRPlus, LuxurySparse],
+    modules = [SDPLRPlus],
     authors = "Yufan Huang and the SDPLR authors",
     sitename = "SDPLRPlus.jl",
     format=Documenter.HTML(;
@@ -21,8 +23,9 @@ makedocs(
         canonical="https://luotuoqingshan.github.io/SDPLRPlus.jl",
         assets=String[],
     ),
+    pages = ["index.md"];
     plugins=[bib],
-    pages = ["index.md"]
+    checkdocs=:exports,
 )
 
 # Some setup is needed for documentation deployment, see “Hosting Documentation” and
