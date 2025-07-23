@@ -144,21 +144,8 @@ function sdplr(
         n = size(C, 1)
         nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
 
-        # randomly initialize primal and dual variables
-        Rt0 = 2 .* rand(r, n) .- 1
-        λ0 = randn(m)
-
         data = SDPData(n, m, C, As, b)
-        var = SolverVars(
-            Rt0,
-            zeros(Tv, size(Rt0)),
-            λ0,
-            Ref(r),
-            Ref(2.0), # initial σ
-            Ref(zero(Tv)),
-            zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
-            zeros(Tv, m+1), # primal_vio
-        )
+        var = SolverVars(data, r)
         aux = SolverAuxiliary(
             length(sparse_cons),
             triu_agg_sparse_A_matptr,
@@ -171,20 +158,12 @@ function sdplr(
             triu_agg_sparse_A,
             agg_sparse_A,
             zeros(Tv, nnz_triu_agg_sparse_A), # UVt
-            zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
 
             length(symlowrank_cons), #n_symlowrank_matrices
             symlowrank_cons, 
             symlowrank_As_global_inds,
         )
-        stats = SolverStats(
-            Ref(zero(Tv)), # starttime
-            Ref(zero(Tv)), # endtime
-            Ref(zero(Tv)), # time spent on lanczos with random start
-            Ref(zero(Tv)), # time spent on GenericArpack
-            Ref(zero(Tv)), # primal time
-            Ref(zero(Tv)), # DIMACS time
-        )
+        stats = SolverStats{Tv}()
     end
 
     @debug "preprocess dt" preprocess_dt
@@ -210,8 +189,8 @@ function _sdplr(
     stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv}
-    n = data.n # size of decision variables 
-    m = data.m # number of constraints
+    n = div(length(var.Rt), var.r[])
+    m = length(var.λ) # number of constraints
 
     stats.starttime[] = time()
 

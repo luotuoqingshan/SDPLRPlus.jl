@@ -1,14 +1,14 @@
 """
 Vector of L-BFGS
 """
-struct LBFGSVector{T}
+struct LBFGSVector{T,Ts<:AbstractArray{T}}
     # notice that we use matrix instead 
     # of vector to store s and y because our
     # decision variables are matrices
     # s = xₖ₊₁ - xₖ 
-    s::Matrix{T}
+    s::Ts
     # y = ∇ f(xₖ₊₁) - ∇ f(xₖ)
-    y::Matrix{T}
+    y::Ts
     # ρ = 1/(⟨y, s⟩)
     ρ::Base.RefValue{T}
     # temporary variable
@@ -35,14 +35,14 @@ Base.:length(lbfgshis::LBFGSHistory) = lbfgshis.m
 Initialization of L-BFGS history
 """
 function lbfgs_init(
-    R::Matrix{Tv},
+    R::AbstractArray{Tv},
     numlbfgsvecs::Ti,
 ) where {Ti <: Integer, Tv}
     lbfgsvecs = LBFGSVector{Tv}[]
     for _ = 1:numlbfgsvecs
         push!(lbfgsvecs, 
-            LBFGSVector(zeros(Tv, size(R)),
-                        zeros(Tv, size(R)),
+            LBFGSVector(zero(R),
+                        zero(R),
                         Ref(zero(Tv)), 
                         Ref(zero(Tv)),
                         ))
@@ -86,9 +86,9 @@ for i = k - m, k - m + 1, ... k - 1
 end
 """
 function lbfgs_dir!(
-    dir::Matrix{Tv},
+    dir::AbstractArray{Tv},
     lbfgshis::LBFGSHistory{Ti, Tv},
-    grad::Matrix{Tv};
+    grad::AbstractArray{Tv};
     negate::Bool=true,
 ) where{Ti <: Integer, Tv}
     # we store l-bfgs vectors as a cyclic array
@@ -159,4 +159,3 @@ function lbfgs_update!(
 
     lbfgshis.latest[] = j
 end
-

@@ -186,9 +186,9 @@ C_matrix(model) = model.C
 """
 Structure for storing the variables used in the solver.
 """
-struct SolverVars{Ti <: Integer,Tv}
-    Rt::Matrix{Tv}              # primal variables X = RR^T
-    Gt::Matrix{Tv}              # gradient w.r.t. R
+struct SolverVars{Ti <: Integer,Tv,TR<:AbstractArray{Tv}}
+    Rt::TR              # primal variables X = RR^T
+    Gt::TR              # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
 
     r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
@@ -202,6 +202,8 @@ struct SolverVars{Ti <: Integer,Tv}
     # the first m entries correspond to the primal violation
     # and the last entry corresponds to the objective 
     primal_vio::Vector{Tv}       
+    A_RD::Vector{Tv}
+    A_DD::Vector{Tv}
 end
 
 function SolverVars(data::SDPData, r)
@@ -222,6 +224,7 @@ function SolverVars(Rt0, λ0::Vector{Tv}, r) where {Tv}
         Ref(zero(Tv)),
         zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
         zeros(Tv, m+1), # primal_vio
+        zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
     )
 end
 
@@ -245,8 +248,6 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     triu_sparse_S::SparseMatrixCSC{Tv, Ti}
     sparse_S::SparseMatrixCSC{Tv, Ti}
     UVt::Vector{Tv}
-    A_RD::Vector{Tv}
-    A_DD::Vector{Tv}
     
     # symmetric low-rank constraints
     n_symlowrank_matrices::Ti
@@ -262,4 +263,14 @@ struct SolverStats{Tv}
     dual_GenericArpack_time::Base.RefValue{Tv} # total time - dual_lanczos_time - dual_GenericArpack_time 
     primal_time::Base.RefValue{Tv}
     DIMACS_time::Base.RefValue{Tv}  # time spent on computing the DIMACS stats which is not included in the total time
+    function SolverStats{Tv}() where {Tv}
+        return new{Tv}(
+            Ref(zero(Tv)), # starttime
+            Ref(zero(Tv)), # endtime
+            Ref(zero(Tv)), # time spent on lanczos with random start
+            Ref(zero(Tv)), # time spent on GenericArpack
+            Ref(zero(Tv)), # primal time
+            Ref(zero(Tv)), # DIMACS time
+        )
+    end
 end
