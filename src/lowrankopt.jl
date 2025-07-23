@@ -62,6 +62,7 @@ function 𝒜!(
     m = model.meta.ncon
     NLPModels.jprod!(model, u, v, view(𝒜_UVt, 1:m))
     𝒜_UVt[end] = LRO.BurerMonteiro.gprod(model, u, v)
+    𝒜_UVt ./= 2
     return
 end
 
@@ -78,4 +79,25 @@ function 𝒜t!(
     Jtv ./= 2
     Jtv .+= NLPModels.grad(model, x) / 2
     return
+end
+
+# `Jtv` is the transpose of the above one.
+# It is only used when `Jtv` is a vector
+# and we are working with the vectorization so
+# it doesn't change anything.
+function 𝒜t!(
+    Jtv::Vector,
+    model::LRO.BurerMonteiro.Model,
+    x::Vector,
+    var::SolverVars,
+)
+    r = model.dim.ranks[1]
+    set_rank!(model, 1)
+    𝒜t!(Jtv, x, model, var)
+    set_rank!(model, r)
+    return
+end
+
+function set_rank!(model::LRO.BurerMonteiro.Model, r)
+    LRO.BurerMonteiro.set_rank!(model, r, 1)
 end

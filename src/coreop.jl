@@ -386,13 +386,13 @@ end
 
 
 function surrogate_duality_gap(
-    data::SDPData{Ti, Tv, TC},
+    data,
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
     trace_bound::Tv, 
     iter::Ti;
     highprecision::Bool=false,
-) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+) where {Ti <: Integer, Tv}
     copy2y_λ_sub_pvio!(var)
 
     𝒜t_preprocess!(var, aux)
@@ -411,8 +411,9 @@ function surrogate_duality_gap(
         GenericArpack_evs = [0.0]
     end
 
-    m = length(data.b)
-    duality_gap = (var.obj[] + dot(var.y[1:m], data.b) - 
+    b = b_vector(data)
+    m = length(b_vector(data))
+    duality_gap = (var.obj[] + dot(var.y[1:m], b) -
              trace_bound * min(res[1], 0.0))     
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
 
@@ -465,10 +466,10 @@ the minimum eigenvalue of `A`.
 """
 function approx_mineigval_lanczos(
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
     q::Ti,
 ) where {Ti <: Integer, Tv}
-    n::Ti = size(aux.sparse_S, 1)
+    n::Ti = div(length(var.Rt), var.r[])
     q = min(q, n-1)
 
     # allocate lanczos vectors
@@ -484,12 +485,6 @@ function approx_mineigval_lanczos(
     v_pre = zeros(Tv, n)
     
     iter = 0
-
-    Btvs = Vector{Tv}[]
-    for _ = 1:aux.n_symlowrank_matrices
-        s = size(aux.symlowrank_As[1].B, 2)
-        push!(Btvs, zeros(Tv, s))
-    end
 
     for i = 1:q
         iter += 1
@@ -525,6 +520,7 @@ function approx_mineigval_lanczos(
     return real.(min_eigval)[1] - 1 # cancel the shift
 end
 
+set_rank!(::SDPData, ::Int) = nothing
 
 function rank_update!(
     data,
@@ -533,6 +529,7 @@ function rank_update!(
     r = var.r[]
     max_r = barvinok_pataki(data)
     newr = min(max_r, r * 2)
+    set_rank!(data, newr)
 
     return SolverVars(data, newr)
 end
