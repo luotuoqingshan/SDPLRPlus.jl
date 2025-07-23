@@ -165,13 +165,16 @@ end
 """
 Structure for storing the data of a semidefinite programming problem.
 """
-struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}, TA}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     C::TC                               # cost matrix
-    As::Vector{Any}                     # set of constraint matrices
+    As::Vector{TA}                      # set of constraint matrices
     b::Vector{Tv}                       # right-hand side b
 end
+
+b_vector(model) = model.b
+C_matrix(model) = model.C
 
 # The scalar variables in the following three structures  
 # are stored by RefValue such that we can declare the structures 
@@ -191,6 +194,35 @@ struct SolverVars{Ti <: Integer,Tv}
     r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
     σ::Base.RefValue{Tv}        # penalty parameter
     obj::Base.RefValue{Tv}      # objective
+
+    # auxiliary variable y = -λ + σ * primal_vio
+    y::Vector{Tv}               
+    # violation of constraints, for convenience, we store
+    # a length (m+1) vector where 
+    # the first m entries correspond to the primal violation
+    # and the last entry corresponds to the objective 
+    primal_vio::Vector{Tv}       
+end
+
+function SolverVars(data::SDPData, r)
+    # randomly initialize primal and dual variables
+    Rt0 = 2 .* rand(r, data.n) .- 1
+    λ0 = randn(data.m)
+    return SolverVars(Rt0, λ0, r)
+end
+
+function SolverVars(Rt0, λ0::Vector{Tv}, r) where {Tv}
+    m = length(λ0)
+    return SolverVars(
+        Rt0,
+        zeros(Tv, size(Rt0)),
+        λ0,
+        Ref(r),
+        Ref(2.0), # initial σ
+        Ref(zero(Tv)),
+        zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
+        zeros(Tv, m+1), # primal_vio
+    )
 end
 
 
@@ -220,14 +252,6 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
-    
-    # auxiliary variable y = -λ + σ * primal_vio
-    y::Vector{Tv}               
-    # violation of constraints, for convenience, we store
-    # a length (m+1) vector where 
-    # the first m entries correspond to the primal violation
-    # and the last entry corresponds to the objective 
-    primal_vio::Vector{Tv}       
 end
 
 
@@ -239,7 +263,3 @@ struct SolverStats{Tv}
     primal_time::Base.RefValue{Tv}
     DIMACS_time::Base.RefValue{Tv}  # time spent on computing the DIMACS stats which is not included in the total time
 end
-
-
-
-

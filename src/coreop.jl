@@ -6,18 +6,19 @@ the augmented Lagrangian value,
     ℒ(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝒜(RRᵀ) - b) + σ/2 ||𝒜(RRᵀ) - b||^2
 """
 function f!(
-    data::SDPData{Ti, Tv, TC},
-    var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
-) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    m = data.m # number of constraints
+    data,
+    var::SolverVars,
+    aux,
+)
+    m = length(var.λ) # number of constraints
 
     # apply the operator 𝒜 to RRᵀ and compute the objective value
-    𝒜!(aux.primal_vio, aux.UVt, aux, var.Rt)
-    var.obj[] = aux.primal_vio[m+1]
+    𝒜!(var.primal_vio, aux, var.Rt)
+    var.obj[] = var.primal_vio[m+1]
 
-    v = @view aux.primal_vio[1:m]
-    @. v -= data.b
+    v = @view var.primal_vio[1:m]
+    b = b_vector(data)
+    @. v -= b
     return (var.obj[] - dot(var.λ, v) + var.σ[] * dot(v, v) / 2) 
 end
 
@@ -27,7 +28,6 @@ Compute 𝒜(UUᵀ)
 """
 function 𝒜!(
     𝒜_UUt::Vector{Tv},
-    UUt::Vector{Tv},
     aux::SolverAuxiliary{Ti, Tv},
     Ut::Matrix{Tv},
 ) where {Ti <: Integer, Tv}
@@ -35,7 +35,7 @@ function 𝒜!(
     # deal with sparse and diagonal constraints first
     # store results of 𝒜(UUᵀ)
     if aux.n_sparse_matrices > 0
-        𝒜_sparse!(𝒜_UUt, UUt, aux, Ut)
+        𝒜_sparse!(𝒜_UUt, aux.UVt, aux, Ut)
     end
     # then deal with low-rank matrices
     if aux.n_symlowrank_matrices > 0
@@ -48,7 +48,6 @@ Compute 𝒜((UVᵀ + VUᵀ)/2)
 """
 function 𝒜!(
     𝒜_UVt::Vector{Tv},
-    UVt::Vector{Tv},
     aux::SolverAuxiliary{Ti, Tv},
     Ut::Matrix{Tv},
     Vt::Matrix{Tv};
@@ -57,7 +56,7 @@ function 𝒜!(
     # deal with sparse and diagonal constraints first
     # store results of 𝓐(UVᵀ + VUᵀ)/2
     if aux.n_sparse_matrices > 0
-        𝒜_sparse!(𝒜_UVt, UVt, aux, Ut, Vt)
+        𝒜_sparse!(𝒜_UVt, aux.UVt, aux, Ut, Vt)
     end
     # then deal with low-rank matrices
     if aux.n_symlowrank_matrices > 0
@@ -226,13 +225,12 @@ end
 
 function copy2y_λ_sub_pvio!(
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
 )where {Ti <: Integer, Tv}  
-    m = length(aux.primal_vio)-1
+    m = length(var.primal_vio)-1
     @inbounds @simd for i = 1:m
-        aux.y[i] = -(var.λ[i] - var.σ[] * aux.primal_vio[i])
+        var.y[i] = -(var.λ[i] - var.σ[] * var.primal_vio[i])
     end 
-    aux.y[m+1] = one(Tv)
+    var.y[m+1] = one(Tv)
 end
 
 
@@ -240,22 +238,23 @@ function copy2y_λ!(
     var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 )where {Ti <: Integer, Tv}
-    m = length(aux.primal_vio)-1
+    m = length(var.primal_vio)-1
     @inbounds @simd for i = 1:m
-        aux.y[i] = -var.λ[i]
+        var.y[i] = -var.λ[i]
     end 
-    aux.y[m+1] = one(Tv)
+    var.y[m+1] = one(Tv)
 end
 
 
 function 𝒜t_preprocess!(
+    var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv}
     # update the sparse matrix
     # compute C - ∑_{i=1}^{m} λ_i A_i for sparse matrices
 
     if aux.n_sparse_matrices > 0
-        v = aux.y[aux.sparse_As_global_inds]
+        v = var.y[aux.sparse_As_global_inds]
         𝒜t_preprocess_sparse!(aux.sparse_S, aux.triu_sparse_S.nzval, v, aux)
     end
 end
@@ -265,6 +264,7 @@ function 𝒜t!(
     y::Tx, 
     x::Tx, 
     aux::SolverAuxiliary{Ti, Tv}, 
+    var::SolverVars{Ti, Tv},
 )where{Ti <: Integer, Tv, Tx <: AbstractArray{Tv}}
     # zero out output vector
     fill!(y, zero(Tv))
@@ -278,7 +278,7 @@ function 𝒜t!(
     if aux.n_symlowrank_matrices > 0
         for i = 1:aux.n_symlowrank_matrices
             global_id = aux.symlowrank_As_global_inds[i]
-            coeff = aux.y[global_id]
+            coeff = var.y[global_id]
             mul!(y, x, aux.symlowrank_As[i], coeff, one(Tv))
         end 
     end
@@ -289,6 +289,7 @@ function 𝒜t!(
     y::Tx, 
     aux::SolverAuxiliary{Ti, Tv}, 
     x::Tx,
+    var::SolverVars{Ti, Tv},
 ) where{Ti <: Integer, Tv, Tx <: AbstractArray{Tv}}
     # zero out output vector
     fill!(y, zero(Tv))
@@ -302,7 +303,7 @@ function 𝒜t!(
     if aux.n_symlowrank_matrices > 0
         for i = 1:aux.n_symlowrank_matrices
             global_id = aux.symlowrank_As_global_inds[i]
-            coeff = aux.y[global_id]
+            coeff = var.y[global_id]
             mul!(y, aux.symlowrank_As[i], x, coeff, one(Tv))
         end 
     end
@@ -314,14 +315,14 @@ This function computes the gradient of the augmented Lagrangian
 """
 function g!(
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
 ) where{Ti <: Integer, Tv}
     𝒜t_preprocess_dt = @elapsed begin
-        copy2y_λ_sub_pvio!(var, aux)
-        𝒜t_preprocess!(aux)
+        copy2y_λ_sub_pvio!(var)
+        𝒜t_preprocess!(var, aux)
     end
     densesparse_dt = @elapsed begin
-        𝒜t!(var.Gt, var.Rt, aux)
+        𝒜t!(var.Gt, var.Rt, aux, var)
     end
     @debug ("𝒜t_preprocess_dt: $𝒜t_preprocess_dt, 
         densesparse_dt: $densesparse_dt")
@@ -335,13 +336,13 @@ Function for computing Lagrangian value, stationary condition
 and primal feasibility.
 """
 function fg!(
-    data::SDPData{Ti, Tv, TC},
+    data,
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
     normC::Tv,
     normb::Tv,
-) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    m = data.m
+) where {Ti <: Integer, Tv}
+    m = length(var.λ)
     f_dt = @elapsed begin
         𝓛_val = f!(data, var, aux)
     end
@@ -351,7 +352,7 @@ function fg!(
     @debug "f dt, g dt" f_dt, g_dt
     grad_norm = norm(var.Gt, 2) / (1.0 + normC)
 
-    v = @view aux.primal_vio[1:m]
+    v = @view var.primal_vio[1:m]
     primal_vio_norm = norm(v, 2) / (1.0 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
@@ -374,7 +375,7 @@ function SDP_S_eigval(
                 𝒜t!(y, aux, x)
                 # shift the matrix by I
                 y .+= x
-                return y 
+                return y
             end, n)
         GenericArpack_eigvals, _ = symeigs(op, nevs; kwargs...)
     end
@@ -392,11 +393,11 @@ function surrogate_duality_gap(
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    copy2y_λ_sub_pvio!(var, aux)
+    copy2y_λ_sub_pvio!(var)
 
-    𝒜t_preprocess!(aux)
+    𝒜t_preprocess!(var, aux)
     lanczos_dt = @elapsed begin
-        lanczos_eigenval = approx_mineigval_lanczos(aux, iter)
+        lanczos_eigenval = approx_mineigval_lanczos(var, aux, iter)
     end
     res = lanczos_eigenval
     if highprecision
@@ -411,7 +412,7 @@ function surrogate_duality_gap(
     end
 
     m = length(data.b)
-    duality_gap = (var.obj[] + dot(aux.y[1:m], data.b) - 
+    duality_gap = (var.obj[] + dot(var.y[1:m], data.b) - 
              trace_bound * min(res[1], 0.0))     
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
 
@@ -435,13 +436,13 @@ function DIMACS_errors(
     aux::SolverAuxiliary{Ti, Tv},
 ) where {Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
     n = size(aux.sparse_S, 1)
-    v = @view aux.primal_vio[1:data.m] 
+    v = @view var.primal_vio[1:data.m] 
     err1 = norm(v, 2) / (1.0 + norm(data.b, 2))       
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)
 
     copy2y_λ!(var, aux)
-    𝒜t_preprocess!(aux)
+    𝒜t_preprocess!(var, aux)
 
     GenericArpack_evs, _ = 
         SDP_S_eigval(var, aux, 1, true; 
@@ -463,6 +464,7 @@ Perform `q` Lanczos iterations with *a random start vector* to approximate
 the minimum eigenvalue of `A`.
 """
 function approx_mineigval_lanczos(
+    var::SolverVars{Ti, Tv},
     aux::SolverAuxiliary{Ti, Tv},
     q::Ti,
 ) where {Ti <: Integer, Tv}
@@ -491,7 +493,7 @@ function approx_mineigval_lanczos(
 
     for i = 1:q
         iter += 1
-        𝒜t!(Av, aux, v)
+        𝒜t!(Av, aux, v, var)
         alpha[i] = v' * Av
 
         if i == 1
@@ -525,23 +527,12 @@ end
 
 
 function rank_update!(
+    data,
     var::SolverVars{Ti, Tv},
 ) where {Ti <: Integer, Tv}
-    n = size(var.Rt, 2)
-    m = size(var.λ, 1)
     r = var.r[]
-    max_r = barvinok_pataki(n, m)
+    max_r = barvinok_pataki(data)
     newr = min(max_r, r * 2)
 
-    newRt = 2 * rand(Tv, newr, n) .- 1
-    newλ = randn(m)
-
-    return SolverVars(
-        newRt, 
-        zeros(Tv, size(newRt)), 
-        newλ, 
-        Ref(Ti(newr)),
-        Ref(Tv(2.0)),
-        Ref(Tv(0.0))
-    )
+    return SolverVars(data, newr)
 end

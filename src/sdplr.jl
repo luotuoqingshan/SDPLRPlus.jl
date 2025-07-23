@@ -71,7 +71,7 @@ The default value is ``10^{-2}``.
 """
 function sdplr(
     C::AbstractMatrix{Tv},
-    As::Vector{Any},
+    As::Vector,
     b::Vector{Tv},
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
@@ -156,6 +156,8 @@ function sdplr(
             Ref(r),
             Ref(2.0), # initial σ
             Ref(zero(Tv)),
+            zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
+            zeros(Tv, m+1), # primal_vio
         )
         aux = SolverAuxiliary(
             length(sparse_cons),
@@ -174,9 +176,6 @@ function sdplr(
             length(symlowrank_cons), #n_symlowrank_matrices
             symlowrank_cons, 
             symlowrank_As_global_inds,
-
-            zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
-            zeros(Tv, m+1), # primal_vio
         )
         stats = SolverStats(
             Ref(zero(Tv)), # starttime
@@ -205,12 +204,12 @@ end
 
 
 function _sdplr(
-    data::SDPData{Ti, Tv, TC},
+    data,
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
     stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti, Tv},
-) where{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+) where{Ti <: Integer, Tv}
     n = data.n # size of decision variables 
     m = data.m # number of constraints
 
@@ -222,8 +221,8 @@ function _sdplr(
     λ0 = deepcopy(var.λ)
 
     # set up algorithm parameters
-    normb = norm(data.b, 2)
-    normC = norm(data.C, 2)
+    normb = norm(b_vector(data), 2)
+    normC = norm(C_matrix(data), 2)
 
     # initialize lbfgs datastructures
     lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
@@ -277,7 +276,7 @@ function _sdplr(
             end
             @debug "g time" g_dt
             grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-            v = @view aux.primal_vio[1:m]
+            v = @view var.primal_vio[1:m]
             primal_vio_norm = norm(v, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
@@ -358,13 +357,13 @@ function _sdplr(
                         rank_double = true
                     end
                     #last_rel_duality_bound = rel_duality_bound
-                    v = @view aux.primal_vio[1:m]
+                    v = @view var.primal_vio[1:m]
                     axpy!(-var.σ[], v, var.λ)
                     cur_ptol = cur_ptol / var.σ[]^0.9
                     cur_gtol = cur_gtol / var.σ[]
                 end
             else
-                v = @view aux.primal_vio[1:m]
+                v = @view var.primal_vio[1:m]
                 axpy!(-var.σ[], v, var.λ)
                 cur_ptol = cur_ptol / var.σ[]^0.9
                 cur_gtol = cur_gtol / var.σ[]
@@ -377,7 +376,7 @@ function _sdplr(
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
-            var = rank_update!(var)
+            var = rank_update!(data, var)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)

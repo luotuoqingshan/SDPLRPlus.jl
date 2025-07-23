@@ -41,5 +41,6 @@ include("utils.jl")
 # main function
 include("sdplr.jl")
 
+#include("nlpmodels.jl")
 
 end
