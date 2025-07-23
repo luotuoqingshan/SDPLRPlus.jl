@@ -34,10 +34,11 @@ import LowRankOpt as LRO
 b_vector(model::LRO.BurerMonteiro.Model) = LRO.cons_constant(model.model)
 C_matrix(model::LRO.BurerMonteiro.Model) = NLPModels.grad(model.model, LRO.MatrixIndex(1))
 
-barvinok_pataki(data::LRO.BurerMonteiro.Model) = barvinok_pataki(data.dim.side_dimension[], data.meta.ncon)
+barvinok_pataki(data::LRO.BurerMonteiro.Model) = barvinok_pataki(data.dim.side_dimensions[], data.meta.ncon)
 
 function SolverVars(data::LRO.BurerMonteiro.Model, r)
     # randomly initialize primal and dual variables
+    LRO.BurerMonteiro.set_rank!(data.dim, r, 1)
     Rt0 = 2 .* rand(length(data.dim)) .- 1
     λ0 = randn(data.meta.ncon)
     return SolverVars(Rt0, λ0, r)
