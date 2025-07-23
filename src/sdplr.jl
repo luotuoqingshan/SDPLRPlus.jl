@@ -362,7 +362,7 @@ function _sdplr(
             dirt = similar(var.Rt)
             min_rel_duality_gap = 1e20
             rankupd_tol_cnt = config.rankupd_tol
-            @info "rank doubled, newrank is $(size(var.Rt, 1))."
+            @info "rank doubled, newrank is $(var.r[])."
         else
             lbfgs_clear!(lbfgshis)
         end
