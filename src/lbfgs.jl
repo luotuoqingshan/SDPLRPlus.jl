@@ -139,9 +139,9 @@ end
 Postprocessing step of L-BFGS.
 """
 function lbfgs_update!(
-    dir::Matrix{Tv},
+    dir::AbstractArray{Tv},
     lbfgshis::LBFGSHistory{Ti, Tv},
-    grad::Matrix{Tv},
+    grad::AbstractArray{Tv},
     stepsize::Tv,
 )where {Ti<:Integer, Tv}
     # if m = 0, LBFGS degenerates to gradient descent

@@ -53,6 +53,18 @@ function 𝒜!(
     𝒜_UUt[end] = NLPModels.obj(model, x)
 end
 
+function 𝒜!(
+    𝒜_UVt::Vector{Tv},
+    model::LRO.BurerMonteiro.Model,
+    u::Vector{Tv},
+    v::Vector{Tv},
+) where {Tv}
+    m = model.meta.ncon
+    NLPModels.jprod!(model, u, v, view(𝒜_UVt, 1:m))
+    𝒜_UVt[end] = LRO.BurerMonteiro.gprod(model, u, v)
+    return
+end
+
 function 𝒜t_preprocess!(::SolverVars, ::LRO.BurerMonteiro.Model) end
 
 function 𝒜t!(
