@@ -75,4 +75,7 @@ function 𝒜t!(
 )
     y = view(var.y, 1:model.meta.ncon)
     NLPModels.jtprod!(model, x, y, Jtv)
+    Jtv ./= 2
+    Jtv .+= NLPModels.grad(model, x) / 2
+    return
 end
