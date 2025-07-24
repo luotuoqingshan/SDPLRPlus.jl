@@ -469,7 +469,7 @@ function approx_mineigval_lanczos(
     aux,
     q::Ti,
 ) where {Ti <: Integer, Tv}
-    n::Ti = div(length(var.Rt), var.r[])
+    n::Ti = side_dimension(aux)
     q = min(q, n-1)
 
     # allocate lanczos vectors

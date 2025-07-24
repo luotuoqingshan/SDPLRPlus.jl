@@ -255,6 +255,7 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     symlowrank_As_global_inds::Vector{Ti}
 end
 
+side_dimension(aux::SolverAuxiliary) = size(aux.sparse_S, 1)
 
 struct SolverStats{Tv}
     starttime::Base.RefValue{Tv}               # timing

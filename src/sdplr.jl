@@ -189,7 +189,7 @@ function _sdplr(
     stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti, Tv},
 ) where{Ti <: Integer, Tv}
-    n = div(length(var.Rt), var.r[])
+    n = side_dimension(aux)
     m = length(var.λ) # number of constraints
 
     stats.starttime[] = time()

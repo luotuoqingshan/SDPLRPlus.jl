@@ -13,7 +13,7 @@ function Solver(src::NLPModels.AbstractNLPModel; config=BurerMonteiroConfig{Int,
         else
             @error "Unrecognized keyword argument $key"
         end
-    end 
+    end
 
     var = SolverVars(src, src.dim.ranks[])
     stats = SolverStats{Float64}()
@@ -24,8 +24,16 @@ function SolverCore.solve!(
     solver::Solver,
     model::NLPModels.AbstractNLPModel, # Same the one given in the constructor
     stats::SolverCore.GenericExecutionStats;
-    kws...,
+    kwargs...,
 )
+    for (key, value) in kwargs
+        if hasfield(BurerMonteiroConfig, Symbol(key))
+            setfield!(solver.config, Symbol(key), value)
+        else
+            @warn "Unrecognized keyword argument $key"
+        end
+    end
+
     return _sdplr(model, solver.var, model, solver.stats, solver.config)
 end
 
@@ -34,11 +42,17 @@ import LowRankOpt as LRO
 b_vector(model::LRO.BurerMonteiro.Model) = LRO.cons_constant(model.model)
 C_matrix(model::LRO.BurerMonteiro.Model) = NLPModels.grad(model.model, LRO.MatrixIndex(1))
 
-barvinok_pataki(data::LRO.BurerMonteiro.Model) = barvinok_pataki(data.dim.side_dimensions[], data.meta.ncon)
+side_dimension(model::LRO.BurerMonteiro.Model) = model.dim.side_dimensions[]
+
+barvinok_pataki(data::LRO.BurerMonteiro.Model) = barvinok_pataki(side_dimension(data), data.meta.ncon)
+
+function set_rank!(model::LRO.BurerMonteiro.Model, r)
+    LRO.BurerMonteiro.set_rank!(model, LRO.MatrixIndex(1), r)
+end
 
 function SolverVars(data::LRO.BurerMonteiro.Model, r)
     # randomly initialize primal and dual variables
-    LRO.BurerMonteiro.set_rank!(data.dim, r, 1)
+    set_rank!(data, r)
     Rt0 = 2 .* rand(length(data.dim)) .- 1
     λ0 = randn(data.meta.ncon)
     return SolverVars(Rt0, λ0, r)
@@ -97,8 +111,4 @@ function 𝒜t!(
     𝒜t!(Jtv, x, model, var)
     set_rank!(model, r)
     return
-end
-
-function set_rank!(model::LRO.BurerMonteiro.Model, r)
-    LRO.BurerMonteiro.set_rank!(model, r, 1)
 end
