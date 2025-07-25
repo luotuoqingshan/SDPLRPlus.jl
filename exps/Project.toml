@@ -1,9 +1,12 @@
 [deps]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
+Dualization = "191a621a-6537-11e9-281d-650236a99e60"
 GenericArpack = "408c25d7-97fa-4992-8bd9-ce15f1a09fe9"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LowRankOpt = "607ca3ad-272e-43c8-bcbe-fc71b56c935c"
 LuxurySparse = "d05aeea4-b7d4-55ac-b691-9e7fabb07ba2"
 MKL = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
 MKLSparse = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
