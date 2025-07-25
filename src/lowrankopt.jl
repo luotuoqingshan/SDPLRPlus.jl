@@ -91,8 +91,8 @@ function 𝒜t!(
 )
     y = view(var.y, 1:model.meta.ncon)
     NLPModels.jtprod!(model, x, y, Jtv)
+    Jtv .+= NLPModels.grad(model, x)
     Jtv ./= 2
-    Jtv .+= NLPModels.grad(model, x) / 2
     return
 end
 
@@ -108,7 +108,13 @@ function 𝒜t!(
 )
     r = model.dim.ranks[1]
     set_rank!(model, 1)
-    𝒜t!(Jtv, x, model, var)
+    i = LRO.MatrixIndex(1)
+    X = LRO.positive_semidefinite_factorization(x)
+    JtV = LRO.positive_semidefinite_factorization(Jtv)
+    NLPModels.grad!(model, X, JtV, i)
+    y = view(var.y, 1:model.meta.ncon)
+    LRO.BurerMonteiro.add_jtprod!(model, X, y, JtV, i)
+    Jtv ./= 2
     set_rank!(model, r)
     return
 end
