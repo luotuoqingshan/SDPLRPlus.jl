@@ -173,6 +173,8 @@ struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}, TA}
     b::Vector{Tv}                       # right-hand side b
 end
 
+SDPData(C, As, b) = SDPData(size(C, 1), length(As), C, As, b)
+
 b_vector(model) = model.b
 C_matrix(model) = model.C
 
@@ -253,6 +255,76 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
+end
+
+function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
+    sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
+    symlowrank_cons = SymLowRankMatrix{Tv}[]
+    # treat diagonal matrices as sparse matrices
+    sparse_As_global_inds = Ti[]
+    symlowrank_As_global_inds = Ti[]
+
+    for (i, A) in enumerate(data.As)
+        if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
+            push!(sparse_cons, A)
+            push!(sparse_As_global_inds, i)
+        elseif isa(A, Diagonal)
+            push!(sparse_cons, sparse(A))
+            push!(sparse_As_global_inds, i)
+        elseif isa(A, SymLowRankMatrix)
+            push!(symlowrank_cons, A)
+            push!(symlowrank_As_global_inds, i)
+        else
+            @error "Currently only sparse\
+            /symmetric low-rank\
+            /diagonal constraints are supported."
+        end
+    end
+
+    if isa(data.C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
+        push!(sparse_cons, data.C)
+        push!(sparse_As_global_inds, data.m+1)
+    elseif isa(data.C, Diagonal)
+        push!(sparse_cons, sparse(data.C))
+        push!(sparse_As_global_inds, data.m+1)
+    elseif isa(data.C, SymLowRankMatrix)
+        push!(symlowrank_cons, data.C)
+        push!(symlowrank_As_global_inds, data.m+1)
+    else
+        @error "Currently only sparse\
+        /lowrank/diagonal objectives are supported."
+    end
+
+    @info "Finish classifying constraints."
+
+    # preprocess sparse constraints
+    res = @timed begin
+        triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
+        triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
+        triu_agg_sparse_A_nzval_two, agg_sparse_A, 
+        agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+    end
+    @debug "$(res.bytes)B allocated during preprocessing constraints." 
+
+    nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
+
+    return SolverAuxiliary(
+        length(sparse_cons),
+        triu_agg_sparse_A_matptr,
+        triu_agg_sparse_A_nzind,
+        triu_agg_sparse_A_nzval_one,
+        triu_agg_sparse_A_nzval_two,
+        agg_sparse_A_mappedto_triu,
+        sparse_As_global_inds,
+
+        triu_agg_sparse_A,
+        agg_sparse_A,
+        zeros(Tv, nnz_triu_agg_sparse_A), # UVt
+
+        length(symlowrank_cons), #n_symlowrank_matrices
+        symlowrank_cons, 
+        symlowrank_As_global_inds,
+    )
 end
 
 side_dimension(aux::SolverAuxiliary) = size(aux.sparse_S, 1)

@@ -92,77 +92,9 @@ function sdplr(
     end
 
     preprocess_dt = @elapsed begin
-        m = length(As)
-        sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
-        symlowrank_cons = SymLowRankMatrix{Tv}[]
-        # treat diagonal matrices as sparse matrices
-        sparse_As_global_inds = Ti[]
-        symlowrank_As_global_inds = Ti[]
-    
-        for (i, A) in enumerate(As)
-            if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
-                push!(sparse_cons, A)
-                push!(sparse_As_global_inds, i)
-            elseif isa(A, Diagonal)
-                push!(sparse_cons, sparse(A))
-                push!(sparse_As_global_inds, i)
-            elseif isa(A, SymLowRankMatrix)
-                push!(symlowrank_cons, A)
-                push!(symlowrank_As_global_inds, i)
-            else
-                @error "Currently only sparse\
-                /symmetric low-rank\
-                /diagonal constraints are supported."
-            end
-        end
-
-        if isa(C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
-            push!(sparse_cons, C)
-            push!(sparse_As_global_inds, m+1)
-        elseif isa(C, Diagonal)
-            push!(sparse_cons, sparse(C))
-            push!(sparse_As_global_inds, m+1)
-        elseif isa(C, SymLowRankMatrix)
-            push!(symlowrank_cons, C)
-            push!(symlowrank_As_global_inds, m+1)
-        else
-            @error "Currently only sparse\
-            /lowrank/diagonal objectives are supported."
-        end
-
-        @info "Finish classifying constraints."
-
-        # preprocess sparse constraints
-        res = @timed begin
-            triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
-            triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
-            triu_agg_sparse_A_nzval_two, agg_sparse_A, 
-            agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
-        end
-        @debug "$(res.bytes)B allocated during preprocessing constraints." 
-    
-        n = size(C, 1)
-        nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
-
-        data = SDPData(n, m, C, As, b)
+        data = SDPData(C, As, b)
         var = SolverVars(data, r)
-        aux = SolverAuxiliary(
-            length(sparse_cons),
-            triu_agg_sparse_A_matptr,
-            triu_agg_sparse_A_nzind,
-            triu_agg_sparse_A_nzval_one,
-            triu_agg_sparse_A_nzval_two,
-            agg_sparse_A_mappedto_triu,
-            sparse_As_global_inds,
-
-            triu_agg_sparse_A,
-            agg_sparse_A,
-            zeros(Tv, nnz_triu_agg_sparse_A), # UVt
-
-            length(symlowrank_cons), #n_symlowrank_matrices
-            symlowrank_cons, 
-            symlowrank_As_global_inds,
-        )
+        aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
     end
 
@@ -180,7 +112,6 @@ function sdplr(
 
     return ans 
 end
-
 
 function _sdplr(
     data,
