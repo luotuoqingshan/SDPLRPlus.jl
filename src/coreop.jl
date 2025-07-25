@@ -372,7 +372,7 @@ function SDP_S_eigval(
     GenericArpack_dt = @elapsed begin
         op = ArpackSimpleFunctionOp(
             (y, x) -> begin
-                𝒜t!(y, aux, x)
+                𝒜t!(y, aux, x, var)
                 # shift the matrix by I
                 y .+= x
                 return y
