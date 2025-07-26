@@ -9,14 +9,14 @@ include(joinpath(dirname(dirname(pathof(LowRankOpt))), "examples", "maxcut.jl"))
 n = 500
 import Random
 Random.seed!(0)
-W = sprand(n, n, 0.1)
+W = sprand(n, n, 0.01)
 W = W + W'
 include(joinpath(@__DIR__, "problems.jl"))
 C, As, b = maxcut(W)
 @time sdplr(C, As, b, 1, maxmajoriter = 20);
 
 # SDPLRPlus does not support sparse factor
-As = [SymLowRankMatrix(Diagonal(ones(1)), e_i(Float64, i, n, sparse = false)) for i in 1:n]
+As = [SymLowRankMatrix(Diagonal(ones(1)), hcat(e_i(Float64, i, n, sparse = false))) for i in 1:n]
 d = SDPLRPlus.SDPData(C, As, b)
 var = SDPLRPlus.SolverVars(d, 1)
 aux = SDPLRPlus.SolverAuxiliary(d)
@@ -28,7 +28,7 @@ set_attribute(model, "sub_solver", SDPLRPlus.Solver)
 set_attribute(model, "ranks", [1])
 set_attribute(model, "maxmajoriter", 0)
 set_attribute(model, "printlevel", 3)
-optimize!(model)
+@profview optimize!(model)
 solver = unsafe_backend(model).dual_problem.dual_model.model.optimizer.solver
 
 using BenchmarkTools
