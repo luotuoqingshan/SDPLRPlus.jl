@@ -366,7 +366,7 @@ function SDP_S_eigval(
     kwargs...
 ) where {Ti <: Integer, Tv}
     if !preprocessed
-        𝒜t_preprocess!(aux)
+        𝒜t_preprocess!(aux, var)
     end
     n = size(aux.sparse_S, 1)
     GenericArpack_dt = @elapsed begin

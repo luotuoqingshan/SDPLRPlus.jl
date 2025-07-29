@@ -15,6 +15,9 @@ function Solver(src::NLPModels.AbstractNLPModel; config=BurerMonteiroConfig{Int,
         end
     end
 
+    if length(src.meta.ifree) != src.meta.nvar
+        error("SDPLRPlus only supports free variables, use `set_attribute(model, \"square_scalars\", true)`")
+    end
     var = SolverVars(src, src.dim.ranks[])
     stats = SolverStats{Float64}()
     return Solver(var, stats, config)
@@ -34,7 +37,12 @@ function SolverCore.solve!(
         end
     end
 
-    return _sdplr(model, solver.var, model, solver.stats, solver.config)
+    ans = _sdplr(model, solver.var, model, solver.stats, solver.config)
+    stats.status = :first_order # TODO find the actual status
+    copyto!(stats.solution, solver.var.Rt)
+    copyto!(stats.multipliers, solver.var.λ)
+    stats.elapsed_time = ans["totaltime"]
+    return
 end
 
 import LowRankOpt as LRO
