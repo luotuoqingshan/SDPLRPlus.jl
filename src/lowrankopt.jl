@@ -119,7 +119,7 @@ function 𝒜t!(
     i = LRO.MatrixIndex(1)
     X = LRO.positive_semidefinite_factorization(x)
     JtV = LRO.positive_semidefinite_factorization(Jtv)
-    LRO.grad!(model, X, JtV, i)
+    LRO.BurerMonteiro.grad!(model, X, JtV, i)
     y = view(var.y, 1:model.meta.ncon)
     LRO.BurerMonteiro.add_jtprod!(model, X, y, JtV, i)
     Jtv ./= 2
