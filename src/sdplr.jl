@@ -271,17 +271,12 @@ function _sdplr(
                         rank_double = true
                     end
                     #last_rel_duality_bound = rel_duality_bound
-                    v = @view var.primal_vio[1:m]
-                    axpy!(-var.σ[], v, var.λ)
-                    cur_ptol = cur_ptol / var.σ[]^0.9
-                    cur_gtol = cur_gtol / var.σ[]
                 end
-            else
-                v = @view var.primal_vio[1:m]
-                axpy!(-var.σ[], v, var.λ)
-                cur_ptol = cur_ptol / var.σ[]^0.9
-                cur_gtol = cur_gtol / var.σ[]
             end
+            v = @view var.primal_vio[1:m]
+            axpy!(-var.σ[], v, var.λ)
+            cur_ptol = cur_ptol / var.σ[]^0.9
+            cur_gtol = cur_gtol / var.σ[]
         else 
             var.σ[] *= config.σfac 
             cur_ptol = 1 / var.σ[]^0.1
