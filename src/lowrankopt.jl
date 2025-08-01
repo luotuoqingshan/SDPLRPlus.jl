@@ -48,7 +48,7 @@ end
 import LowRankOpt as LRO
 
 b_vector(model::LRO.BurerMonteiro.Model) = LRO.cons_constant(model.model)
-C_matrix(model::LRO.BurerMonteiro.Model) = NLPModels.grad(model.model, LRO.MatrixIndex(1))
+C_matrix(model::LRO.BurerMonteiro.Model) = LRO.grad(model.model, LRO.MatrixIndex(1))
 
 side_dimension(model::LRO.BurerMonteiro.Model) = model.dim.side_dimensions[]
 
@@ -119,7 +119,7 @@ function 𝒜t!(
     i = LRO.MatrixIndex(1)
     X = LRO.positive_semidefinite_factorization(x)
     JtV = LRO.positive_semidefinite_factorization(Jtv)
-    NLPModels.grad!(model, X, JtV, i)
+    LRO.grad!(model, X, JtV, i)
     y = view(var.y, 1:model.meta.ncon)
     LRO.BurerMonteiro.add_jtprod!(model, X, y, JtV, i)
     Jtv ./= 2
