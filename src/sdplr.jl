@@ -240,6 +240,10 @@ function _sdplr(
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
                 @debug "primal vio is small enough, checking duality bound."
+                if config.objtol == Inf
+                    @debug "`objtol` is `Inf`, skipping duality gap check"
+                    break
+                end
                 eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n))) 
 
                 # when highprecision=true, then GenericArpack will be used
