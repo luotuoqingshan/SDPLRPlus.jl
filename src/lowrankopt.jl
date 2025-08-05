@@ -115,7 +115,9 @@ function 𝒜t!(
     var::SolverVars,
 )
     r = model.dim.ranks[1]
-    set_rank!(model, 1)
+    if r != 1
+        set_rank!(model, 1)
+    end
     i = LRO.MatrixIndex(1)
     X = LRO.positive_semidefinite_factorization(x)
     JtV = LRO.positive_semidefinite_factorization(Jtv)
@@ -123,6 +125,8 @@ function 𝒜t!(
     y = view(var.y, 1:model.meta.ncon)
     LRO.BurerMonteiro.add_jtprod!(model, X, y, JtV, i)
     Jtv ./= 2
-    set_rank!(model, r)
+    if r != 1
+        set_rank!(model, r)
+    end
     return
 end
