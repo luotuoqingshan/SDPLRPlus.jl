@@ -118,7 +118,7 @@ function read_graph(name, problem)
     if problem in ["LovaszTheta"]
         problem = "MaxCut"
     end
-    return matread(homedir()*"/datasets/graphs/"*problem*"/"*name*".mat")["A"]
+    return matread("/p/mnt/data/yufan/datasets/graphs/"*problem*"/"*name*".mat")["A"]
 end
 
 function eval_cut(L, x)
