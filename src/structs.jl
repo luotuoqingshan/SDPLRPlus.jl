@@ -165,13 +165,18 @@ end
 """
 Structure for storing the data of a semidefinite programming problem.
 """
-struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
+struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}, TA}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     C::TC                               # cost matrix
-    As::Vector{Any}                     # set of constraint matrices
+    As::Vector{TA}                      # set of constraint matrices
     b::Vector{Tv}                       # right-hand side b
 end
+
+SDPData(C, As, b) = SDPData(size(C, 1), length(As), C, As, b)
+
+b_vector(model) = model.b
+C_matrix(model) = model.C
 
 # The scalar variables in the following three structures  
 # are stored by RefValue such that we can declare the structures 
@@ -183,14 +188,46 @@ end
 """
 Structure for storing the variables used in the solver.
 """
-struct SolverVars{Ti <: Integer,Tv}
-    Rt::Matrix{Tv}              # primal variables X = RR^T
-    Gt::Matrix{Tv}              # gradient w.r.t. R
+struct SolverVars{Ti <: Integer,Tv,TR<:AbstractArray{Tv}}
+    Rt::TR              # primal variables X = RR^T
+    Gt::TR              # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
 
     r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
     σ::Base.RefValue{Tv}        # penalty parameter
     obj::Base.RefValue{Tv}      # objective
+
+    # auxiliary variable y = -λ + σ * primal_vio
+    y::Vector{Tv}               
+    # violation of constraints, for convenience, we store
+    # a length (m+1) vector where 
+    # the first m entries correspond to the primal violation
+    # and the last entry corresponds to the objective 
+    primal_vio::Vector{Tv}       
+    A_RD::Vector{Tv}
+    A_DD::Vector{Tv}
+end
+
+function SolverVars(data::SDPData, r)
+    # randomly initialize primal and dual variables
+    Rt0 = 2 .* rand(r, data.n) .- 1
+    λ0 = randn(data.m)
+    return SolverVars(Rt0, λ0, r)
+end
+
+function SolverVars(Rt0, λ0::Vector{Tv}, r) where {Tv}
+    m = length(λ0)
+    return SolverVars(
+        Rt0,
+        zeros(Tv, size(Rt0)),
+        λ0,
+        Ref(r),
+        Ref(2.0), # initial σ
+        Ref(zero(Tv)),
+        zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
+        zeros(Tv, m+1), # primal_vio
+        zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
+    )
 end
 
 
@@ -213,23 +250,84 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     triu_sparse_S::SparseMatrixCSC{Tv, Ti}
     sparse_S::SparseMatrixCSC{Tv, Ti}
     UVt::Vector{Tv}
-    A_RD::Vector{Tv}
-    A_DD::Vector{Tv}
     
     # symmetric low-rank constraints
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
     symlowrank_As_global_inds::Vector{Ti}
-    
-    # auxiliary variable y = -λ + σ * primal_vio
-    y::Vector{Tv}               
-    # violation of constraints, for convenience, we store
-    # a length (m+1) vector where 
-    # the first m entries correspond to the primal violation
-    # and the last entry corresponds to the objective 
-    primal_vio::Vector{Tv}       
 end
 
+function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
+    sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
+    symlowrank_cons = SymLowRankMatrix{Tv}[]
+    # treat diagonal matrices as sparse matrices
+    sparse_As_global_inds = Ti[]
+    symlowrank_As_global_inds = Ti[]
+
+    for (i, A) in enumerate(data.As)
+        if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
+            push!(sparse_cons, A)
+            push!(sparse_As_global_inds, i)
+        elseif isa(A, Diagonal)
+            push!(sparse_cons, sparse(A))
+            push!(sparse_As_global_inds, i)
+        elseif isa(A, SymLowRankMatrix)
+            push!(symlowrank_cons, A)
+            push!(symlowrank_As_global_inds, i)
+        else
+            @error "Currently only sparse\
+            /symmetric low-rank\
+            /diagonal constraints are supported."
+        end
+    end
+
+    if isa(data.C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
+        push!(sparse_cons, data.C)
+        push!(sparse_As_global_inds, data.m+1)
+    elseif isa(data.C, Diagonal)
+        push!(sparse_cons, sparse(data.C))
+        push!(sparse_As_global_inds, data.m+1)
+    elseif isa(data.C, SymLowRankMatrix)
+        push!(symlowrank_cons, data.C)
+        push!(symlowrank_As_global_inds, data.m+1)
+    else
+        @error "Currently only sparse\
+        /lowrank/diagonal objectives are supported."
+    end
+
+    @info "Finish classifying constraints."
+
+    # preprocess sparse constraints
+    res = @timed begin
+        triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
+        triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
+        triu_agg_sparse_A_nzval_two, agg_sparse_A, 
+        agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+    end
+    @debug "$(res.bytes)B allocated during preprocessing constraints." 
+
+    nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
+
+    return SolverAuxiliary(
+        length(sparse_cons),
+        triu_agg_sparse_A_matptr,
+        triu_agg_sparse_A_nzind,
+        triu_agg_sparse_A_nzval_one,
+        triu_agg_sparse_A_nzval_two,
+        agg_sparse_A_mappedto_triu,
+        sparse_As_global_inds,
+
+        triu_agg_sparse_A,
+        agg_sparse_A,
+        zeros(Tv, nnz_triu_agg_sparse_A), # UVt
+
+        length(symlowrank_cons), #n_symlowrank_matrices
+        symlowrank_cons, 
+        symlowrank_As_global_inds,
+    )
+end
+
+side_dimension(aux::SolverAuxiliary) = size(aux.sparse_S, 1)
 
 struct SolverStats{Tv}
     starttime::Base.RefValue{Tv}               # timing
@@ -238,8 +336,14 @@ struct SolverStats{Tv}
     dual_GenericArpack_time::Base.RefValue{Tv} # total time - dual_lanczos_time - dual_GenericArpack_time 
     primal_time::Base.RefValue{Tv}
     DIMACS_time::Base.RefValue{Tv}  # time spent on computing the DIMACS stats which is not included in the total time
+    function SolverStats{Tv}() where {Tv}
+        return new{Tv}(
+            Ref(zero(Tv)), # starttime
+            Ref(zero(Tv)), # endtime
+            Ref(zero(Tv)), # time spent on lanczos with random start
+            Ref(zero(Tv)), # time spent on GenericArpack
+            Ref(zero(Tv)), # primal time
+            Ref(zero(Tv)), # DIMACS time
+        )
+    end
 end
-
-
-
-
