@@ -239,6 +239,8 @@ function _sdplr(
 
     rankupd_tol_cnt = config.rankupd_tol
 
+    duality_bound = 1e20
+    rel_duality_bound = 1e20
     min_rel_duality_gap = 1e20
 
     for _ = 1:config.maxmajoriter
@@ -336,7 +338,7 @@ function _sdplr(
                 # when highprecision=true, then GenericArpack will be used
                 # otherwise Lanczos with random start will be used
                 lanczos_dt, _, GenericArpack_dt, 
-                _, _, rel_duality_bound = 
+                _, duality_bound, rel_duality_bound = 
                     surrogate_duality_gap(data, var, aux, 
                     config.prior_trace_bound, eig_iter;highprecision=false)  
                 stats.dual_lanczos_time[] += lanczos_dt
@@ -401,16 +403,6 @@ function _sdplr(
     printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val, 
                 var.obj[], grad_norm, primal_vio_norm, min_rel_duality_gap)
 
-    eig_iter = Ti(ceil(2*max(iter, 100)^0.5*log(n))) 
-
-    lanczos_dt, _, GenericArpack_dt, 
-        _, duality_bound, rel_duality_bound = surrogate_duality_gap(
-            data, var, aux, config.prior_trace_bound, eig_iter;
-            highprecision=false)
-
-    stats.dual_lanczos_time[] += lanczos_dt
-    stats.dual_GenericArpack_time[] += GenericArpack_dt
-
     stats.endtime[] = time()
 
     totaltime = stats.endtime[] - stats.starttime[]
@@ -435,6 +427,7 @@ function _sdplr(
         "obj" => var.obj[],
         "duality_bound" => duality_bound,
         "rel_duality_bound" => rel_duality_bound,
+        "min_rel_duality_gap" => min_rel_duality_gap,
         "totaltime" => totaltime,
         "dual_lanczos_time" => stats.dual_lanczos_time[],
         "dual_GenericArpack_time" => stats.dual_GenericArpack_time[],
