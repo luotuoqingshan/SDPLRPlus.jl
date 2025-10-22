@@ -152,7 +152,7 @@ trace_bounds = [n, n, 1, n]
 # warmup
 # this is necessay for benchmarking julia code
 batch_eval(problem, "G1", A, inputs[ind], callbacks[ind], "SDPLR-warmup", trace_bounds[ind], args["rank"]; 
-                  maxtime=36000.0, objtol=args["objtol"], ptol=args["ptol"])
+                  maxtime=36000.0)
 
 
 A = matread("/p/mnt/data/yufan/datasets/graphs/$problem/$graph.mat")["A"]
