@@ -34,6 +34,17 @@ If you feel this package or our paper useful for your work, we kindly request yo
 ]  activate .; add https://github.com/luotuoqingshan/SDPLRPlus.jl 
 ```
 
+## Use with JuMP
+
+You can solve an JuMP model by using [LowRankOpt.jl](https://github.com/blegat/LowRankOpt.jl).
+```julia
+using JuMP, LowRankOpt, SDPLRPlus
+model = Model(NLPModelsJuMP.Optimizer)
+set_attribute(model, "solver", LRO.BurerMonteiro.Solver)
+set_attribute(model, "sub_solver", SDPLRPlus.Solver)
+set_attribute(model, "ranks", [1]) # Set the rank used by Burer-Monteiro for the PSD constraints
+```
+
 For information with regard to the interfaces, refer to the documentation for more details.  
 
 ## Experiments 
