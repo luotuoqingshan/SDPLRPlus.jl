@@ -3,20 +3,20 @@ Exact line search for minimizing the augmented Lagrangian
 """
 function linesearch!(
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
-    Dt::Matrix{Tv};
+    aux,
+    Dt::AbstractArray{Tv};
     α_max = one(Tv),
 ) where{Ti <: Integer, Tv}
-    m = length(aux.primal_vio)-1
+    m = length(var.primal_vio)-1
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
-        𝒜!(aux.A_RD, aux.UVt, aux, var.Rt, Dt)
+        𝒜!(var.A_RD, aux, var.Rt, Dt)
     end
     # remember we divide it by 2 in Aoper, now scale back
-    aux.A_RD .*= 2.0
+    var.A_RD .*= 2.0
     # evaluate 𝓐(DDᵀ)
     DD_dt = @elapsed begin
-        𝒜!(aux.A_DD, aux.UVt, aux, Dt, Dt)
+        𝒜!(var.A_DD, aux, Dt, Dt)
     end
     @debug "RD_dt, DD_dt" RD_dt, DD_dt
 
@@ -26,7 +26,7 @@ function linesearch!(
     # p0 = ⟨ C, RRᵀ⟩           = var.obj[] 
     # p1 = ⟨ C, (RDᵀ + DRᵀ)⟩   = C_RD
     # p2 = ⟨ C, DDᵀ⟩           = C_DD
-    # (-q0) = 𝓐(RRᵀ) - b      = aux.primal_vio
+    # (-q0) = 𝓐(RRᵀ) - b      = var.primal_vio
     # q1 = 𝓐(RDᵀ + DRᵀ)       = 𝓐_RD
     # q2 = 𝓐(DDᵀ)             = 𝓐_DD
      
@@ -37,11 +37,11 @@ function linesearch!(
     # d = p1 - λᵀ * q1 + σ (-q0)ᵀ * q1
     # e = p0 - λᵀ * (-q0) + σ / 2 * ||-q0||²
     p0 = var.obj[]
-    p1 = aux.A_RD[m+1]
-    p2 = aux.A_DD[m+1]
-    neg_q0 = @view aux.primal_vio[1:m]
-    q1 = @view aux.A_RD[1:m]
-    q2 = @view aux.A_DD[1:m]
+    p1 = var.A_RD[m+1]
+    p2 = var.A_DD[m+1]
+    neg_q0 = @view var.primal_vio[1:m]
+    q1 = @view var.A_RD[1:m]
+    q2 = @view var.A_DD[1:m]
     σ = var.σ[]
 
     biquadratic[1] = (p0 - dot(var.λ, neg_q0) + σ * dot(neg_q0, neg_q0) / 2)
@@ -119,8 +119,8 @@ function linesearch!(
     # notice that 
     # 𝓐((R + αD)(R + αD)ᵀ) =   
     # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-    @. aux.primal_vio += α_star * (α_star * aux.A_DD + aux.A_RD)
-    var.obj[] = aux.primal_vio[m+1]
+    @. var.primal_vio += α_star * (α_star * var.A_DD + var.A_RD)
+    var.obj[] = var.primal_vio[m+1]
 
     return α_star, f_star 
 end

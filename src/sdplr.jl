@@ -71,7 +71,7 @@ The default value is ``10^{-2}``.
 """
 function sdplr(
     C::AbstractMatrix{Tv},
-    As::Vector{Any},
+    As::Vector,
     b::Vector{Tv},
     r::Ti;
     config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
@@ -92,100 +92,10 @@ function sdplr(
     end
 
     preprocess_dt = @elapsed begin
-        m = length(As)
-        sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
-        symlowrank_cons = SymLowRankMatrix{Tv}[]
-        # treat diagonal matrices as sparse matrices
-        sparse_As_global_inds = Ti[]
-        symlowrank_As_global_inds = Ti[]
-    
-        for (i, A) in enumerate(As)
-            if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
-                push!(sparse_cons, A)
-                push!(sparse_As_global_inds, i)
-            elseif isa(A, Diagonal)
-                push!(sparse_cons, sparse(A))
-                push!(sparse_As_global_inds, i)
-            elseif isa(A, SymLowRankMatrix)
-                push!(symlowrank_cons, A)
-                push!(symlowrank_As_global_inds, i)
-            else
-                @error "Currently only sparse\
-                /symmetric low-rank\
-                /diagonal constraints are supported."
-            end
-        end
-
-        if isa(C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
-            push!(sparse_cons, C)
-            push!(sparse_As_global_inds, m+1)
-        elseif isa(C, Diagonal)
-            push!(sparse_cons, sparse(C))
-            push!(sparse_As_global_inds, m+1)
-        elseif isa(C, SymLowRankMatrix)
-            push!(symlowrank_cons, C)
-            push!(symlowrank_As_global_inds, m+1)
-        else
-            @error "Currently only sparse\
-            /lowrank/diagonal objectives are supported."
-        end
-
-        @info "Finish classifying constraints."
-
-        # preprocess sparse constraints
-        res = @timed begin
-            triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
-            triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
-            triu_agg_sparse_A_nzval_two, agg_sparse_A, 
-            agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
-        end
-        @debug "$(res.bytes)B allocated during preprocessing constraints." 
-    
-        n = size(C, 1)
-        nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
-
-        # randomly initialize primal and dual variables
-        Rt0 = 2 .* rand(r, n) .- 1
-        λ0 = randn(m)
-
-        data = SDPData(n, m, C, As, b)
-        var = SolverVars(
-            Rt0,
-            zeros(Tv, size(Rt0)),
-            λ0,
-            Ref(r),
-            Ref(2.0), # initial σ
-            Ref(zero(Tv)),
-        )
-        aux = SolverAuxiliary(
-            length(sparse_cons),
-            triu_agg_sparse_A_matptr,
-            triu_agg_sparse_A_nzind,
-            triu_agg_sparse_A_nzval_one,
-            triu_agg_sparse_A_nzval_two,
-            agg_sparse_A_mappedto_triu,
-            sparse_As_global_inds,
-
-            triu_agg_sparse_A,
-            agg_sparse_A,
-            zeros(Tv, nnz_triu_agg_sparse_A), # UVt
-            zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
-
-            length(symlowrank_cons), #n_symlowrank_matrices
-            symlowrank_cons, 
-            symlowrank_As_global_inds,
-
-            zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
-            zeros(Tv, m+1), # primal_vio
-        )
-        stats = SolverStats(
-            Ref(zero(Tv)), # starttime
-            Ref(zero(Tv)), # endtime
-            Ref(zero(Tv)), # time spent on lanczos with random start
-            Ref(zero(Tv)), # time spent on GenericArpack
-            Ref(zero(Tv)), # primal time
-            Ref(zero(Tv)), # DIMACS time
-        )
+        data = SDPData(C, As, b)
+        var = SolverVars(data, r)
+        aux = SolverAuxiliary(data)
+        stats = SolverStats{Tv}()
     end
 
     @debug "preprocess dt" preprocess_dt
@@ -203,16 +113,15 @@ function sdplr(
     return ans 
 end
 
-
 function _sdplr(
-    data::SDPData{Ti, Tv, TC},
+    data,
     var::SolverVars{Ti, Tv},
-    aux::SolverAuxiliary{Ti, Tv},
+    aux,
     stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti, Tv},
-) where{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}}
-    n = data.n # size of decision variables 
-    m = data.m # number of constraints
+) where{Ti <: Integer, Tv}
+    n = side_dimension(aux)
+    m = length(var.λ) # number of constraints
 
     stats.starttime[] = time()
 
@@ -222,8 +131,8 @@ function _sdplr(
     λ0 = deepcopy(var.λ)
 
     # set up algorithm parameters
-    normb = norm(data.b, 2)
-    normC = norm(data.C, 2)
+    normb = norm(b_vector(data), 2)
+    normC = norm(C_matrix(data), 2)
 
     # initialize lbfgs datastructures
     lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
@@ -279,7 +188,7 @@ function _sdplr(
             end
             @debug "g time" g_dt
             grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-            v = @view aux.primal_vio[1:m]
+            v = @view var.primal_vio[1:m]
             primal_vio_norm = norm(v, 2) / (1.0 + normb)
 
             # if change of the Lagrangian value is small enough
@@ -333,6 +242,10 @@ function _sdplr(
         if primal_vio_norm <= cur_ptol
             if primal_vio_norm <= config.ptol 
                 @debug "primal vio is small enough, checking duality bound."
+                if config.objtol == Inf
+                    @debug "`objtol` is `Inf`, skipping duality gap check"
+                    break
+                end
                 eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n))) 
 
                 # when highprecision=true, then GenericArpack will be used
@@ -360,17 +273,12 @@ function _sdplr(
                         rank_double = true
                     end
                     #last_rel_duality_bound = rel_duality_bound
-                    v = @view aux.primal_vio[1:m]
-                    axpy!(-var.σ[], v, var.λ)
-                    cur_ptol = cur_ptol / var.σ[]^0.9
-                    cur_gtol = cur_gtol / var.σ[]
                 end
-            else
-                v = @view aux.primal_vio[1:m]
-                axpy!(-var.σ[], v, var.λ)
-                cur_ptol = cur_ptol / var.σ[]^0.9
-                cur_gtol = cur_gtol / var.σ[]
             end
+            v = @view var.primal_vio[1:m]
+            axpy!(-var.σ[], v, var.λ)
+            cur_ptol = cur_ptol / var.σ[]^0.9
+            cur_gtol = cur_gtol / var.σ[]
         else 
             var.σ[] *= config.σfac 
             cur_ptol = 1 / var.σ[]^0.1
@@ -379,14 +287,14 @@ function _sdplr(
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
-            var = rank_update!(var)
+            var = rank_update!(data, var)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
             dirt = similar(var.Rt)
             min_rel_duality_gap = 1e20
             rankupd_tol_cnt = config.rankupd_tol
-            @info "rank doubled, newrank is $(size(var.Rt, 1))."
+            @info "rank doubled, newrank is $(var.r[])."
         else
             lbfgs_clear!(lbfgshis)
         end
