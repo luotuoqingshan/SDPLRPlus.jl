@@ -41,6 +41,6 @@ include("utils.jl")
 # main function
 include("sdplr.jl")
 
-include("lowrankopt.jl")
+#include("lowrankopt.jl")
 
 end
