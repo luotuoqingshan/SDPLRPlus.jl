@@ -16,7 +16,7 @@ C, As, b = maxcut(W)
 @time sdplr(C, As, b, 1, maxmajoriter = 20);
 
 # SDPLRPlus does not support sparse factor
-As = [SymLowRankMatrix(Diagonal(ones(1)), hcat(e_i(Float64, i, n, sparse = false))) for i in 1:n]
+As = [SymLowRankMatrix(Diagonal(ones(1)), hcat(e_i(Float64, i, n, sparse = false, vector = false))) for i in 1:n]
 d = SDPLRPlus.SDPData(C, As, b)
 var = SDPLRPlus.SolverVars(d, 1)
 aux = SDPLRPlus.SolverAuxiliary(d)
