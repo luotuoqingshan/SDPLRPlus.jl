@@ -145,17 +145,17 @@ ind = findfirst(x -> x == problem, ["MaxCut", "MinimumBisection", "LovaszTheta",
 inputs = [maxcut, minimum_bisection, lovasz_theta, cutnorm]
 callbacks = [maxcut_rounding, minimumbisection_rounding, dymmy_callback, dymmy_callback]
 
-A = matread(homedir()*"/SDPLRPlus.jl/exps/data/$problem/G1.mat")["A"] 
+A = matread("/p/mnt/data/yufan/datasets/graphs/$problem/G1.mat")["A"]
 n = size(A, 1)
 trace_bounds = [n, n, 1, n] 
 
 # warmup
 # this is necessay for benchmarking julia code
 batch_eval(problem, "G1", A, inputs[ind], callbacks[ind], "SDPLR-warmup", trace_bounds[ind], args["rank"]; 
-                  maxtime=36000.0, objtol=args["objtol"], ptol=args["ptol"])
+                  maxtime=36000.0)
 
 
-A = matread(homedir()*"/SDPLRPlus.jl/exps/data/$problem/$graph.mat")["A"] 
+A = matread("/p/mnt/data/yufan/datasets/graphs/$problem/$graph.mat")["A"]
 n = size(A, 1)
 trace_bounds = [n, n, 1, n] 
 # run the benchmark
