@@ -154,7 +154,7 @@ function sdplr(
             zeros(Tv, size(Rt0)),
             λ0,
             Ref(r),
-            Ref(2.0), # initial σ
+            Ref(config.σ_0), # initial σ
             Ref(zero(Tv)),
         )
         aux = SolverAuxiliary(
@@ -377,7 +377,7 @@ function _sdplr(
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
-            var = rank_update!(var)
+            var = rank_update!(var, config.σ_0)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)

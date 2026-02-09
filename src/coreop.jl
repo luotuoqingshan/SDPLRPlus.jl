@@ -526,6 +526,7 @@ end
 
 function rank_update!(
     var::SolverVars{Ti, Tv},
+    σ_0::Tv=2.0,
 ) where {Ti <: Integer, Tv}
     n = size(var.Rt, 2)
     m = size(var.λ, 1)
@@ -541,7 +542,7 @@ function rank_update!(
         zeros(Tv, size(newRt)), 
         newλ, 
         Ref(Ti(newr)),
-        Ref(Tv(2.0)),
+        Ref(σ_0),
         Ref(Tv(0.0))
     )
 end

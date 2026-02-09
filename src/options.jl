@@ -1,6 +1,7 @@
 @with_kw mutable struct BurerMonteiroConfig{Ti <: Integer, Tv}
     ptol::Tv = 1e-2                    # primal infeasibility tolerance 
     objtol::Tv = 1e-2                  # suboptimality tolerance
+    σ_0::Tv = 2.0                      # initial penalty parameter
     σfac::Tv = 2.0                     # factor for increasing σ
     maxtime::Tv = 3600.0               # maximum time in seconds(better use terminal tool for limiting time)
     printlevel::Ti = 1                 # print level
