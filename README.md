@@ -52,7 +52,7 @@ For more information about experiments in the paper,
 take a look at the [README](https://github.com/luotuoqingshan/SDPLRPlus.jl/blob/main/exps/README.md) under `exps/`. 
 
 ## Contact
-The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email huan1754 at purdue dot edu or create issues or pull requests (any contribution to the project is welcome).
+The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email 2019hyf at gmail dot com or create issues or pull requests (any contribution to the project is welcome).
 
 ## Acknowledgement
 Part of this project started as a julia reproduction of 
