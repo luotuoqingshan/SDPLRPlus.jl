@@ -532,12 +532,5 @@ function rank_update!(
     newr = min(max_r, r * 2)
     set_rank!(data, newr)
 
-    return SolverVars(
-        newRt, 
-        zeros(Tv, size(newRt)), 
-        newλ, 
-        Ref(Ti(newr)),
-        Ref(σ_0),
-        Ref(Tv(0.0))
-    )
+    return SolverVars(data, newr, σ_0=σ_0)
 end

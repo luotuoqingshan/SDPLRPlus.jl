@@ -93,7 +93,7 @@ function sdplr(
 
     preprocess_dt = @elapsed begin
         data = SDPData(C, As, b)
-        var = SolverVars(data, r)
+        var = SolverVars(data, r, config.σ_0)
         aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
     end
@@ -287,7 +287,7 @@ function _sdplr(
 
         # when objective gap doesn't improve, we double the rank
         if rank_double 
-            var = rank_update!(data, var)
+            var = rank_update!(data, var, config.σ_0)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
