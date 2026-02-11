@@ -531,11 +531,12 @@ set_rank!(::SDPData, ::Int) = nothing
 function rank_update!(
     data,
     var::SolverVars{Ti, Tv},
+    σ_0::Tv=2.0,
 ) where {Ti <: Integer, Tv}
     r = var.r[]
     max_r = barvinok_pataki(data)
     newr = min(max_r, r * 2)
     set_rank!(data, newr)
 
-    return SolverVars(data, newr)
+    return SolverVars(data, newr, σ_0=σ_0)
 end
