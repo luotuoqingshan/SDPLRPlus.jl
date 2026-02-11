@@ -17,7 +17,7 @@
 <!-- [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) -->
 
 SDPLRPlus is a pure julia package which integrates the suboptimality bound and dynamic rank update idea introduced in the following paper with the original [SDPLR](https://sburer.github.io/projects.html) solver.  
-```
+```bibtex
 @misc{huang2024suboptimality,
       title={Suboptimality bounds for trace-bounded SDPs enable a faster and scalable low-rank SDP solver SDPLR+}, 
       author={Yufan Huang and David F. Gleich},
@@ -34,6 +34,17 @@ If you feel this package or our paper useful for your work, we kindly request yo
 ]  activate .; add https://github.com/luotuoqingshan/SDPLRPlus.jl 
 ```
 
+## Use with JuMP
+
+You can solve an JuMP model by using [LowRankOpt.jl](https://github.com/blegat/LowRankOpt.jl).
+```julia
+using JuMP, LowRankOpt, SDPLRPlus
+model = Model(NLPModelsJuMP.Optimizer)
+set_attribute(model, "solver", LRO.BurerMonteiro.Solver)
+set_attribute(model, "sub_solver", SDPLRPlus.Solver)
+set_attribute(model, "ranks", [1]) # Set the rank used by Burer-Monteiro for the PSD constraints
+```
+
 For information with regard to the interfaces, refer to the documentation for more details.  
 
 ## Experiments 
@@ -41,7 +52,7 @@ For more information about experiments in the paper,
 take a look at the [README](https://github.com/luotuoqingshan/SDPLRPlus.jl/blob/main/exps/README.md) under `exps/`. 
 
 ## Contact
-The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email huan1754 at purdue dot edu or create issues or pull requests (any contribution to the project is welcome).
+The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email 2019hyf at gmail dot com or create issues or pull requests (any contribution to the project is welcome).
 
 ## Acknowledgement
 Part of this project started as a julia reproduction of 
