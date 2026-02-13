@@ -419,10 +419,8 @@ function surrogate_duality_gap(
 
     b = b_vector(data)
     m = length(b_vector(data))
-    duality_gap = (var.obj[] + dot(var.y[1:m], b) -
-             trace_bound * min(res[1], 0.0))     
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
-    duality_gap = (var.obj[] - dual_value)     
+    duality_gap = var.obj[] - dual_value  
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, 
