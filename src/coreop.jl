@@ -393,15 +393,9 @@ function surrogate_duality_gap(
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti <: Integer, Tv}
-    # y = -λ + σ * primal_vio
-    # y = [-λ_1, -λ_2, -β, -γ]
     copy2y_λ_sub_pvio!(var)
 
     𝒜t_preprocess!(var, aux)
-    m = length(b_vector(data))
-    n = Int(m / 2 - 1)
-    var.y[3:n+2] = max.(zero(Tv), var.y[3:n+2])
-    var.y[n+3:m] = min.(zero(Tv), var.y[n+3:m])
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(var, aux, iter)
     end

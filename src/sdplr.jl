@@ -157,6 +157,7 @@ function _sdplr(
     duality_bound = 1e20
     rel_duality_bound = 1e20
     min_rel_duality_gap = 1e20
+    max_dual_value = -1e20
 
     for _ = 1:config.maxmajoriter
         majoriter += 1
