@@ -25,7 +25,7 @@ using Polynomials, PolynomialRoots
 include("linesearch.jl")
 
 # printing functions
-using Printf
+using PrettyTables
 include("myprint.jl")
 
 # options

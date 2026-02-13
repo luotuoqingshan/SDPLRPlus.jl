@@ -17,15 +17,20 @@ function printintermediate(
     iter::Int,
     𝓛_val::Float64,
     obj::Float64,
+    σ::Float64,
+    cur_gtol::Float64,
+    cur_ptol::Float64,
     grad_norm::Float64,
     primal_vio_norm::Float64,
     dual_bound::Float64,
+    max_dual_value::Float64,
 )
-    @printf("%12s  %10s  %10s  %10s  %12s  %12s  %12s  %12s  %12s\n",
-            "dataset", "majoriter", "localiter", "totaliter", "Lagranval",
-            "objval", "gradnorm", "pvio val", "best suboptimality")
-    @printf("%12s %10d  %10d  %10d  %12.3e  %12.3e  %12.3e  %12.3e  %12.3e\n",
-            dataset, majoriter, localiter, iter, 𝓛_val,
-            obj, grad_norm, primal_vio_norm, dual_bound)
+    header = ["dataset", "T", "Iterₜ", "TotIter", "ℒ", "pobj", "σ", "ηₜ", "ωₜ", "‖grad‖",
+    "‖pinfeas‖", "min pobj-dobj", "max dobj"]
+    data = [dataset majoriter localiter iter 𝓛_val obj σ cur_gtol cur_ptol grad_norm primal_vio_norm dual_bound max_dual_value]
+    pretty_table(data; column_labels=header, 
+                 formatters = [fmt__printf("%s", [1]),
+                               fmt__printf("%d", 2:4),
+                               fmt__printf("%.2E", 5:13)])
 end
 
