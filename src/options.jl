@@ -14,4 +14,6 @@
     prior_trace_bound::Tv = 1e18       # a trace bound determined or estimated
     dataset::String = ""               # dataset name
     eval_DIMACS_errs::Bool = false     # whether to evaluate DIMACS errors
+    init_func::Union{Nothing, Function} = nothing  # custom init; used in rank_update! too
+    init_args::Tuple = ()              # extra args for init_func
 end
