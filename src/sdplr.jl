@@ -68,6 +68,12 @@ The default value is ``10^{-2}``.
     especially when executed parallely. The default value is "".
 - `eval_DIMACS_errs`: Whether to evaluate DIMACS errors. The default value 
     is false.
+- `init_func`: Optional custom initialization function. Called as 
+    `init_func(data, r, init_args...)` and must return `(Rt0, λ0)` where 
+    `Rt0` is `r×n` and `λ0` is length-`m`. Used for initial setup and when 
+    rank is doubled in `rank_update!`. If not provided, random init is used.
+- `init_args`: Tuple of extra arguments passed to `init_func` after `(data, r)`. 
+    Default is `()`.
 """
 function sdplr(
     C::AbstractMatrix{Tv},
@@ -93,7 +99,7 @@ function sdplr(
 
     preprocess_dt = @elapsed begin
         data = SDPData(C, As, b)
-        var = SolverVars(data, r, config.σ_0)
+        var = SolverVars(data, r, config)
         aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
     end
@@ -288,8 +294,8 @@ function _sdplr(
         end
 
         # when objective gap doesn't improve, we double the rank
-        if rank_double 
-            var = rank_update!(data, var, config.σ_0)
+        if rank_double
+            var = rank_update!(data, var, config)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
