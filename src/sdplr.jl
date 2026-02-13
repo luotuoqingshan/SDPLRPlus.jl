@@ -223,7 +223,6 @@ function _sdplr(
 
 
         current_time = time()
-        printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val, 
         printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val,
             var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm, primal_vio_norm,
             min_rel_duality_gap, max_dual_value)
