@@ -2,7 +2,7 @@ using CSDP
 using JSON, MAT
 using Random
 using LinearAlgebra, Arpack 
-using SDPLR: SymLowRankMatrix
+using SDPLRPlus: SymLowRankMatrix
 
 function csdp_solver(
     C::TC,
@@ -11,7 +11,7 @@ function csdp_solver(
     extra_f::Function,
     filename::String="csdp_result";
     seed::Int=0,
-    filefolder::String=homedir()*"/SDPLR.jl/output/",
+    filefolder::String=homedir()*"/SDPLRPlus.jl/output/",
     kwargs...
 ) where {Tv <: AbstractFloat, TC <: AbstractMatrix{Tv}}
     Random.seed!(seed)
@@ -57,7 +57,8 @@ function csdp_solver(
     )
     mkpath(filefolder)
     open(filefolder*filename*"-short-seed-$seed-tol-$(params[:axtol]).json", "w") do f
-        JSON.print(f, short_res, 4)
+        json_str = JSON.json(short_res; pretty=4, allownan=true)
+        print(f, json_str)
     end
 end
 
@@ -96,6 +97,10 @@ s = ArgParseSettings()
         arg_type = String
         default = "MinimumBisection"
         help = "Name of the problem(MaxCut, MinimumBisection, LovaszTheta)"
+    "--mu"
+        arg_type = Float64
+        default = 0.01
+        help = "Parameter for mu-conductance"
     "--axtol"
         arg_type = Float64
         default = 1e-2
@@ -163,7 +168,7 @@ args = parse_args(s)
 Random.seed!(args["seed"])
 BLAS.set_num_threads(1)
 
-include("problems.jl")
+include("../problems.jl")
 
 if args["problem"] == "MaxCut"
     A = read_graph(args["graph"], args["problem"])
@@ -181,6 +186,10 @@ elseif args["problem"] == "CutNorm"
     A = read_graph(args["graph"], args["problem"])
     C, As, bs = cutnorm(A)
     extra_f = identity
+elseif args["problem"] == "MuConductance"
+    A = read_graph(args["graph"], args["problem"])
+    C, As, bs = mu_conductance(A, args["mu"])
+    extra_f = identity
 else
     error("Problem not supported")
 end
@@ -192,8 +201,8 @@ graph = args["graph"]
 println("Solving ($problem) on graph ($graph) using CSDP.")
 # notice that the primal problem of CSDP is a maximization problem
 csdp_solver(-C, As, bs, extra_f, "csdp"; 
-    filefolder=homedir()*"/SDPLR.jl/output/"*
-    args["problem"]*"/$graph/csdp/",
+    filefolder=homedir()*"/SDPLRPlus.jl/exps/output/"*
+    args["problem"]*"/$graph/",
     :axtol => args["axtol"], 
     :atytol => args["atytol"], 
     :objtol => args["objtol"])
