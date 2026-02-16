@@ -68,6 +68,12 @@ The default value is ``10^{-2}``.
     especially when executed parallely. The default value is "".
 - `eval_DIMACS_errs`: Whether to evaluate DIMACS errors. The default value 
     is false.
+- `init_func`: Optional custom initialization function. Called as 
+    `init_func(data, r, init_args...)` and must return `(Rt0, λ0)` where 
+    `Rt0` is `r×n` and `λ0` is length-`m`. Used for initial setup and when 
+    rank is doubled in `rank_update!`. If not provided, random init is used.
+- `init_args`: Tuple of extra arguments passed to `init_func` after `(data, r)`. 
+    Default is `()`.
 """
 function sdplr(
     C::AbstractMatrix{Tv},
@@ -93,7 +99,7 @@ function sdplr(
 
     preprocess_dt = @elapsed begin
         data = SDPData(C, As, b)
-        var = SolverVars(data, r)
+        var = SolverVars(data, r, config)
         aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
     end
@@ -151,6 +157,7 @@ function _sdplr(
     duality_bound = 1e20
     rel_duality_bound = 1e20
     min_rel_duality_gap = 1e20
+    max_dual_value = -1e20
 
     for _ = 1:config.maxmajoriter
         majoriter += 1
@@ -208,9 +215,9 @@ function _sdplr(
             if current_time - lastprint >= config.printfreq
                 lastprint = current_time
                 if config.printlevel > 0
-                    printintermediate(config.dataset, majoriter, 
-                              localiter, iter, 𝓛_val, var.obj[], grad_norm,
-                              primal_vio_norm, min_rel_duality_gap)
+                    printintermediate(config.dataset, majoriter,
+                        localiter, iter, 𝓛_val, var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm,
+                        primal_vio_norm, min_rel_duality_gap, max_dual_value)
                 end
             end   
 
@@ -223,8 +230,9 @@ function _sdplr(
 
 
         current_time = time()
-        printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val, 
-                  var.obj[], grad_norm, primal_vio_norm, min_rel_duality_gap)
+        printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val,
+            var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm, primal_vio_norm,
+            min_rel_duality_gap, max_dual_value)
         lastprint = current_time
 
         if current_time - stats.starttime[] > config.maxtime
@@ -250,10 +258,11 @@ function _sdplr(
 
                 # when highprecision=true, then GenericArpack will be used
                 # otherwise Lanczos with random start will be used
-                lanczos_dt, _, GenericArpack_dt, 
-                _, duality_bound, rel_duality_bound = 
-                    surrogate_duality_gap(data, var, aux, 
-                    config.prior_trace_bound, eig_iter;highprecision=false)  
+                lanczos_dt, _, GenericArpack_dt,
+                _, duality_bound, rel_duality_bound, dual_value =
+                    surrogate_duality_gap(data, var, aux,
+                        config.prior_trace_bound, eig_iter; highprecision=false)
+                max_dual_value = max(max_dual_value, dual_value)
                 stats.dual_lanczos_time[] += lanczos_dt
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
 
@@ -286,13 +295,14 @@ function _sdplr(
         end
 
         # when objective gap doesn't improve, we double the rank
-        if rank_double 
-            var = rank_update!(data, var)
+        if rank_double
+            var = rank_update!(data, var, config)
             cur_ptol = 1 / var.σ[]^0.1
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
             dirt = similar(var.Rt)
             min_rel_duality_gap = 1e20
+            max_dual_value = -1e20
             rankupd_tol_cnt = config.rankupd_tol
             @info "rank doubled, newrank is $(var.r[])."
         else
@@ -305,11 +315,12 @@ function _sdplr(
             @warn "Major iteration limit exceeded. Stop optimizing."
         end
     end
-    
+
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
 
-    printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val, 
-                var.obj[], grad_norm, primal_vio_norm, min_rel_duality_gap)
+    printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val,
+        var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm, primal_vio_norm,
+        min_rel_duality_gap, max_dual_value)
 
     stats.endtime[] = time()
 
@@ -334,6 +345,7 @@ function _sdplr(
         "primal_vio" => primal_vio_norm,
         "obj" => var.obj[],
         "duality_bound" => duality_bound,
+        "max_dual_value" => max_dual_value,
         "rel_duality_bound" => rel_duality_bound,
         "min_rel_duality_gap" => min_rel_duality_gap,
         "totaltime" => totaltime,

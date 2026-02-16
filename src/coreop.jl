@@ -413,12 +413,12 @@ function surrogate_duality_gap(
 
     b = b_vector(data)
     m = length(b_vector(data))
-    duality_gap = (var.obj[] + dot(var.y[1:m], b) -
-             trace_bound * min(res[1], 0.0))     
+    dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
+    duality_gap = var.obj[] - dual_value  
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[])) 
 
     return lanczos_dt, lanczos_eigenval, GenericArpack_dt, 
-           res[1], duality_gap, rel_duality_gap
+           res[1], duality_gap, rel_duality_gap, dual_value
 end
 
 
@@ -525,11 +525,11 @@ set_rank!(::SDPData, ::Int) = nothing
 function rank_update!(
     data,
     var::SolverVars{Ti, Tv},
+    config::BurerMonteiroConfig{Ti, Tv},
 ) where {Ti <: Integer, Tv}
     r = var.r[]
     max_r = barvinok_pataki(data)
     newr = min(max_r, r * 2)
     set_rank!(data, newr)
-
-    return SolverVars(data, newr)
+    return SolverVars(data, newr, config)
 end

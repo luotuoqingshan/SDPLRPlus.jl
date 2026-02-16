@@ -10,7 +10,11 @@ using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse, MKL
 # eig computation
 using GenericArpack
 
-# key data structures defined for the solver 
+# options
+using Parameters
+include("options.jl")
+
+# key data structures defined for the solver
 include("structs.jl")
 export SymLowRankMatrix
 
@@ -25,12 +29,8 @@ using Polynomials, PolynomialRoots
 include("linesearch.jl")
 
 # printing functions
-using Printf
+using PrettyTables
 include("myprint.jl")
-
-# options
-using Parameters
-include("options.jl")
 
 # preprocessing
 include("preprocess.jl")

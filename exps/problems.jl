@@ -110,3 +110,59 @@ function cutnorm(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @info "Cut Norm SDP is formed."
     return -Tv.(C), As, bs 
 end
+
+function extend_sparse(A, new_n, new_m)
+    I, J, V = findnz(A)
+    return sparse(I, J, V, new_n, new_m)
+end
+
+mu_conductance_ub(volG, mu) = (1 - mu)/(mu * volG)
+mu_conductance_lb(volG, mu) = mu/((1 - mu) * volG)
+
+
+"""
+μ-Conductance SDP:              
+
+minimize  ⟨L, X⟩   
+
+s.t.      ⟨D, X⟩ = 1
+
+          ⟨ddᵀ, X⟩ = 0
+
+          Diag(X) ≤ (1 - μ)/(μ Vol(G)) 
+
+          Diag(X) ≥ μ/((1 - μ) Vol(G)) 
+
+          X ≽ 0
+"""
+function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A, dims=2)[:, 1]
+    D = sparse(Diagonal(d))
+    volG = sum(d)
+    L = sparse(Diagonal(d) - A)
+    As = []
+    bs = Tv[]
+
+    padded_d = [d; zeros(Tv, 2*n)]
+    padded_D = extend_sparse(D, 3*n, 3*n)
+    padded_L = extend_sparse(L, 3*n, 3*n)
+
+    push!(As, padded_D)
+    push!(bs, 1)
+
+    push!(As, SymLowRankMatrix(Diagonal(ones(Tv, 1)), reshape(padded_d, :, 1)))
+    push!(bs, zero(Tv))
+
+    ub = mu_conductance_ub(volG, mu)
+    lb = mu_conductance_lb(volG, mu)
+
+    for i in eachindex(d)
+        push!(As, super_sparse(Ti[i, i + n], Ti[i, i + n], [one(Tv), one(Tv)], 3*n, 3*n))
+        push!(bs, Tv(ub))
+        push!(As, super_sparse(Ti[i, i + 2*n], Ti[i, i + 2*n], [one(Tv), -one(Tv)], 3*n, 3*n))
+        push!(bs, Tv(lb))
+    end
+    Tv.(padded_L), As, bs
+end

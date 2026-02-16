@@ -208,21 +208,26 @@ struct SolverVars{Ti <: Integer,Tv,TR<:AbstractArray{Tv}}
     A_DD::Vector{Tv}
 end
 
-function SolverVars(data::SDPData, r)
-    # randomly initialize primal and dual variables
-    Rt0 = 2 .* rand(r, data.n) .- 1
-    λ0 = randn(data.m)
-    return SolverVars(Rt0, λ0, r)
+function SolverVars(data::SDPData, r, config::BurerMonteiroConfig)
+    if config.init_func !== nothing
+        Rt0, λ0 = config.init_func(data, r, config.init_args...)
+        return SolverVars(Rt0, λ0, r, config.σ_0)
+    else
+        # randomly initialize primal and dual variables
+        Rt0 = 2 .* rand(r, data.n) .- 1
+        λ0 = randn(data.m)
+        return SolverVars(Rt0, λ0, r, config.σ_0)
+    end
 end
 
-function SolverVars(Rt0, λ0::Vector{Tv}, r) where {Tv}
+function SolverVars(Rt0, λ0::Vector{Tv}, r, σ_0::Tv=2.0) where {Tv}
     m = length(λ0)
     return SolverVars(
         Rt0,
         zeros(Tv, size(Rt0)),
         λ0,
         Ref(r),
-        Ref(2.0), # initial σ
+        Ref(σ_0), # initial σ
         Ref(zero(Tv)),
         zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
         zeros(Tv, m+1), # primal_vio
