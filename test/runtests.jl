@@ -1,6 +1,7 @@
-using SDPLRPlus
+using SDPLRPlus: SDPData, SolverVars, SolverAuxiliary, BurerMonteiroConfig, f!
 using Test
 
+using Random
 using LuxurySparse, SparseArrays, LinearAlgebra
 
 # write tests here
