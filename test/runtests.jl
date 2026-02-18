@@ -1,4 +1,4 @@
-using SDPLRPlus: SDPData, SolverVars, SolverAuxiliary, BurerMonteiroConfig, f!
+using SDPLRPlus: sdplr, linesearch!, g!, SDPData, SymLowRankMatrix, SolverVars, SolverAuxiliary, BurerMonteiroConfig, f!
 using Test
 
 using Random

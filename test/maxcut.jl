@@ -1,24 +1,24 @@
 @testset "Max Cut" begin
-   @testset "A toy graph with 2 vertices" begin
-       A = sparse([0.0 1.0;
-           1.0 0.0])
-       C, As, bs = maxcut(A)
-       n = size(A, 1)
-       r = 1
-       res = sdplr(C, As, bs, r; 
-           fprec=0.0, objtol=1e-8, ptol=1e-8, prior_trace_bound=Float64(n))
-       @test res["obj"] ≈ -1 
-   end
-   @testset "a different σ_0" begin
-       A = sparse([0.0 1.0;
-           1.0 0.0])
-       C, As, bs = maxcut(A)
-       n = size(A, 1)
-       r = 1
-       res = sdplr(C, As, bs, r; σ_0=10.0,
-           fprec=0.0, objtol=1e-8, ptol=1e-8, prior_trace_bound=Float64(n))
-       @test res["obj"] ≈ -1 
-   end
+    @testset "A toy graph with 2 vertices" begin
+        A = sparse([0.0 1.0;
+            1.0 0.0])
+        C, As, bs = maxcut(A)
+        n = size(A, 1)
+        r = 1
+        res = sdplr(C, As, bs, r; 
+            fprec=0.0, objtol=1e-8, ptol=1e-8, prior_trace_bound=Float64(n))
+        @test res["obj"] ≈ -1 
+    end
+    @testset "a different σ_0" begin
+        A = sparse([0.0 1.0;
+            1.0 0.0])
+        C, As, bs = maxcut(A)
+        n = size(A, 1)
+        r = 1
+        res = sdplr(C, As, bs, r; σ_0=10.0,
+            fprec=0.0, objtol=1e-8, ptol=1e-8, prior_trace_bound=Float64(n))
+        @test res["obj"] ≈ -1 
+    end
     @testset "using customized init function" begin
         A = sparse([0.0 1.0;
             1.0 0.0])
@@ -41,7 +41,6 @@
         A_dense = Float64.(A_dense .> p)  # Sparsify
         A_dense[diagind(A_dense)] .= 0.0  # Remove self-loops
         A = sparse(A_dense)
-        @show A
         
         C, As, bs = maxcut(A)
         r = 3  # Random rank
@@ -56,6 +55,19 @@
         # Call f! to evaluate primal violation
         ℒ_val = f!(data, var, aux)
         my_primal_vio = zeros(Float64, m + 1)
+        my_primal_vio[m+1] = tr(var.Rt * C * var.Rt') # objective
+
+        for i in 1:m
+            my_primal_vio[i] = tr(var.Rt * As[i] * var.Rt') - bs[i]
+        end
+        @test norm(var.primal_vio - my_primal_vio, Inf) < 1e-10
+
+        # simulate linesearch step and check primal violation
+        g!(var, aux)
+        dirt = -1.0 * copy(var.Gt)
+        α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0) 
+        axpy!(α, dirt, var.Rt)
+        
         my_primal_vio[m+1] = tr(var.Rt * C * var.Rt') # objective
 
         for i in 1:m
