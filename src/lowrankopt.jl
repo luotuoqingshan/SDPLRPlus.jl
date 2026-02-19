@@ -1,4 +1,5 @@
-import SolverCore, NLPModels
+using SolverCore: SolverCore
+using NLPModels: NLPModels
 
 struct Solver <: SolverCore.AbstractOptimizationSolver
     var::SolverVars{Int,Float64}
@@ -6,7 +7,11 @@ struct Solver <: SolverCore.AbstractOptimizationSolver
     config::BurerMonteiroConfig{Int,Float64}
 end
 
-function Solver(src::NLPModels.AbstractNLPModel; config=BurerMonteiroConfig{Int,Float64}(), kwargs...)
+function Solver(
+    src::NLPModels.AbstractNLPModel;
+    config=BurerMonteiroConfig{Int,Float64}(),
+    kwargs...,
+)
     for (key, value) in kwargs
         if hasfield(BurerMonteiroConfig, Symbol(key))
             setfield!(config, Symbol(key), value)
@@ -16,7 +21,9 @@ function Solver(src::NLPModels.AbstractNLPModel; config=BurerMonteiroConfig{Int,
     end
 
     if length(src.meta.ifree) != src.meta.nvar
-        error("SDPLRPlus only supports free variables, use `set_attribute(model, \"square_scalars\", true)`")
+        error(
+            "SDPLRPlus only supports free variables, use `set_attribute(model, \"square_scalars\", true)`",
+        )
     end
     var = SolverVars(src, src.dim.ranks[])
     stats = SolverStats{Float64}()
@@ -42,17 +49,21 @@ function SolverCore.solve!(
     copyto!(stats.solution, solver.var.Rt)
     copyto!(stats.multipliers, solver.var.λ)
     stats.elapsed_time = ans["totaltime"]
-    return
+    return nothing
 end
 
 import LowRankOpt as LRO
 
 b_vector(model::LRO.BurerMonteiro.Model) = LRO.cons_constant(model.model)
-C_matrix(model::LRO.BurerMonteiro.Model) = LRO.grad(model.model, LRO.MatrixIndex(1))
+function C_matrix(model::LRO.BurerMonteiro.Model)
+    LRO.grad(model.model, LRO.MatrixIndex(1))
+end
 
 side_dimension(model::LRO.BurerMonteiro.Model) = model.dim.side_dimensions[]
 
-barvinok_pataki(data::LRO.BurerMonteiro.Model) = barvinok_pataki(side_dimension(data), data.meta.ncon)
+function barvinok_pataki(data::LRO.BurerMonteiro.Model)
+    barvinok_pataki(side_dimension(data), data.meta.ncon)
+end
 
 function set_rank!(model::LRO.BurerMonteiro.Model, r)
     LRO.BurerMonteiro.set_rank!(model, LRO.MatrixIndex(1), r)
@@ -67,9 +78,7 @@ function SolverVars(data::LRO.BurerMonteiro.Model, r)
 end
 
 function 𝒜!(
-    𝒜_UUt::Vector{Tv},
-    model::LRO.BurerMonteiro.Model,
-    x::Vector{Tv},
+    𝒜_UUt::Vector{Tv}, model::LRO.BurerMonteiro.Model, x::Vector{Tv}
 ) where {Tv}
     m = model.meta.ncon
     NLPModels.cons!(model, x, view(𝒜_UUt, 1:m))
@@ -86,22 +95,19 @@ function 𝒜!(
     NLPModels.jprod!(model, u, v, view(𝒜_UVt, 1:m))
     𝒜_UVt[end] = LRO.BurerMonteiro.gprod(model, u, v)
     𝒜_UVt ./= 2
-    return
+    return nothing
 end
 
 function 𝒜t_preprocess!(::SolverVars, ::LRO.BurerMonteiro.Model) end
 
 function 𝒜t!(
-    Jtv::Vector,
-    x::Vector,
-    model::LRO.BurerMonteiro.Model,
-    var::SolverVars,
+    Jtv::Vector, x::Vector, model::LRO.BurerMonteiro.Model, var::SolverVars
 )
     y = view(var.y, 1:model.meta.ncon)
     NLPModels.jtprod!(model, x, y, Jtv)
     Jtv .+= NLPModels.grad(model, x)
     Jtv ./= 2
-    return
+    return nothing
 end
 
 # `Jtv` is the transpose of the above one.
@@ -109,10 +115,7 @@ end
 # and we are working with the vectorization so
 # it doesn't change anything.
 function 𝒜t!(
-    Jtv::Vector,
-    model::LRO.BurerMonteiro.Model,
-    x::Vector,
-    var::SolverVars,
+    Jtv::Vector, model::LRO.BurerMonteiro.Model, x::Vector, var::SolverVars
 )
     r = model.dim.ranks[1]
     if r != 1
@@ -128,5 +131,5 @@ function 𝒜t!(
     if r != 1
         set_rank!(model, r)
     end
-    return
+    return nothing
 end

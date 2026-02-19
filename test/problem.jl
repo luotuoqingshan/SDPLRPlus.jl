@@ -12,11 +12,11 @@ s.t.      Diag(X) = 1
 function maxcut(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @assert A == A' "Only undirected graphs supported now."
     n = size(A, 1)
-    d = sum(A, dims=2)[:, 1]
+    d = sum(A; dims=2)[:, 1]
     L = sparse(Diagonal(d) - A)
     L .*= Tv(-0.25)
     As = []
-    bs = Tv[] 
+    bs = Tv[]
     for i in eachindex(d)
         push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
         push!(bs, one(Tv))
@@ -24,7 +24,6 @@ function maxcut(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @info "Max Cut SDP is formed."
     return L, As, bs
 end
-
 
 """
 Lovasz theta SDP:
@@ -46,7 +45,9 @@ function lovasz_theta(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     bs = Tv[]
     for (i, j, _) in zip(findnz(A)...)
         if i < j
-            push!(As, super_sparse(Ti[i, j], Ti[j, i], [one(Tv), one(Tv)], n, n))
+            push!(
+                As, super_sparse(Ti[i, j], Ti[j, i], [one(Tv), one(Tv)], n, n)
+            )
             push!(bs, zero(Tv))
         elseif i == j
             push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
@@ -58,7 +59,6 @@ function lovasz_theta(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @info "Lovasz Theta SDP is formed."
     return C, As, bs
 end
-
 
 """
 Minimum Bisection
@@ -74,7 +74,7 @@ s.t.     Diag(X) = 1
 function minimum_bisection(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     @assert A == A' "Only undirected graphs supported now."
     n = size(A, 1)
-    d = sum(A, dims=2)[:, 1]
+    d = sum(A; dims=2)[:, 1]
     L = sparse(Diagonal(d) - A)
     L ./= 4
     As = []
@@ -85,10 +85,9 @@ function minimum_bisection(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     end
     push!(As, SymLowRankMatrix(Diagonal(ones(Tv, 1)), ones(Tv, n, 1)))
     push!(bs, zero(Tv))
-    @info "Minimum Bisection SDP is formed." 
-    return Tv.(L) , As, bs
+    @info "Minimum Bisection SDP is formed."
+    return Tv.(L), As, bs
 end
-
 
 function bipartite_matrix(A::SparseMatrixCSC)
     m, n = size(A)
@@ -100,10 +99,10 @@ function cutnorm(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
     C = bipartite_matrix(A) ./ 2
     As = []
     bs = Tv[]
-    for i in 1:size(C, 1) 
+    for i in 1:size(C, 1)
         push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], size(C)...))
         push!(bs, one(Tv))
     end
     @info "Cut Norm SDP is formed."
-    return -Tv.(C), As, bs 
+    return -Tv.(C), As, bs
 end

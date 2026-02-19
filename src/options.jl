@@ -1,4 +1,4 @@
-@with_kw mutable struct BurerMonteiroConfig{Ti <: Integer, Tv}
+@with_kw mutable struct BurerMonteiroConfig{Ti<:Integer,Tv}
     ptol::Tv = 1e-2                    # primal infeasibility tolerance 
     objtol::Tv = 1e-2                  # suboptimality tolerance
     σ_0::Tv = 2.0                      # initial penalty parameter
@@ -14,6 +14,6 @@
     prior_trace_bound::Tv = 1e18       # a trace bound determined or estimated
     dataset::String = ""               # dataset name
     eval_DIMACS_errs::Bool = false     # whether to evaluate DIMACS errors
-    init_func::Union{Nothing, Function} = nothing  # custom init; used in rank_update! too
+    init_func::Union{Nothing,Function} = nothing  # custom init; used in rank_update! too
     init_args::Tuple = ()              # extra args for init_func
 end

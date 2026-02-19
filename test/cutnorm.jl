@@ -1,2 +1,1 @@
-@testset "Cut Norm" begin
-end
+@testset "Cut Norm" begin end

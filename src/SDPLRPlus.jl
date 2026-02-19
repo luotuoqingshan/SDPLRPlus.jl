@@ -2,7 +2,7 @@ module SDPLRPlus
 
 export sdplr
 
-using Random                      
+using Random
 
 # linear algebra
 using SparseArrays, LinearAlgebra, LuxurySparse, MKLSparse, MKL
