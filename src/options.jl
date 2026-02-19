@@ -16,4 +16,8 @@
     eval_DIMACS_errs::Bool = false     # whether to evaluate DIMACS errors
     init_func::Union{Nothing,Function} = nothing  # custom init; used in rank_update! too
     init_args::Tuple = ()              # extra args for init_func
+    custom_mineig::Union{Nothing,Function} = nothing  # custom mineig function
+    custom_mineig_args::Tuple = ()    # extra args for custom_mineig
+    custom_Aty::Union{Nothing,Function} = nothing  # custom Aty function
+    custom_Aty_args::Tuple = ()    # extra args for custom_Aty
 end

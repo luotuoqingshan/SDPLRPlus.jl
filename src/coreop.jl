@@ -75,7 +75,7 @@ function 𝒜_sparse!(
         aux.triu_agg_sparse_A_nzval_two,
     )
     v = UUt' * C
-    𝒜_UUt[aux.sparse_As_global_inds] .= @view(v[1, :])
+    return 𝒜_UUt[aux.sparse_As_global_inds] .= @view(v[1, :])
 end
 
 function 𝒜_sparse!(
@@ -97,7 +97,7 @@ function 𝒜_sparse!(
         aux.triu_agg_sparse_A_nzval_two,
     )
     v = UVt' * C
-    𝒜_UVt[aux.sparse_As_global_inds] .= @view(v[1, :])
+    return 𝒜_UVt[aux.sparse_As_global_inds] .= @view(v[1, :])
 end
 
 function tr_UtAU(A::SymLowRankMatrix{Tv}, Ut::Matrix{Tv}) where {Tv}
@@ -215,21 +215,21 @@ function 𝒜t_preprocess_sparse!(
 end
 
 function copy2y_λ_sub_pvio!(var::SolverVars{Ti,Tv}) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+    m = length(var.primal_vio) - 1
     @inbounds @simd for i in 1:m
         var.y[i] = -(var.λ[i] - var.σ[] * var.primal_vio[i])
     end
-    var.y[m+1] = one(Tv)
+    return var.y[m+1] = one(Tv)
 end
 
 function copy2y_λ!(
     var::SolverVars{Ti,Tv}, aux::SolverAuxiliary{Ti,Tv}
 ) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+    m = length(var.primal_vio) - 1
     @inbounds @simd for i in 1:m
         var.y[i] = -var.λ[i]
     end
-    var.y[m+1] = one(Tv)
+    return var.y[m+1] = one(Tv)
 end
 
 function 𝒜t_preprocess!(
@@ -318,10 +318,14 @@ function fg!(
         g!(var, aux)
     end
     @debug "f dt, g dt" f_dt, g_dt
-    grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+    # grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+    @show normC
+    grad_norm = norm(var.Gt, Inf)
 
     v = @view var.primal_vio[1:m]
-    primal_vio_norm = norm(v, 2) / (1.0 + normb)
+    #primal_vio_norm = norm(v, 2) / (1.0 + normb)
+    #primal_vio_norm = maximum(abs.(v) ./ (1.0 .+ abs.(data.b)))
+    primal_vio_norm = norm(v, Inf)
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
 
@@ -354,13 +358,29 @@ function surrogate_duality_gap(
     data,
     var::SolverVars{Ti,Tv},
     aux,
+    config::BurerMonteiroConfig{Ti,Tv},
     trace_bound::Tv,
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti<:Integer,Tv}
-    copy2y_λ_sub_pvio!(var)
+    copy2y_λ!(var, aux)
+    m = length(b_vector(data))
+    n = Int(m / 2 - 1)
 
+    @. var.y[n+3:m] = max.(zero(Tv), -var.y[3:n+2])
+    mineig = config.custom_mineig(var.y, config.custom_mineig_args...)
+    @show mineig
     𝒜t_preprocess!(var, aux)
+    output1 = zeros(Tv, 3 * n)
+    x = randn(Tv, 3 * n)
+    𝒜t!(output1, aux, x, var)
+    output2 = config.custom_Aty(x[1:n], var.y, config.custom_Aty_args...)
+    @show norm(output1[1:n] - output2[1:n], Inf)
+
+    @show var.obj[]
+    @show -dot(var.y[1:m], b_vector(data))
+    @show minimum(var.y[3:n+2] .+ var.y[n+3:m])
+    @show minimum(var.y[n+3:m])
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(var, aux, iter)
     end
@@ -385,9 +405,12 @@ function surrogate_duality_gap(
 
     b = b_vector(data)
     m = length(b_vector(data))
+
+    @show res[1]
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
-    duality_gap = var.obj[] - dual_value
+    duality_gap = (var.obj[] - dual_value)
     rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[]))
+    @show duality_gap, rel_duality_gap, dual_value
 
     return lanczos_dt,
     lanczos_eigenval,
@@ -446,7 +469,7 @@ function approx_mineigval_lanczos(
     var::SolverVars{Ti,Tv}, aux, q::Ti
 ) where {Ti<:Integer,Tv}
     n::Ti = side_dimension(aux)
-    q = min(q, n-1)
+    q = min(q, n - 1)
 
     # allocate lanczos vectors
     # alpha is the diagonal of the tridiagonal matrix
