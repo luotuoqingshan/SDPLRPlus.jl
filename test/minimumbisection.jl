@@ -1,3 +1,5 @@
+# End-to-end solver test for the Minimum Bisection SDP.
+# K₂ has one cut edge, so ¼⟨L,X⟩ at optimum equals 1.
 @testset "Minimum Bisection" begin
     @testset "A toy graph with 2 vertices" begin
         A = sparse([
