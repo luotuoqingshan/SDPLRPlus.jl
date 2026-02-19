@@ -22,6 +22,7 @@ function test_gradient_fd!(data, var, aux)
 end
 
 
+# 4 problem types × 12 (n,p,r) combos × 3 @test calls ≈ 144 tests
 @testset "f!, g! and linesearch!" begin
     for (label, prob_fn) in [
         ("MaxCut",         maxcut),
@@ -30,77 +31,83 @@ end
         ("Cut Norm",       cutnorm),
     ]
         @testset "$label" begin
-            n = 10
-            A = make_random_graph(n, 0.6)
-            C, As, bs = prob_fn(A)
-            r = 3
+            for (seed, (n, p, r)) in enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+                @testset "n=$n p=$p r=$r" begin
+                    Random.seed!(seed)
+                    A = make_random_graph(n, p)
+                    C, As, bs = prob_fn(A)
 
-            data = SDPData(C, As, bs)
-            config = BurerMonteiroConfig(σ_0=2.0)
-            var = SolverVars(data, r, config)
-            aux = SolverAuxiliary(data)
+                    data = SDPData(C, As, bs)
+                    config = BurerMonteiroConfig(σ_0=2.0)
+                    var = SolverVars(data, r, config)
+                    aux = SolverAuxiliary(data)
 
-            ℒ_val = f!(data, var, aux)
-            @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
+                    f!(data, var, aux)
+                    @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
 
-            test_gradient_fd!(data, var, aux)
+                    test_gradient_fd!(data, var, aux)
 
-            g!(var, aux)
-            dirt = -1.0 * copy(var.Gt)
-            α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
-            axpy!(α, dirt, var.Rt)
+                    g!(var, aux)
+                    dirt = -1.0 * copy(var.Gt)
+                    α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
+                    axpy!(α, dirt, var.Rt)
 
-            @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
+                    @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
+                end
+            end
         end
     end
 end
 
 
-@testset "𝒜t! operator" begin
-    # Dense reference: S = Σᵢ var.y[i] * Aᵢ + var.y[m+1] * C
-    function At_reference(C, As, var)
-        m = length(As)
-        S = sum(var.y[i] .* Matrix(As[i]) for i in 1:m)
-        S .+= var.y[m+1] .* Matrix(C)
-        return S
-    end
+# Dense reference: S = Σᵢ var.y[i] * Aᵢ + var.y[m+1] * C
+function At_reference(C, As, var)
+    m = length(As)
+    S = sum(var.y[i] .* Matrix(As[i]) for i in 1:m)
+    S .+= var.y[m+1] .* Matrix(C)
+    return S
+end
 
+# 3 problem types × 12 (n,p,r) combos × 2 @test calls = 72 tests
+@testset "𝒜t! operator" begin
     for (label, prob_fn) in [
         ("MaxCut (sparse only)",         maxcut),
         ("Lovász Theta (low-rank C)",    lovasz_theta),
         ("Min. Bisection (low-rank As)", minimum_bisection),
     ]
         @testset "$label" begin
-            n = 8
-            A = make_random_graph(n, 0.5)
-            C, As, bs = prob_fn(A)
-            r = 2
+            for (seed, (n, p, r)) in enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+                @testset "n=$n p=$p r=$r" begin
+                    Random.seed!(seed)
+                    A = make_random_graph(n, p)
+                    C, As, bs = prob_fn(A)
 
-            data = SDPData(C, As, bs)
-            config = BurerMonteiroConfig(σ_0=2.0)
-            var = SolverVars(data, r, config)
-            aux = SolverAuxiliary(data)
+                    data = SDPData(C, As, bs)
+                    config = BurerMonteiroConfig(σ_0=2.0)
+                    var = SolverVars(data, r, config)
+                    aux = SolverAuxiliary(data)
 
-            f!(data, var, aux)
+                    f!(data, var, aux)
 
-            # Set var.y to known random values, then sync aux.sparse_S
-            Random.seed!(42)
-            var.y .= randn(length(var.y))
-            𝒜t_preprocess!(var, aux)
+                    Random.seed!(seed + 100)
+                    var.y .= randn(length(var.y))
+                    𝒜t_preprocess!(var, aux)
 
-            S_ref = At_reference(C, As, var)
+                    S_ref = At_reference(C, As, var)
 
-            # Test left-multiply: 𝒜t!(y, x, aux, var) → y = x * S  (r×n = r×n * n×n)
-            Rt = copy(var.Rt)  # r×n
-            y_left = zeros(eltype(Rt), r, n)
-            𝒜t!(y_left, Rt, aux, var)
-            @test norm(y_left - Rt * S_ref, Inf) < 1e-10
+                    # Test left-multiply: 𝒜t!(y, x, aux, var) → y = x * S  (r×n = r×n * n×n)
+                    Rt = copy(var.Rt)
+                    y_left = zeros(eltype(Rt), r, n)
+                    𝒜t!(y_left, Rt, aux, var)
+                    @test norm(y_left - Rt * S_ref, Inf) < 1e-10
 
-            # Test right-multiply: 𝒜t!(y, aux, x, var) → y = S * x  (n×r = n×n * n×r)
-            x_right = randn(n, r)
-            y_right = zeros(n, r)
-            𝒜t!(y_right, aux, x_right, var)
-            @test norm(y_right - S_ref * x_right, Inf) < 1e-10
+                    # Test right-multiply: 𝒜t!(y, aux, x, var) → y = S * x  (n×r = n×n * n×r)
+                    x_right = randn(n, r)
+                    y_right = zeros(n, r)
+                    𝒜t!(y_right, aux, x_right, var)
+                    @test norm(y_right - S_ref * x_right, Inf) < 1e-10
+                end
+            end
         end
     end
 end
