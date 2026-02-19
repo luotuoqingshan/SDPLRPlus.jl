@@ -34,7 +34,8 @@ SolverCore = "0.3.8"
 julia = "1"
 
 [extras]
+FiniteDiff = "6cc86c72-6a7e-5d67-a2c6-d564bbeb4a2a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["FiniteDiff", "Test"]
