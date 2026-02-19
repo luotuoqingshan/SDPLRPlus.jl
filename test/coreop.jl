@@ -11,7 +11,8 @@ end
 function test_gradient_fd!(data, var, aux)
     r, n = size(var.Rt)
     rt_vec = vec(copy(var.Rt))
-    ℒ_scalar(x::Vector) = (copyto!(var.Rt, reshape(x, r, n)); f!(data, var, aux))
+    ℒ_scalar(x::Vector) =
+        (copyto!(var.Rt, reshape(x, r, n)); f!(data, var, aux))
     grad_num = FiniteDiff.finite_difference_gradient(ℒ_scalar, copy(rt_vec))
     copyto!(var.Rt, reshape(rt_vec, r, n))
     f!(data, var, aux)
@@ -21,17 +22,17 @@ function test_gradient_fd!(data, var, aux)
     @test rel_err < 1e-8
 end
 
-
 # 4 problem types × 12 (n,p,r) combos × 3 @test calls ≈ 144 tests
 @testset "f!, g! and linesearch!" begin
     for (label, prob_fn) in [
-        ("MaxCut",         maxcut),
-        ("Lovász Theta",   lovasz_theta),
+        ("MaxCut", maxcut),
+        ("Lovász Theta", lovasz_theta),
         ("Min. Bisection", minimum_bisection),
-        ("Cut Norm",       cutnorm),
+        ("Cut Norm", cutnorm),
     ]
         @testset "$label" begin
-            for (seed, (n, p, r)) in enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+            for (seed, (n, p, r)) in
+                enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
                 @testset "n=$n p=$p r=$r" begin
                     Random.seed!(seed)
                     A = make_random_graph(n, p)
@@ -43,7 +44,9 @@ end
                     aux = SolverAuxiliary(data)
 
                     f!(data, var, aux)
-                    @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
+                    @test norm(
+                        var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf
+                    ) < 1e-10
 
                     test_gradient_fd!(data, var, aux)
 
@@ -52,13 +55,14 @@ end
                     α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
                     axpy!(α, dirt, var.Rt)
 
-                    @test norm(var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf) < 1e-10
+                    @test norm(
+                        var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf
+                    ) < 1e-10
                 end
             end
         end
     end
 end
-
 
 # Dense reference: S = Σᵢ var.y[i] * Aᵢ + var.y[m+1] * C
 function At_reference(C, As, var)
@@ -71,12 +75,13 @@ end
 # 3 problem types × 12 (n,p,r) combos × 2 @test calls = 72 tests
 @testset "𝒜t! operator" begin
     for (label, prob_fn) in [
-        ("MaxCut (sparse only)",         maxcut),
-        ("Lovász Theta (low-rank C)",    lovasz_theta),
+        ("MaxCut (sparse only)", maxcut),
+        ("Lovász Theta (low-rank C)", lovasz_theta),
         ("Min. Bisection (low-rank As)", minimum_bisection),
     ]
         @testset "$label" begin
-            for (seed, (n, p, r)) in enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+            for (seed, (n, p, r)) in
+                enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
                 @testset "n=$n p=$p r=$r" begin
                     Random.seed!(seed)
                     A = make_random_graph(n, p)

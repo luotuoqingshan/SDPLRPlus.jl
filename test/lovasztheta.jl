@@ -1,2 +1,1 @@
-@testset "Lovasz Theta" begin
-end
+@testset "Lovasz Theta" begin end

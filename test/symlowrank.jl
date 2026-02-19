@@ -1,10 +1,10 @@
 @testset "SymLowRankMatrix tests" begin
     @testset "test norm computation" begin
         ntests = 100
-        for i = 1:ntests
-            n = rand(50:100) 
-            s = rand(1:20) 
-            r = rand(1:20) 
+        for i in 1:ntests
+            n = rand(50:100)
+            s = rand(1:20)
+            r = rand(1:20)
             A = SymLowRankMatrix(Diagonal(randn(s)), randn(n, s))
             Adense = A.B * A.D * A.Bt
             @test norm(A, 2) ≈ norm(Adense, 2)
@@ -13,7 +13,6 @@
     end
 
     #@testset "test matrix-matrix multiplication"
-
 
     #using LinearAlgebra, SparseArrays
     #@testset "sparsematrix mul" begin
@@ -73,4 +72,3 @@
     #    @test sum(A) == 19176 * 2
     #end
 end
-

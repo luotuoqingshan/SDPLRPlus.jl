@@ -1,16 +1,19 @@
 """
 Extract upper triangular part of a sparse matrix in COO format.
 """
-function LinearAlgebra.triu(coo::SparseMatrixCOO{Tv, Ti}) where {Tv, Ti}
-    I = Ti[]; J = Ti[]; V = Tv[];
+function LinearAlgebra.triu(coo::SparseMatrixCOO{Tv,Ti}) where {Tv,Ti}
+    I = Ti[];
+    J = Ti[];
+    V = Tv[];
     for (i, j, v) in zip(coo.is, coo.js, coo.vs)
         if i <= j
-            push!(I, i); push!(J, j); push!(V, v)
+            push!(I, i);
+            push!(J, j);
+            push!(V, v)
         end
     end
     return SparseMatrixCOO(I, J, V, coo.m, coo.n);
 end
-
 
 """
     preprocess_sparsecons(As)
@@ -19,12 +22,11 @@ Preprocess the sparse constraints to initialize necessary
 data structures for BurerMonteiro algorithm.
 """
 function preprocess_sparsecons(
-    As::Vector{Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}}
-) where {Ti <: Integer, Tv}
+    As::Vector{Union{SparseMatrixCSC{Tv,Ti},SparseMatrixCOO{Tv,Ti}}}
+) where {Ti<:Integer,Tv}
     # Following the original SDPLR code, we preprocess all the sparse 
     # constraints. Because the original code has limited documentation 
     # for this part, I add some explanation here. 
-
 
     # According to my understanding, this preprocess has two benefits, 
     # 1. It may increase the data locality, but this one is not benchmarked 
@@ -37,18 +39,18 @@ function preprocess_sparsecons(
     # when computing the gradient. That's the reason we have two sets 
     # of auxiliary variables and also the mapping between them. 
 
-
     # aggregate all constraints into one sparse matrix
     n = size(As[1], 1)
     nA = length(As)
 
     # first count the nnz to perform preallocation
-    total_nnz = 0; total_triu_nnz = 0
+    total_nnz = 0;
+    total_triu_nnz = 0
     for A in As
         total_nnz += nnz(A)
         total_triu_nnz += nnz(triu(A))
     end
-    
+
     # (all_triu_I, all_triu_J, all_triu_V) stores 
     # combined upper triangular part of all constraint matrices A
     all_triu_I = zeros(Ti, total_triu_nnz)
@@ -71,10 +73,10 @@ function preprocess_sparsecons(
 
         # here we append 1 instead of V[i] to both all_triu_V and all_V
         # in this way we can make sure cancellation doesn't happen 
-        all_I[cur_ptr+1:cur_ptr+length(I)] .= I
-        all_J[cur_ptr+1:cur_ptr+length(J)] .= J
-        all_triu_I[cur_triu_ptr+1:cur_triu_ptr+length(triu_I)] .= triu_I
-        all_triu_J[cur_triu_ptr+1:cur_triu_ptr+length(triu_J)] .= triu_J
+        all_I[(cur_ptr+1):(cur_ptr+length(I))] .= I
+        all_J[(cur_ptr+1):(cur_ptr+length(J))] .= J
+        all_triu_I[(cur_triu_ptr+1):(cur_triu_ptr+length(triu_I))] .= triu_I
+        all_triu_J[(cur_triu_ptr+1):(cur_triu_ptr+length(triu_J))] .= triu_J
         cur_ptr += length(I)
         cur_triu_ptr += length(triu_I)
     end
@@ -109,23 +111,23 @@ function preprocess_sparsecons(
             # is located in triu_agg_sparse_A
             while low <= high
                 mid = (low + high) ÷ 2
-                if triu_agg_sparse_A.rowval[mid] == row 
-                    triu_agg_sparse_A_nzind[cumul_nnz+j] = mid 
+                if triu_agg_sparse_A.rowval[mid] == row
+                    triu_agg_sparse_A_nzind[cumul_nnz+j] = mid
                     break
-                elseif triu_agg_sparse_A.rowval[mid] < row 
+                elseif triu_agg_sparse_A.rowval[mid] < row
                     low = mid + 1
                 else
                     high = mid - 1
                 end
             end
-            triu_agg_sparse_A_nzval_one[cumul_nnz+j] = triu_V[j] 
+            triu_agg_sparse_A_nzval_one[cumul_nnz+j] = triu_V[j]
             if row == col
                 triu_agg_sparse_A_nzval_two[cumul_nnz+j] = triu_V[j]
             else
                 # since the matrix is symmetric, 
                 # we can scale up the off-diagonal entries by 2
                 # as we are considering upper triangular part
-                triu_agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j] 
+                triu_agg_sparse_A_nzval_two[cumul_nnz+j] = Tv(2.0) * triu_V[j]
             end
         end
         cumul_nnz += length(triu_I)
@@ -134,8 +136,8 @@ function preprocess_sparsecons(
 
     # map the entries of agg_sparse_A to the corresponding entries of triu_agg_sparse_A
     agg_sparse_A_mappedto_triu = zeros(Ti, length(agg_sparse_A.rowval))
-    for col = 1:n
-        for nzi = agg_sparse_A.colptr[col]:agg_sparse_A.colptr[col+1]-1
+    for col in 1:n
+        for nzi in agg_sparse_A.colptr[col]:(agg_sparse_A.colptr[col+1]-1)
             row = agg_sparse_A.rowval[nzi]
             r = min(row, col)
             c = max(row, col)
@@ -155,8 +157,13 @@ function preprocess_sparsecons(
             end
         end
     end
-    return (triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
-            triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
-            triu_agg_sparse_A_nzval_two, agg_sparse_A, 
-            agg_sparse_A_mappedto_triu)
+    return (
+        triu_agg_sparse_A,
+        triu_agg_sparse_A_matptr,
+        triu_agg_sparse_A_nzind,
+        triu_agg_sparse_A_nzval_one,
+        triu_agg_sparse_A_nzval_two,
+        agg_sparse_A,
+        agg_sparse_A_mappedto_triu,
+    )
 end

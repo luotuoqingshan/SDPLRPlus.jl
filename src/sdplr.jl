@@ -80,9 +80,9 @@ function sdplr(
     As::Vector,
     b::Vector{Tv},
     r::Ti;
-    config::BurerMonteiroConfig{Ti, Tv}=BurerMonteiroConfig{Ti, Tv}(),
-    kwargs...
-) where{Ti <: Integer, Tv}
+    config::BurerMonteiroConfig{Ti,Tv}=BurerMonteiroConfig{Ti,Tv}(),
+    kwargs...,
+) where {Ti<:Integer,Tv}
 
     # update config with input kwargs
     for (key, value) in kwargs
@@ -91,7 +91,7 @@ function sdplr(
         else
             @error "Unrecognized keyword argument $key"
         end
-    end 
+    end
 
     if config.printlevel > 0
         printheading(1)
@@ -116,16 +116,16 @@ function sdplr(
         printheading(0)
     end
 
-    return ans 
+    return ans
 end
 
 function _sdplr(
     data,
-    var::SolverVars{Ti, Tv},
+    var::SolverVars{Ti,Tv},
     aux,
     stats::SolverStats{Tv},
-    config::BurerMonteiroConfig{Ti, Tv},
-) where{Ti <: Integer, Tv}
+    config::BurerMonteiroConfig{Ti,Tv},
+) where {Ti<:Integer,Tv}
     n = side_dimension(aux)
     m = length(var.λ) # number of constraints
 
@@ -133,7 +133,7 @@ function _sdplr(
 
     lastprint = stats.starttime[] # timestamp of last print
 
-    Rt0 = deepcopy(var.Rt) 
+    Rt0 = deepcopy(var.Rt)
     λ0 = deepcopy(var.λ)
 
     # set up algorithm parameters
@@ -159,14 +159,14 @@ function _sdplr(
     min_rel_duality_gap = 1e20
     max_dual_value = -1e20
 
-    for _ = 1:config.maxmajoriter
+    for _ in 1:config.maxmajoriter
         majoriter += 1
         localiter = 0
 
         # find a stationary point of the Lagrangian
-        while grad_norm > cur_gtol 
+        while grad_norm > cur_gtol
             # update iteration counters
-            localiter += 1     
+            localiter += 1
             iter += 1
             # find the lbfgs direction
             # the return direction has been negated
@@ -184,7 +184,7 @@ function _sdplr(
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α ,𝓛_val = linesearch!(var, aux, dirt, α_max=1.0) 
+                α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
             end
             @debug "line search time" linesearch_dt
 
@@ -206,7 +206,7 @@ function _sdplr(
             end
 
             # update lbfgs vectors
-            if config.numlbfgsvecs > 0 
+            if config.numlbfgsvecs > 0
                 lbfgs_update!(dirt, lbfgshis, var.Gt, α)
             end
 
@@ -215,24 +215,49 @@ function _sdplr(
             if current_time - lastprint >= config.printfreq
                 lastprint = current_time
                 if config.printlevel > 0
-                    printintermediate(config.dataset, majoriter,
-                        localiter, iter, 𝓛_val, var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm,
-                        primal_vio_norm, min_rel_duality_gap, max_dual_value)
+                    printintermediate(
+                        config.dataset,
+                        majoriter,
+                        localiter,
+                        iter,
+                        𝓛_val,
+                        var.obj[],
+                        var.σ[],
+                        cur_gtol,
+                        cur_ptol,
+                        grad_norm,
+                        primal_vio_norm,
+                        min_rel_duality_gap,
+                        max_dual_value,
+                    )
                 end
-            end   
+            end
 
             # timeout or iteration limit reached
-            if (current_time - stats.starttime[] > config.maxtime
-                || iter > config.maxiter)
+            if (
+                current_time - stats.starttime[] > config.maxtime ||
+                iter > config.maxiter
+            )
                 break
             end
         end
 
-
         current_time = time()
-        printintermediate(config.dataset, majoriter, localiter, iter, 𝓛_val,
-            var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm, primal_vio_norm,
-            min_rel_duality_gap, max_dual_value)
+        printintermediate(
+            config.dataset,
+            majoriter,
+            localiter,
+            iter,
+            𝓛_val,
+            var.obj[],
+            var.σ[],
+            cur_gtol,
+            cur_ptol,
+            grad_norm,
+            primal_vio_norm,
+            min_rel_duality_gap,
+            max_dual_value,
+        )
         lastprint = current_time
 
         if current_time - stats.starttime[] > config.maxtime
@@ -248,28 +273,34 @@ function _sdplr(
         rank_double = false
 
         if primal_vio_norm <= cur_ptol
-            if primal_vio_norm <= config.ptol 
+            if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
                 if config.objtol == Inf
                     @debug "`objtol` is `Inf`, skipping duality gap check"
                     break
                 end
-                eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n))) 
+                eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n)))
 
                 # when highprecision=true, then GenericArpack will be used
                 # otherwise Lanczos with random start will be used
-                lanczos_dt, _, GenericArpack_dt,
-                _, duality_bound, rel_duality_bound, dual_value =
-                    surrogate_duality_gap(data, var, aux,
-                        config.prior_trace_bound, eig_iter; highprecision=false)
+                lanczos_dt, _, GenericArpack_dt, _, duality_bound, rel_duality_bound, dual_value = surrogate_duality_gap(
+                    data,
+                    var,
+                    aux,
+                    config.prior_trace_bound,
+                    eig_iter;
+                    highprecision=false,
+                )
                 max_dual_value = max(max_dual_value, dual_value)
                 stats.dual_lanczos_time[] += lanczos_dt
                 stats.dual_GenericArpack_time[] += GenericArpack_dt
 
                 if rel_duality_bound <= config.objtol
-                    @debug "Duality gap and primal violence are small enough." 
-                    @debug  primal_vio_norm rel_duality_bound grad_norm
-                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
+                    @debug "Duality gap and primal violence are small enough."
+                    @debug primal_vio_norm rel_duality_bound grad_norm
+                    min_rel_duality_gap = min(
+                        min_rel_duality_gap, rel_duality_bound
+                    )
                     break
                 else
                     if min_rel_duality_gap - rel_duality_bound < config.objtol
@@ -277,7 +308,9 @@ function _sdplr(
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
-                    min_rel_duality_gap = min(min_rel_duality_gap, rel_duality_bound)
+                    min_rel_duality_gap = min(
+                        min_rel_duality_gap, rel_duality_bound
+                    )
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
@@ -288,10 +321,10 @@ function _sdplr(
             axpy!(-var.σ[], v, var.λ)
             cur_ptol = cur_ptol / var.σ[]^0.9
             cur_gtol = cur_gtol / var.σ[]
-        else 
-            var.σ[] *= config.σfac 
+        else
+            var.σ[] *= config.σfac
             cur_ptol = 1 / var.σ[]^0.1
-            cur_gtol = 1 / var.σ[] 
+            cur_gtol = 1 / var.σ[]
         end
 
         # when objective gap doesn't improve, we double the rank
@@ -318,16 +351,29 @@ function _sdplr(
 
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
 
-    printintermediate(config.dataset, majoriter, -1, iter, 𝓛_val,
-        var.obj[], var.σ[], cur_gtol, cur_ptol, grad_norm, primal_vio_norm,
-        min_rel_duality_gap, max_dual_value)
+    printintermediate(
+        config.dataset,
+        majoriter,
+        -1,
+        iter,
+        𝓛_val,
+        var.obj[],
+        var.σ[],
+        cur_gtol,
+        cur_ptol,
+        grad_norm,
+        primal_vio_norm,
+        min_rel_duality_gap,
+        max_dual_value,
+    )
 
     stats.endtime[] = time()
 
     totaltime = stats.endtime[] - stats.starttime[]
 
-    stats.primal_time[] = (totaltime - stats.dual_lanczos_time[] 
-        - stats.dual_GenericArpack_time[])
+    stats.primal_time[] = (
+        totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
+    )
     stats.DIMACS_time[] = @elapsed begin
         if config.eval_DIMACS_errs
             DIMACS_errs = DIMACS_errors(data, var, aux)

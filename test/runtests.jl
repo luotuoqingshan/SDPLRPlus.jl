@@ -1,6 +1,17 @@
 # Run tests from package root with: julia --project -e 'using Pkg; Pkg.test()'
 # That uses the local SDPLRPlus source (no need to add the package from the registry).
-using SDPLRPlus: sdplr, linesearch!, g!, SDPData, SymLowRankMatrix, SolverVars, SolverAuxiliary, BurerMonteiroConfig, f!, 𝒜t!, 𝒜t_preprocess!
+using SDPLRPlus:
+    sdplr,
+    linesearch!,
+    g!,
+    SDPData,
+    SymLowRankMatrix,
+    SolverVars,
+    SolverAuxiliary,
+    BurerMonteiroConfig,
+    f!,
+    𝒜t!,
+    𝒜t_preprocess!
 using Test
 
 using Random
