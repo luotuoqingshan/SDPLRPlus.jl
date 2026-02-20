@@ -75,7 +75,7 @@ function 𝒜_sparse!(
         aux.triu_agg_sparse_A_nzval_two,
     )
     v = UUt' * C
-    𝒜_UUt[aux.sparse_As_global_inds] .= @view(v[1, :])
+    return 𝒜_UUt[aux.sparse_As_global_inds] .= @view(v[1, :])
 end
 
 function 𝒜_sparse!(
@@ -97,7 +97,7 @@ function 𝒜_sparse!(
         aux.triu_agg_sparse_A_nzval_two,
     )
     v = UVt' * C
-    𝒜_UVt[aux.sparse_As_global_inds] .= @view(v[1, :])
+    return 𝒜_UVt[aux.sparse_As_global_inds] .= @view(v[1, :])
 end
 
 function tr_UtAU(A::SymLowRankMatrix{Tv}, Ut::Matrix{Tv}) where {Tv}
@@ -215,21 +215,19 @@ function 𝒜t_preprocess_sparse!(
 end
 
 function copy2y_λ_sub_pvio!(var::SolverVars{Ti,Tv}) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+    m = length(var.primal_vio) - 1
     @inbounds @simd for i in 1:m
         var.y[i] = -(var.λ[i] - var.σ[] * var.primal_vio[i])
     end
-    var.y[m+1] = one(Tv)
+    return var.y[m+1] = one(Tv)
 end
 
-function copy2y_λ!(
-    var::SolverVars{Ti,Tv}, aux::SolverAuxiliary{Ti,Tv}
-) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+function copy2y_λ!(var::SolverVars{Ti,Tv}) where {Ti<:Integer,Tv}
+    m = length(var.primal_vio) - 1
     @inbounds @simd for i in 1:m
         var.y[i] = -var.λ[i]
     end
-    var.y[m+1] = one(Tv)
+    return var.y[m+1] = one(Tv)
 end
 
 function 𝒜t_preprocess!(
@@ -446,7 +444,7 @@ function approx_mineigval_lanczos(
     var::SolverVars{Ti,Tv}, aux, q::Ti
 ) where {Ti<:Integer,Tv}
     n::Ti = side_dimension(aux)
-    q = min(q, n-1)
+    q = min(q, n - 1)
 
     # allocate lanczos vectors
     # alpha is the diagonal of the tridiagonal matrix
