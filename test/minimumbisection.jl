@@ -3,7 +3,7 @@
 @testset "Minimum Bisection" begin
     @testset "A toy graph with 2 vertices" begin
         A = sparse([
-            0.0 1.0;
+            0.0 1.0
             1.0 0.0
         ])
         C, As, bs = minimum_bisection(A)
@@ -19,6 +19,6 @@
             ptol=1e-4,
             prior_trace_bound=Float64(n),
         )
-        @test (res["obj"]-1) / (1 + abs(res["obj"])) < 1e-4
+        @test (res["obj"] - 1) / (1 + abs(res["obj"])) < 1e-4
     end
 end
