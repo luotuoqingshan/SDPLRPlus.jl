@@ -165,6 +165,8 @@ function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
             ),
         )
         push!(bs, Tv(ub))
+    end
+    for i in eachindex(d)
         push!(
             As,
             super_sparse(
