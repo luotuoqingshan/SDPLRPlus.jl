@@ -363,24 +363,13 @@ function surrogate_duality_gap(
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti<:Integer,Tv}
-    copy2y_λ!(var, aux)
+    copy2y_λ_sub_pvio!(var)
     m = length(b_vector(data))
     n = Int(m / 2 - 1)
 
     @. var.y[n+3:m] = max.(zero(Tv), -var.y[3:n+2])
-    mineig = config.custom_mineig(var.y, config.custom_mineig_args...)
-    @show mineig
     𝒜t_preprocess!(var, aux)
-    output1 = zeros(Tv, 3 * n)
-    x = randn(Tv, 3 * n)
-    𝒜t!(output1, aux, x, var)
-    output2 = config.custom_Aty(x[1:n], var.y, config.custom_Aty_args...)
-    @show norm(output1[1:n] - output2[1:n], Inf)
 
-    @show var.obj[]
-    @show -dot(var.y[1:m], b_vector(data))
-    @show minimum(var.y[3:n+2] .+ var.y[n+3:m])
-    @show minimum(var.y[n+3:m])
     lanczos_dt = @elapsed begin
         lanczos_eigenval = approx_mineigval_lanczos(var, aux, iter)
     end
@@ -406,10 +395,9 @@ function surrogate_duality_gap(
     b = b_vector(data)
     m = length(b_vector(data))
 
-    @show res[1]
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
     duality_gap = (var.obj[] - dual_value)
-    rel_duality_gap = duality_gap / max(one(Tv), abs(var.obj[]))
+    rel_duality_gap = duality_gap / minimum(abs.([dual_value, var.obj[]]))
     @show duality_gap, rel_duality_gap, dual_value
 
     return lanczos_dt,
