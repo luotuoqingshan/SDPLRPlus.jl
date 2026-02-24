@@ -26,18 +26,16 @@ end
 """
 size of a symmetric low-rank matrix
 """
-LinearAlgebra.size(A::SymLowRankMatrix) = (n=size(A.B, 1); (n, n))
+LinearAlgebra.size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
 
 """
     getindex(A, i, j)
 
 return the (i, j)-th element of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
 """
-(
-    function Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer)
-        (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
-    end
-)
+(function Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer)
+    return (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
+end)
 
 """
 display a symmetric low-rank matrix
@@ -51,7 +49,7 @@ function LinearAlgebra.show(
     println(io, "B factor:")
     show(io, mime, A.B)
     println(io, "\nD factor:")
-    show(io, mime, A.D)
+    return show(io, mime, A.D)
 end
 
 """
@@ -94,7 +92,7 @@ function LinearAlgebra.mul!(
 ) where {Tv<:Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
-    mul!(Y, A.B, BtX)
+    return mul!(Y, A.B, BtX)
 end
 
 """
@@ -107,7 +105,7 @@ function LinearAlgebra.mul!(
 ) where {Tv<:Number}
     XB = X * A.B
     rmul!(XB, A.D)
-    mul!(Y, XB, A.Bt)
+    return mul!(Y, XB, A.Bt)
 end
 
 """
@@ -125,7 +123,7 @@ function LinearAlgebra.mul!(
 ) where {Tv<:Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
-    mul!(Y, A.B, BtX, α, β)
+    return mul!(Y, A.B, BtX, α, β)
 end
 
 """
@@ -143,7 +141,7 @@ function LinearAlgebra.mul!(
 ) where {Tv<:Number}
     XB = X * A.B
     rmul!(XB, A.D)
-    mul!(Y, XB, A.Bt, α, β)
+    return mul!(Y, XB, A.Bt, α, β)
 end
 
 """
@@ -212,10 +210,10 @@ function SolverVars(Rt0, λ0::Vector{Tv}, r, σ_0::Tv=2.0) where {Tv}
         Ref(r),
         Ref(σ_0), # initial σ
         Ref(zero(Tv)),
-        zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
-        zeros(Tv, m+1), # primal_vio
-        zeros(Tv, m+1),
-        zeros(Tv, m+1), # A_RD, A_DD
+        zeros(Tv, m + 1), # y, auxiliary variable for 𝒜t 
+        zeros(Tv, m + 1), # primal_vio
+        zeros(Tv, m + 1),
+        zeros(Tv, m + 1), # A_RD, A_DD
     )
 end
 
@@ -271,13 +269,13 @@ function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
 
     if isa(data.C, Union{SparseMatrixCSC,SparseMatrixCOO})
         push!(sparse_cons, data.C)
-        push!(sparse_As_global_inds, data.m+1)
+        push!(sparse_As_global_inds, data.m + 1)
     elseif isa(data.C, Diagonal)
         push!(sparse_cons, sparse(data.C))
-        push!(sparse_As_global_inds, data.m+1)
+        push!(sparse_As_global_inds, data.m + 1)
     elseif isa(data.C, SymLowRankMatrix)
         push!(symlowrank_cons, data.C)
-        push!(symlowrank_As_global_inds, data.m+1)
+        push!(symlowrank_As_global_inds, data.m + 1)
     else
         @error "Currently only sparse\
         /lowrank/diagonal objectives are supported."
