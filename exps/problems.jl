@@ -163,6 +163,8 @@ function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
             ),
         )
         push!(bs, Tv(ub))
+    end
+    for i in eachindex(d)
         push!(
             As,
             super_sparse(
@@ -200,6 +202,8 @@ function relaxed_maxcut(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
             ),
         )
         push!(bs, one(Tv))
+    end
+    for i in eachindex(d)
         push!(
             As,
             super_sparse(
@@ -246,7 +250,7 @@ function mu_conductance_reformulated(
     padded_L = extend_sparse(L, 3 * n, 3 * n)
 
     push!(As, padded_D)
-    push!(bs, 1)
+    push!(bs, one(Tv))
 
     push!(As, SymLowRankMatrix(Diagonal([one(Tv)]), reshape(padded_d, :, 1)))
     push!(bs, zero(Tv))
@@ -262,6 +266,8 @@ function mu_conductance_reformulated(
             ),
         )
         push!(bs, Tv(ub))
+    end
+    for i in eachindex(d)
         push!(
             As,
             super_sparse(
