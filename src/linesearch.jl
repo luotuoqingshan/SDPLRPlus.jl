@@ -4,7 +4,7 @@ Exact line search for minimizing the augmented Lagrangian
 function linesearch!(
     var::SolverVars{Ti,Tv}, aux, Dt::AbstractArray{Tv}; α_max=one(Tv)
 ) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+    m = length(var.primal_vio) - 1
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
         𝒜!(var.A_RD, aux, var.Rt, Dt)
