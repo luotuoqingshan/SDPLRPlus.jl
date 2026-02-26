@@ -164,8 +164,8 @@ function _sdplr(
 
     rankupd_tol_cnt = config.rankupd_tol
 
-    duality_bound = 1e20
-    rel_duality_bound = 1e20
+    duality_gap = 1e20
+    rel_duality_gap = 1e20
     min_rel_duality_gap = 1e20
     max_dual_value = -1e20
     best_λ = deepcopy(var.λ)
@@ -292,50 +292,52 @@ function _sdplr(
         if primal_vio_norm <= cur_ptol
             # when highprecision=true, then GenericArpack will be used
             # otherwise Lanczos with random start will be used
-            dual_value, _, dt = dual_obj(
-                data,
-                var,
-                aux,
-                config.prior_trace_bound,
-                iter;
-                highprecision=config.eigval_highprecision,
-            )
+            dual_dt = @elapsed begin
+                dual_value, _ = dual_obj(
+                    data,
+                    var,
+                    aux,
+                    config.prior_trace_bound,
+                    iter;
+                    highprecision=config.eigval_highprecision,
+                )
+            end
 
             if dual_value > max_dual_value
                 best_λ = -deepcopy(var.y)
                 max_dual_value = dual_value
             end
             duality_gap = var.obj[] - max_dual_value
-            rel_duality_bound =
+            rel_duality_gap =
                 duality_gap / minimum(abs.([var.obj[], max_dual_value]))
-            stats.dual_time[] += dt
-            @show var.obj[] max_dual_value rel_duality_bound
+            stats.dual_time[] += dual_dt
+            @show var.obj[] max_dual_value rel_duality_gap
             if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
                 if config.objtol == Inf
                     @debug "`objtol` is `Inf`, skipping duality gap check"
                     break
                 end
-                if rel_duality_bound <= config.objtol
+                if rel_duality_gap <= config.objtol
                     @debug "Duality gap and primal violence are small enough."
-                    @debug primal_vio_norm rel_duality_bound grad_norm
+                    @debug primal_vio_norm rel_duality_gap grad_norm
                     min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_bound
+                        min_rel_duality_gap, rel_duality_gap
                     )
                     break
                 else
-                    if min_rel_duality_gap - rel_duality_bound < config.objtol
+                    if min_rel_duality_gap - rel_duality_gap < config.objtol
                         rankupd_tol_cnt -= 1
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
                     min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_bound
+                        min_rel_duality_gap, rel_duality_gap
                     )
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
-                    #last_rel_duality_bound = rel_duality_bound
+                    #last_rel_duality_gap = rel_duality_gap
                 end
             end
             @inbounds for i in 1:m
@@ -398,9 +400,7 @@ function _sdplr(
 
     totaltime = stats.endtime[] - stats.starttime[]
 
-    stats.primal_time[] = (
-        totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
-    )
+    stats.primal_time[] = (totaltime - stats.dual_time[])
     stats.DIMACS_time[] = @elapsed begin
         if config.eval_DIMACS_errs
             DIMACS_errs = DIMACS_errors(data, var, aux)
@@ -417,9 +417,9 @@ function _sdplr(
         "grad_norm" => grad_norm,
         "primal_vio" => primal_vio_norm,
         "obj" => var.obj[],
-        "duality_bound" => duality_bound,
+        "duality_gap" => duality_gap,
         "max_dual_value" => max_dual_value,
-        "rel_duality_bound" => rel_duality_bound,
+        "rel_duality_gap" => rel_duality_gap,
         "min_rel_duality_gap" => min_rel_duality_gap,
         "totaltime" => totaltime,
         "dual_time" => stats.dual_time[],

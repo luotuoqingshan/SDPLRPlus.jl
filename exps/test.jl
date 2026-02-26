@@ -131,13 +131,13 @@ function batch_eval(
     )
     callback_res = callback(A, res["Rt"])
     res["callback_res"] = callback_res
-    @show graph, res["totaltime"], res["primaltime"], res["rel_duality_bound"]
+    @show graph, res["totaltime"], res["primaltime"], res["rel_duality_gap"]
 
     short_res_keys = [
         "grad_norm",
         "primal_vio",
         "obj",
-        "rel_duality_bound",
+        "rel_duality_gap",
         "totaltime",
         "dual_lanczos_time",
         "dual_GenericArpack_time",

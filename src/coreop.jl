@@ -392,14 +392,12 @@ function dual_obj(
             maxiter=1000000,
         )
         res = GenericArpack_evs[1]
-        dt = GenericArpack_dt
     else
         eig_iter = Ti(2 * ceil(max(iter, 100)^0.5 * log(n)))
         lanczos_dt = @elapsed begin
             lanczos_eigenval = approx_mineigval_lanczos(var, aux, eig_iter)
         end
         res = lanczos_eigenval
-        dt = lanczos_dt
     end
 
     b = b_vector(data)
@@ -407,7 +405,7 @@ function dual_obj(
 
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
 
-    return dual_value, res[1], dt
+    return dual_value, res[1]
 end
 
 """
