@@ -177,3 +177,60 @@ function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
     end
     return Tv.(padded_L), As, bs
 end
+
+"""
+μ-Conductance SDP with native inequality constraints (n×n, no lifting):
+
+minimize  ⟨L, X⟩
+
+s.t.      ⟨D, X⟩ = 1              (equality)
+          ⟨ddᵀ, X⟩ = 0            (equality)
+          X_{ii} ≤ ub              (inequality, for i = 1…n)
+          -X_{ii} ≤ -lb            (inequality, for i = 1…n)
+
+          X ≽ 0
+
+Returns (C, As, bs, constraint_types).  Equivalent to mu_conductance but avoids
+the 3n slack-variable lift.
+"""
+function mu_conductance_ineq(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A; dims=2)[:, 1]
+    D = sparse(Diagonal(d))
+    volG = sum(d)
+    L = sparse(Diagonal(d) - A)
+    ub = mu_conductance_ub(volG, mu)
+    lb = mu_conductance_lb(volG, mu)
+
+    As = []
+    bs = Tv[]
+    constraint_types = Bool[]
+
+    # Equality: ⟨D, X⟩ = 1
+    push!(As, D)
+    push!(bs, one(Tv))
+    push!(constraint_types, false)
+
+    # Equality: ⟨ddᵀ, X⟩ = 0
+    push!(As, SymLowRankMatrix(Diagonal(ones(Tv, 1)), reshape(d, :, 1)))
+    push!(bs, zero(Tv))
+    push!(constraint_types, false)
+
+    # Inequality: X_{ii} ≤ ub
+    for i in eachindex(d)
+        push!(As, super_sparse(Ti[i], Ti[i], [one(Tv)], n, n))
+        push!(bs, Tv(ub))
+        push!(constraint_types, true)
+    end
+
+    # Inequality: -X_{ii} ≤ -lb  (i.e. X_{ii} ≥ lb)
+    for i in eachindex(d)
+        push!(As, super_sparse(Ti[i], Ti[i], [-one(Tv)], n, n))
+        push!(bs, Tv(-lb))
+        push!(constraint_types, true)
+    end
+
+    @info "μ-Conductance (inequality) SDP is formed."
+    return Tv.(L), As, bs, constraint_types
+end

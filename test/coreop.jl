@@ -57,7 +57,7 @@ end
 
                     f!(data, var, aux)
                     @test norm(
-                        var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf
+                        var.primal_vio_raw - primal_vio(C, As, bs, var.Rt), Inf
                     ) < 1e-10
 
                     test_gradient_fd!(data, var, aux)
@@ -68,8 +68,50 @@ end
                     axpy!(α, dirt, var.Rt)
 
                     @test norm(
-                        var.primal_vio - primal_vio(C, As, bs, var.Rt), Inf
+                        var.primal_vio_raw - primal_vio(C, As, bs, var.Rt), Inf
                     ) < 1e-10
+                end
+            end
+        end
+    end
+end
+
+# Dense reference for primal_vio: equality violations are free, inequality violations are capped at 0.
+function primal_vio_reference(pv, constraint_types)
+    cap = copy(pv[1:length(constraint_types)])
+    for i in eachindex(constraint_types)
+        if constraint_types[i]  # inequality ≤
+            cap[i] = max(cap[i], 0.0)
+        end
+    end
+    return cap
+end
+
+# Tests for inequality constraints using mu_conductance_ineq (n×n, no slack-variable lift).
+# Checks: primal_vio_raw, primal_vio, gradient (vs finite differences).
+@testset "f!, g! with inequality constraints" begin
+    for mu in [0.01, 0.05, 0.1]
+        @testset "μ-Conductance-ineq μ=$mu" begin
+            for (seed, (n, p, r)) in
+                enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+                @testset "n=$n p=$p r=$r" begin
+                    Random.seed!(seed)
+                    A = make_random_graph(n, p)
+                    C, As, bs, constraint_types = mu_conductance_ineq(A, mu)
+
+                    data = SDPData(C, As, bs, constraint_types)
+                    config = BurerMonteiroConfig(; σ_0=2.0)
+                    var = SolverVars(data, r, config)
+                    aux = SolverAuxiliary(data)
+
+                    f!(data, var, aux)
+                    pv = primal_vio(C, As, bs, var.Rt)
+                    @test norm(var.primal_vio_raw - pv, Inf) < 1e-10
+
+                    pvc_ref = primal_vio_reference(pv, constraint_types)
+                    @test norm(var.primal_vio - pvc_ref, Inf) < 1e-10
+
+                    test_gradient_fd!(data, var, aux)
                 end
             end
         end
@@ -124,6 +166,43 @@ end
                     @test norm(y_left - Rt * S_ref, Inf) < 1e-10
 
                     # Test right-multiply: 𝒜t!(y, aux, x, var) → y = S * x  (n×r = n×n * n×r)
+                    x_right = randn(n, r)
+                    y_right = zeros(n, r)
+                    𝒜t!(y_right, aux, x_right, var)
+                    @test norm(y_right - S_ref * x_right, Inf) < 1e-10
+                end
+            end
+        end
+    end
+
+    for mu in [0.01, 0.05, 0.1]
+        @testset "μ-Conductance-ineq μ=$mu (n×n, inequality)" begin
+            for (seed, (n, p, r)) in
+                enumerate(Iterators.product([5, 8, 12], [0.4, 0.7], [2, 3]))
+                @testset "n=$n p=$p r=$r" begin
+                    Random.seed!(seed)
+                    A = make_random_graph(n, p)
+                    C, As, bs, constraint_types = mu_conductance_ineq(A, mu)
+                    n = size(C, 1)
+
+                    data = SDPData(C, As, bs, constraint_types)
+                    config = BurerMonteiroConfig(; σ_0=2.0)
+                    var = SolverVars(data, r, config)
+                    aux = SolverAuxiliary(data)
+
+                    f!(data, var, aux)
+
+                    Random.seed!(seed + 100)
+                    var.y .= randn(length(var.y))
+                    𝒜t_preprocess!(var, aux)
+
+                    S_ref = At_reference(C, As, var)
+
+                    Rt = copy(var.Rt)
+                    y_left = zeros(eltype(Rt), r, n)
+                    𝒜t!(y_left, Rt, aux, var)
+                    @test norm(y_left - Rt * S_ref, Inf) < 1e-10
+
                     x_right = randn(n, r)
                     y_right = zeros(n, r)
                     𝒜t!(y_right, aux, x_right, var)

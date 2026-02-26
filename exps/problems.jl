@@ -114,8 +114,8 @@ function extend_sparse(A, new_n, new_m)
     return sparse(I, J, V, new_n, new_m)
 end
 
-mu_conductance_ub(volG, mu) = (1 - mu)/(mu * volG)
-mu_conductance_lb(volG, mu) = mu/((1 - mu) * volG)
+mu_conductance_ub(volG, mu) = (1 - mu) / (mu * volG)
+mu_conductance_lb(volG, mu) = mu / ((1 - mu) * volG)
 
 """
 μ-Conductance SDP:              
@@ -142,9 +142,9 @@ function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
     As = []
     bs = Tv[]
 
-    padded_d = [d; zeros(Tv, 2*n)]
-    padded_D = extend_sparse(D, 3*n, 3*n)
-    padded_L = extend_sparse(L, 3*n, 3*n)
+    padded_d = [d; zeros(Tv, 2 * n)]
+    padded_D = extend_sparse(D, 3 * n, 3 * n)
+    padded_L = extend_sparse(L, 3 * n, 3 * n)
 
     push!(As, padded_D)
     push!(bs, 1)
@@ -158,16 +158,184 @@ function mu_conductance(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
     for i in eachindex(d)
         push!(
             As,
-            super_sparse(Ti[i, i+n], Ti[i, i+n], [one(Tv), one(Tv)], 3*n, 3*n),
+            super_sparse(
+                Ti[i, i+n], Ti[i, i+n], [one(Tv), one(Tv)], 3 * n, 3 * n
+            ),
         )
         push!(bs, Tv(ub))
+    end
+    for i in eachindex(d)
         push!(
             As,
             super_sparse(
-                Ti[i, i+2*n], Ti[i, i+2*n], [one(Tv), -one(Tv)], 3*n, 3*n
+                Ti[i, i+2*n], Ti[i, i+2*n], [one(Tv), -one(Tv)], 3 * n, 3 * n
             ),
         )
         push!(bs, Tv(lb))
     end
-    Tv.(padded_L), As, bs
+    return Tv.(padded_L), As, bs
+end
+
+"""
+Maxcut SDP:              
+
+minimize  - 1/4 ⟨L, X⟩   
+
+s.t.      0.99 ≤ Diag(X) ≤ 1    
+
+          X ≽ 0    
+"""
+function relaxed_maxcut(A::SparseMatrixCSC; Tv=Float64, Ti=Int64)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A; dims=2)[:, 1]
+    L = sparse(Diagonal(d) - A)
+    L .*= Tv(-0.25)
+    padded_L = extend_sparse(L, 3 * n, 3 * n)
+    As = []
+    bs = Tv[]
+    for i in eachindex(d)
+        push!(
+            As,
+            super_sparse(
+                Ti[i, i+n], Ti[i, i+n], [one(Tv), one(Tv)], 3 * n, 3 * n
+            ),
+        )
+        push!(bs, one(Tv))
+    end
+    for i in eachindex(d)
+        push!(
+            As,
+            super_sparse(
+                Ti[i, i+2*n], Ti[i, i+2*n], [one(Tv), -one(Tv)], 3 * n, 3 * n
+            ),
+        )
+        push!(bs, Tv(0.99))
+    end
+    return Tv.(padded_L), As, bs
+end
+
+"""
+μ-Conductance SDP:              
+
+minimize  ⟨L, X⟩   
+
+s.t.      ⟨D, X⟩ = 1
+
+          ⟨ddᵀ, X⟩ = 0
+
+          Diag(X) ≤ (1 - μ)/(μ Vol(G)) 
+
+          Diag(X) ≥ μ/((1 - μ) Vol(G)) 
+
+          X ≽ 0
+"""
+function mu_conductance_reformulated(
+    A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64
+)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A; dims=2)[:, 1]
+    D = sparse(Diagonal(d))
+    volG = sum(d)
+    L = sparse(Diagonal(d) - A)
+
+    As = []
+    bs = Tv[]
+
+    ddt_norm = norm(d, 2)^2
+    D_norm = norm(D, 2)
+    padded_d = [d; zeros(Tv, 2 * n)]
+    padded_D = extend_sparse(D, 3 * n, 3 * n)
+    padded_L = extend_sparse(L, 3 * n, 3 * n)
+
+    push!(As, padded_D)
+    push!(bs, one(Tv))
+
+    push!(As, SymLowRankMatrix(Diagonal([one(Tv)]), reshape(padded_d, :, 1)))
+    push!(bs, zero(Tv))
+
+    ub = mu_conductance_ub(volG, mu)
+    lb = mu_conductance_lb(volG, mu)
+
+    for i in eachindex(d)
+        push!(
+            As,
+            super_sparse(
+                Ti[i, i+n], Ti[i, i+n], [one(Tv), one(Tv)], 3 * n, 3 * n
+            ),
+        )
+        push!(bs, Tv(ub))
+    end
+    for i in eachindex(d)
+        push!(
+            As,
+            super_sparse(
+                Ti[i+n, i+2*n], Ti[i+n, i+2*n], [one(Tv), one(Tv)], 3 * n, 3 * n
+            ),
+        )
+        push!(bs, Tv(ub - lb))
+    end
+    return Tv.(padded_L), As, bs
+end
+
+"""
+μ-Conductance SDP (native inequality formulation, n×n):
+
+minimize  ⟨L, X⟩
+
+s.t.      ⟨D, X⟩ = 1
+          ⟨ddᵀ, X⟩ = 0
+          X[i,i] ≤ ub    (represented as ⟨eᵢeᵢᵀ, X⟩ ≤ ub,   constraint_type = true)
+          X[i,i] ≥ lb    (flipped to    ⟨-eᵢeᵢᵀ, X⟩ ≤ -lb,  constraint_type = true)
+          X ≽ 0
+
+Returns (C, As, bs, constraint_types) for use with sdplr(...; constraint_types=ct).
+"""
+function mu_conductance_native(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A; dims=2)[:, 1]
+    D = sparse(Diagonal(d))
+    volG = sum(d)
+    L = sparse(Diagonal(d) - A)
+
+    As = []
+    bs = Tv[]
+    ct = Bool[]
+
+    D_norm = norm(D, 2)
+    d_max = maximum(d)
+    dd_norm = norm(d, 2)^2
+
+    # Equality 1: ⟨D, X⟩ = 1
+    push!(As, D)
+    push!(bs, one(Tv))
+    push!(ct, false)
+
+    # Equality 2: ⟨ddᵀ, X⟩ = 0  (rank-1 low-rank matrix)
+    push!(
+        As, SymLowRankMatrix(Diagonal([Tv(D_norm / dd_norm)]), reshape(d, :, 1))
+    )
+    push!(bs, zero(Tv))
+    push!(ct, false)
+
+    ub = mu_conductance_ub(volG, mu)
+    lb = mu_conductance_lb(volG, mu)
+
+    # Inequality ≤ ub: X[i,i] ≤ ub  →  ⟨eᵢeᵢᵀ, X⟩ ≤ ub
+    for i in 1:n
+        push!(As, super_sparse(Ti[i], Ti[i], [Tv(D_norm)], n, n))
+        push!(bs, Tv(ub * D_norm))
+        push!(ct, true)
+    end
+
+    # Inequality ≥ lb: X[i,i] ≥ lb  →  flip: ⟨-eᵢeᵢᵀ, X⟩ ≤ -lb
+    for i in 1:n
+        push!(As, super_sparse(Ti[i], Ti[i], [-Tv(D_norm)], n, n))
+        push!(bs, Tv(-lb * D_norm))
+        push!(ct, true)
+    end
+
+    return Tv.(L), As, bs, ct
 end
