@@ -290,18 +290,17 @@ function _sdplr(
         rank_double = false
 
         if primal_vio_norm <= cur_ptol
-            eig_iter = Ti(2 * ceil(max(iter, 100)^0.5 * log(n)))
-
             # when highprecision=true, then GenericArpack will be used
             # otherwise Lanczos with random start will be used
-            lanczos_dt, _, GenericArpack_dt, _, dual_value = surrogate_duality_gap(
+            dual_value, _, dt = dual_obj(
                 data,
                 var,
                 aux,
                 config.prior_trace_bound,
-                eig_iter;
-                highprecision=false,
+                iter;
+                highprecision=config.eigval_highprecision,
             )
+
             if dual_value > max_dual_value
                 best_λ = -deepcopy(var.y)
                 max_dual_value = dual_value
@@ -309,8 +308,7 @@ function _sdplr(
             duality_gap = var.obj[] - max_dual_value
             rel_duality_bound =
                 duality_gap / minimum(abs.([var.obj[], max_dual_value]))
-            stats.dual_lanczos_time[] += lanczos_dt
-            stats.dual_GenericArpack_time[] += GenericArpack_dt
+            stats.dual_time[] += dt
             @show var.obj[] max_dual_value rel_duality_bound
             if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
@@ -424,8 +422,7 @@ function _sdplr(
         "rel_duality_bound" => rel_duality_bound,
         "min_rel_duality_gap" => min_rel_duality_gap,
         "totaltime" => totaltime,
-        "dual_lanczos_time" => stats.dual_lanczos_time[],
-        "dual_GenericArpack_time" => stats.dual_GenericArpack_time[],
+        "dual_time" => stats.dual_time[],
         "primaltime" => stats.primal_time[],
         "iter" => iter,
         "majoriter" => majoriter,

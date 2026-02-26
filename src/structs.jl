@@ -365,16 +365,14 @@ side_dimension(aux::SolverAuxiliary) = size(aux.sparse_S, 1)
 struct SolverStats{Tv}
     starttime::Base.RefValue{Tv}               # timing
     endtime::Base.RefValue{Tv}                 # time spent on computing eigenvalue using Lanczos with random start
-    dual_lanczos_time::Base.RefValue{Tv}       # time spent on computing eigenvalue using GenericArpack 
-    dual_GenericArpack_time::Base.RefValue{Tv} # total time - dual_lanczos_time - dual_GenericArpack_time 
+    dual_time::Base.RefValue{Tv}       # time spent on computing eigenvalue
     primal_time::Base.RefValue{Tv}
     DIMACS_time::Base.RefValue{Tv}  # time spent on computing the DIMACS stats which is not included in the total time
     function SolverStats{Tv}() where {Tv}
         return new{Tv}(
             Ref(zero(Tv)), # starttime
             Ref(zero(Tv)), # endtime
-            Ref(zero(Tv)), # time spent on lanczos with random start
-            Ref(zero(Tv)), # time spent on GenericArpack
+            Ref(zero(Tv)), # time spent on eigenvalue
             Ref(zero(Tv)), # primal time
             Ref(zero(Tv)), # DIMACS time
         )

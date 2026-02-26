@@ -355,11 +355,11 @@ function SDP_S_eigval(
     n = size(aux.sparse_S, 1)
     GenericArpack_dt = @elapsed begin
         op = ArpackSimpleFunctionOp((y, x) -> begin
-            𝒜t!(y, aux, x, var)
-            # shift the matrix by I
-            y .+= x
-            return y
-        end, n)
+                𝒜t!(y, aux, x, var)
+                # shift the matrix by I
+                y .+= x
+                return y
+            end, n)
         GenericArpack_eigvals, _ = symeigs(op, nevs; kwargs...)
     end
     GenericArpack_eigvals = real.(GenericArpack_eigvals)
@@ -367,7 +367,7 @@ function SDP_S_eigval(
     return GenericArpack_eigvals, GenericArpack_dt
 end
 
-function surrogate_duality_gap(
+function dual_obj(
     data,
     var::SolverVars{Ti,Tv},
     aux,
@@ -378,12 +378,9 @@ function surrogate_duality_gap(
     copy2y_λ_sub_pvio!(var)
     𝒜t_preprocess!(var, aux)
 
-    lanczos_dt = @elapsed begin
-        lanczos_eigenval = approx_mineigval_lanczos(var, aux, iter)
-    end
-    res = lanczos_eigenval
+    n = side_dimension(aux)
+
     if highprecision
-        n = size(aux.sparse_S, 1)
         GenericArpack_evs, GenericArpack_dt = SDP_S_eigval(
             var,
             aux,
@@ -395,9 +392,14 @@ function surrogate_duality_gap(
             maxiter=1000000,
         )
         res = GenericArpack_evs[1]
+        dt = GenericArpack_dt
     else
-        GenericArpack_dt = 0.0
-        GenericArpack_evs = [0.0]
+        eig_iter = Ti(2 * ceil(max(iter, 100)^0.5 * log(n)))
+        lanczos_dt = @elapsed begin
+            lanczos_eigenval = approx_mineigval_lanczos(var, aux, eig_iter)
+        end
+        res = lanczos_eigenval
+        dt = lanczos_dt
     end
 
     b = b_vector(data)
@@ -405,7 +407,7 @@ function surrogate_duality_gap(
 
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
 
-    return lanczos_dt, lanczos_eigenval, GenericArpack_dt, res[1], dual_value
+    return dual_value, res[1], dt
 end
 
 """
