@@ -2,11 +2,8 @@
 Exact line search for minimizing the augmented Lagrangian
 """
 function linesearch!(
-    var::SolverVars{Ti, Tv},
-    aux,
-    Dt::AbstractArray{Tv};
-    α_max = one(Tv),
-) where{Ti <: Integer, Tv}
+    var::SolverVars{Ti,Tv}, aux, Dt::AbstractArray{Tv}; α_max=one(Tv)
+) where {Ti<:Integer,Tv}
     m = length(var.primal_vio)-1
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
@@ -29,7 +26,7 @@ function linesearch!(
     # (-q0) = 𝓐(RRᵀ) - b      = var.primal_vio
     # q1 = 𝓐(RDᵀ + DRᵀ)       = 𝓐_RD
     # q2 = 𝓐(DDᵀ)             = 𝓐_DD
-     
+
     # f(x) = a x⁴ + b x³ + c x² + d x + e 
     # a = σ / 2 * ||q2||²
     # b = σ * q1ᵀ * q2
@@ -45,13 +42,13 @@ function linesearch!(
     σ = var.σ[]
 
     biquadratic[1] = (p0 - dot(var.λ, neg_q0) + σ * dot(neg_q0, neg_q0) / 2)
-    
+
     # in principle biquadratic[2] should equal to 
     # the inner product between direction and gradient
     # thus it should be negative
 
-    biquadratic[2] = (p1 - dot(var.λ, q1) + σ * dot(neg_q0, q1))  
-    
+    biquadratic[2] = (p1 - dot(var.λ, q1) + σ * dot(neg_q0, q1))
+
     biquadratic[3] = (p2 - dot(var.λ - σ * neg_q0, q2) + σ * dot(q1, q1) / 2)
 
     biquadratic[4] = σ * dot(q1, q2)
@@ -98,9 +95,9 @@ function linesearch!(
         push!(Roots, α_max)
     end
 
-    for i = eachindex(Roots)
+    for i in eachindex(Roots)
         # only examine real roots in [0, α_max]
-        if (abs(imag(Roots[i])) >= eps())    
+        if (abs(imag(Roots[i])) >= eps())
             continue
         end
         root = real(Roots[i])
@@ -110,10 +107,9 @@ function linesearch!(
         f_α = f(root)
         if f_α < f_star
             f_star = f_α
-            α_star = root 
+            α_star = root
         end
     end
-
 
     # update the primal violation and function value
     # notice that 
@@ -122,5 +118,5 @@ function linesearch!(
     @. var.primal_vio += α_star * (α_star * var.A_DD + var.A_RD)
     var.obj[] = var.primal_vio[m+1]
 
-    return α_star, f_star 
+    return α_star, f_star
 end

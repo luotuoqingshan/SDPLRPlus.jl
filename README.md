@@ -28,10 +28,12 @@ SDPLRPlus is a pure julia package which integrates the suboptimality bound and d
 ```
 If you feel this package or our paper useful for your work, we kindly request you to cite it. 
 
-## Usage 
-**This package hasn't been registered yet**, to use it, you can add it via github link. 
-```
-]  activate .; add https://github.com/luotuoqingshan/SDPLRPlus.jl 
+## Installation
+
+Install SDPLRPlus as follows:
+```julia
+import Pkg
+Pkg.add("SDPLRPlus")
 ```
 
 ## Use with JuMP
@@ -52,7 +54,7 @@ For more information about experiments in the paper,
 take a look at the [README](https://github.com/luotuoqingshan/SDPLRPlus.jl/blob/main/exps/README.md) under `exps/`. 
 
 ## Contact
-The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email 2019hyf at gmail dot com or create issues or pull requests (any contribution to the project is welcome).
+The documentation and examples are quite experimental. If anything is unclear or wrong, feel free to contact via email or create issues or pull requests (any contribution to the project is welcome).
 
 ## Acknowledgement
 Part of this project started as a julia reproduction of 

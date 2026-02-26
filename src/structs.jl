@@ -15,13 +15,10 @@ struct SymLowRankMatrix{T} <: AbstractMatrix{T}
 
     @doc """
         SymLowRankMatrix(D, B)
-    
+
     Construct a symmetric low-rank matrix of the form `BDBᵀ`.
     """
-    function SymLowRankMatrix(
-        D::Diagonal{T},
-        B::Matrix{T},
-    )where {T}
+    function SymLowRankMatrix(D::Diagonal{T}, B::Matrix{T}) where {T}
         return new{T}(D, B, Matrix(B'))
     end
 end
@@ -29,26 +26,26 @@ end
 """
 size of a symmetric low-rank matrix
 """
-LinearAlgebra.size(A::SymLowRankMatrix) = (n = size(A.B, 1); (n, n))
+LinearAlgebra.size(A::SymLowRankMatrix) = (n=size(A.B, 1); (n, n))
 
 """
     getindex(A, i, j)
 
 return the (i, j)-th element of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
 """
-(Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer) 
-    = (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j]))
-
+(
+    function Base.getindex(A::SymLowRankMatrix, i::Integer, j::Integer)
+        (@view(A.Bt[:, i]))' * A.D * @view(A.Bt[:, j])
+    end
+)
 
 """
 display a symmetric low-rank matrix
 """
 function LinearAlgebra.show(
-    io::IO, 
-    mime::MIME{Symbol("text/plain")}, 
-    A::SymLowRankMatrix,
+    io::IO, mime::MIME{Symbol("text/plain")}, A::SymLowRankMatrix
 )
-    summary(io, A) 
+    summary(io, A)
     println(io)
     println(io, "SymLowRankMatrix of form BDBᵀ.")
     println(io, "B factor:")
@@ -57,17 +54,13 @@ function LinearAlgebra.show(
     show(io, mime, A.D)
 end
 
-
 """
     norm(A, p)
 
 Compute the `p`-norm of a symmetric low-rank matrix `A` of the form `BDBᵀ`.
 Currently support `p` ∈ [2, Inf]. 
 """
-function LinearAlgebra.norm(
-    A::SymLowRankMatrix{Tv},
-    p::Real,
-) where {Tv <: Number}
+function LinearAlgebra.norm(A::SymLowRankMatrix{Tv}, p::Real) where {Tv<:Number}
     # norm is usually not performance critical
     # so we don't do too much preallocation
     n = size(A.B, 1)
@@ -75,10 +68,10 @@ function LinearAlgebra.norm(
     if p in [2, Inf]
         # BDBᵀ 
         U = A.B * A.D
-        res = zero(Tv) 
+        res = zero(Tv)
         @inbounds for i in axes(A.Bt, 2)
             mul!(tmpv, U, @view(A.Bt[:, i]))
-            if p == Inf 
+            if p == Inf
                 res = max(res, norm(tmpv, p))
             else
                 res += norm(tmpv, p)^2
@@ -90,7 +83,6 @@ function LinearAlgebra.norm(
     end
 end
 
-
 """
     mul!(Y, A, X)
 
@@ -98,15 +90,12 @@ Multiply a symmetric low-rank matrix `A` of the form `BDBᵀ`
 with an AbstractArray `X`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractVecOrMat{Tv}, 
-    A::SymLowRankMatrix{Tv},
-    X::AbstractVecOrMat{Tv},
-) where {Tv <: Number}
+    Y::AbstractVecOrMat{Tv}, A::SymLowRankMatrix{Tv}, X::AbstractVecOrMat{Tv}
+) where {Tv<:Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX)
 end
-
 
 """
     mul!(Y, X, A)
@@ -114,15 +103,12 @@ end
 Multiply an AbstractArray `X` with a symmetric low-rank matrix `A` of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractMatrix{Tv}, 
-    X::AbstractVecOrMat{Tv},
-    A::SymLowRankMatrix{Tv},
-) where {Tv <: Number}
-    XB = X * A.B 
+    Y::AbstractMatrix{Tv}, X::AbstractVecOrMat{Tv}, A::SymLowRankMatrix{Tv}
+) where {Tv<:Number}
+    XB = X * A.B
     rmul!(XB, A.D)
     mul!(Y, XB, A.Bt)
 end
-
 
 """
     mul!(Y, A, X, α, β)
@@ -131,17 +117,16 @@ Compute `Y = α * A * X + β * Y`
 where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractVecOrMat{Tv}, 
+    Y::AbstractVecOrMat{Tv},
     A::SymLowRankMatrix{Tv},
     X::AbstractVecOrMat{Tv},
     α::Tv,
     β::Tv,
-) where{Tv <: Number}
+) where {Tv<:Number}
     BtX = A.Bt * X
     lmul!(A.D, BtX)
     mul!(Y, A.B, BtX, α, β)
 end
-
 
 """
     mul!(Y, X, A, α, β)
@@ -150,22 +135,21 @@ Compute `Y = α * X * A + β * Y`
 where `A` is a symmetric low-rank matrix of the form `BDBᵀ`.
 """
 function LinearAlgebra.mul!(
-    Y::AbstractMatrix{Tv}, 
+    Y::AbstractMatrix{Tv},
     X::AbstractVecOrMat{Tv},
     A::SymLowRankMatrix{Tv},
     α::Tv,
     β::Tv,
-) where{Tv <: Number}
-    XB = X * A.B 
+) where {Tv<:Number}
+    XB = X * A.B
     rmul!(XB, A.D)
     mul!(Y, XB, A.Bt, α, β)
 end
 
-
 """
 Structure for storing the data of a semidefinite programming problem.
 """
-struct SDPData{Ti <: Integer, Tv, TC <: AbstractMatrix{Tv}, TA}
+struct SDPData{Ti<:Integer,Tv,TC<:AbstractMatrix{Tv},TA}
     n::Ti                               # size of decision variables
     m::Ti                               # number of constraints
     C::TC                               # cost matrix
@@ -184,11 +168,10 @@ C_matrix(model) = model.C
 # see discussion here:
 # https://discourse.julialang.org/t/question-on-refvalue/53498/2
 
-
 """
 Structure for storing the variables used in the solver.
 """
-struct SolverVars{Ti <: Integer,Tv,TR<:AbstractArray{Tv}}
+struct SolverVars{Ti<:Integer,Tv,TR<:AbstractArray{Tv}}
     Rt::TR              # primal variables X = RR^T
     Gt::TR              # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
@@ -198,44 +181,49 @@ struct SolverVars{Ti <: Integer,Tv,TR<:AbstractArray{Tv}}
     obj::Base.RefValue{Tv}      # objective
 
     # auxiliary variable y = -λ + σ * primal_vio
-    y::Vector{Tv}               
+    y::Vector{Tv}
     # violation of constraints, for convenience, we store
     # a length (m+1) vector where 
     # the first m entries correspond to the primal violation
     # and the last entry corresponds to the objective 
-    primal_vio::Vector{Tv}       
+    primal_vio::Vector{Tv}
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
 end
 
-function SolverVars(data::SDPData, r)
-    # randomly initialize primal and dual variables
-    Rt0 = 2 .* rand(r, data.n) .- 1
-    λ0 = randn(data.m)
-    return SolverVars(Rt0, λ0, r)
+function SolverVars(data::SDPData, r, config::BurerMonteiroConfig)
+    if config.init_func !== nothing
+        Rt0, λ0 = config.init_func(data, r, config.init_args...)
+        return SolverVars(Rt0, λ0, r, config.σ_0)
+    else
+        # randomly initialize primal and dual variables
+        Rt0 = 2 .* rand(r, data.n) .- 1
+        λ0 = randn(data.m)
+        return SolverVars(Rt0, λ0, r, config.σ_0)
+    end
 end
 
-function SolverVars(Rt0, λ0::Vector{Tv}, r) where {Tv}
+function SolverVars(Rt0, λ0::Vector{Tv}, r, σ_0::Tv=2.0) where {Tv}
     m = length(λ0)
     return SolverVars(
         Rt0,
         zeros(Tv, size(Rt0)),
         λ0,
         Ref(r),
-        Ref(2.0), # initial σ
+        Ref(σ_0), # initial σ
         Ref(zero(Tv)),
         zeros(Tv, m+1), # y, auxiliary variable for 𝒜t 
         zeros(Tv, m+1), # primal_vio
-        zeros(Tv, m+1), zeros(Tv, m+1), # A_RD, A_DD
+        zeros(Tv, m+1),
+        zeros(Tv, m+1), # A_RD, A_DD
     )
 end
-
 
 """
 Structure for auxiliary variables used in the solver.
 In General, user should not directly interact with this structure.
 """
-struct SolverAuxiliary{Ti <: Integer, Tv}
+struct SolverAuxiliary{Ti<:Integer,Tv}
     # auxiliary variables for sparse constraints
     # take a look at the preprocess_sparsecons function
     # for more explanation
@@ -244,13 +232,13 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
     triu_agg_sparse_A_nzind::Vector{Ti}
     triu_agg_sparse_A_nzval_one::Vector{Tv}
     triu_agg_sparse_A_nzval_two::Vector{Tv}
-    agg_sparse_A_mappedto_triu::Vector{Ti} 
+    agg_sparse_A_mappedto_triu::Vector{Ti}
     sparse_As_global_inds::Vector{Ti}
 
-    triu_sparse_S::SparseMatrixCSC{Tv, Ti}
-    sparse_S::SparseMatrixCSC{Tv, Ti}
+    triu_sparse_S::SparseMatrixCSC{Tv,Ti}
+    sparse_S::SparseMatrixCSC{Tv,Ti}
     UVt::Vector{Tv}
-    
+
     # symmetric low-rank constraints
     n_symlowrank_matrices::Ti
     symlowrank_As::Vector{SymLowRankMatrix{Tv}}
@@ -258,14 +246,14 @@ struct SolverAuxiliary{Ti <: Integer, Tv}
 end
 
 function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
-    sparse_cons = Union{SparseMatrixCSC{Tv, Ti}, SparseMatrixCOO{Tv, Ti}}[]
+    sparse_cons = Union{SparseMatrixCSC{Tv,Ti},SparseMatrixCOO{Tv,Ti}}[]
     symlowrank_cons = SymLowRankMatrix{Tv}[]
     # treat diagonal matrices as sparse matrices
     sparse_As_global_inds = Ti[]
     symlowrank_As_global_inds = Ti[]
 
     for (i, A) in enumerate(data.As)
-        if isa(A, Union{SparseMatrixCSC, SparseMatrixCOO})
+        if isa(A, Union{SparseMatrixCSC,SparseMatrixCOO})
             push!(sparse_cons, A)
             push!(sparse_As_global_inds, i)
         elseif isa(A, Diagonal)
@@ -281,7 +269,7 @@ function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
         end
     end
 
-    if isa(data.C, Union{SparseMatrixCSC, SparseMatrixCOO}) 
+    if isa(data.C, Union{SparseMatrixCSC,SparseMatrixCOO})
         push!(sparse_cons, data.C)
         push!(sparse_As_global_inds, data.m+1)
     elseif isa(data.C, Diagonal)
@@ -299,12 +287,11 @@ function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
 
     # preprocess sparse constraints
     res = @timed begin
-        triu_agg_sparse_A, triu_agg_sparse_A_matptr, 
-        triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, 
-        triu_agg_sparse_A_nzval_two, agg_sparse_A, 
-        agg_sparse_A_mappedto_triu = preprocess_sparsecons(sparse_cons)
+        triu_agg_sparse_A, triu_agg_sparse_A_matptr, triu_agg_sparse_A_nzind, triu_agg_sparse_A_nzval_one, triu_agg_sparse_A_nzval_two, agg_sparse_A, agg_sparse_A_mappedto_triu = preprocess_sparsecons(
+            sparse_cons
+        )
     end
-    @debug "$(res.bytes)B allocated during preprocessing constraints." 
+    @debug "$(res.bytes)B allocated during preprocessing constraints."
 
     nnz_triu_agg_sparse_A = length(triu_agg_sparse_A.rowval)
 
@@ -316,13 +303,11 @@ function SolverAuxiliary(data::SDPData{Ti,Tv}) where {Ti,Tv}
         triu_agg_sparse_A_nzval_two,
         agg_sparse_A_mappedto_triu,
         sparse_As_global_inds,
-
         triu_agg_sparse_A,
         agg_sparse_A,
         zeros(Tv, nnz_triu_agg_sparse_A), # UVt
-
         length(symlowrank_cons), #n_symlowrank_matrices
-        symlowrank_cons, 
+        symlowrank_cons,
         symlowrank_As_global_inds,
     )
 end

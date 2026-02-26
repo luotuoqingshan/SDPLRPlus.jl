@@ -2,17 +2,16 @@ using GZip, ZipFile, CSV, MAT, DataFrames
 using SparseArrays, LinearAlgebra, MatrixNetworks
 
 function read_txt_gz(
-    filename::String;
-    filefolder::String=homedir()*"/datasets/raw/",
+    filename::String; filefolder::String=homedir()*"/datasets/raw/"
 )
     filepath = filefolder*filename*".txt.gz"
     linecounter = 0
-    I = Int64[]    
+    I = Int64[]
     J = Int64[]
     GZip.open(filepath) do f
         for l in eachline(f)
             linecounter += 1
-            if linecounter >= 5                 
+            if linecounter >= 5
                 u, v = split(l, '\t')
                 u = parse(Int, u)
                 v = parse(Int, v)
@@ -28,19 +27,17 @@ function read_txt_gz(
     return A
 end
 
-
 function read_ungraph_txt_gz(
-    filename::String;
-    filefolder::String=homedir()*"/datasets/raw/",
+    filename::String; filefolder::String=homedir()*"/datasets/raw/"
 )
     filepath = filefolder*filename*".ungraph.txt.gz"
     linecounter = 0
-    I = Int64[]    
+    I = Int64[]
     J = Int64[]
     GZip.open(filepath) do f
         for l in eachline(f)
             linecounter += 1
-            if linecounter >= 5                 
+            if linecounter >= 5
                 u, v = split(l, '\t')
                 u = parse(Int, u)
                 v = parse(Int, v)
@@ -62,10 +59,8 @@ function read_ungraph_txt_gz(
     return A
 end
 
-
 function read_zip(
-    filename::String;
-    filefolder::String=homedir()*"/datasets/raw/",
+    filename::String; filefolder::String=homedir()*"/datasets/raw/"
 )
     zip_filename = filefolder*filename*".zip"
     z = ZipFile.Reader(zip_filename)
@@ -73,8 +68,8 @@ function read_zip(
         names = split(f.name, "/")
         if names[end] == filename*"_edges.csv"
             df = CSV.read(f, DataFrame)
-            I = df[1:end, 1] 
-            J = df[1:end, 2] 
+            I = df[1:end, 1]
+            J = df[1:end, 2]
             minid = min(minimum(I), minimum(J))-1
             shift = max(0, -minid)
             I .+= shift
@@ -87,12 +82,10 @@ function read_zip(
     end
 end
 
-
 function read_gset(
-    filename::String;
-    filefolder::String=homedir()*"/Gset/",
+    filename::String; filefolder::String=homedir()*"/Gset/"
 )::SparseMatrixCSC
-    I = Int32[] 
+    I = Int32[]
     J = Int32[]
     V = Float64[]
     n = 0
@@ -107,8 +100,12 @@ function read_gset(
             v = parse(Int, v)
             w = parse(Float64, w)
             # Turn it into an undirected graph
-            push!(I, u); push!(J, v); push!(V, w)
-            push!(J, u); push!(I, v); push!(V, w)
+            push!(I, u);
+            push!(J, v);
+            push!(V, w)
+            push!(J, u);
+            push!(I, v);
+            push!(V, w)
         end
     end
     A = sparse(I, J, V, n, n)
@@ -118,14 +115,13 @@ function read_gset(
     return A
 end
 
-
 function postprocess_graph(A)
     B = deepcopy(A)
 
     # take the largest component
     B, _ = largest_component(B)
     n = size(B, 1)
-    oldm = nnz(B) 
+    oldm = nnz(B)
     @info "The largest component's n = $(n) \
         number of directed edges(non self-loop counts as 2) = $(oldm)"
 
@@ -134,7 +130,7 @@ function postprocess_graph(A)
     dropzeros!(B)
     newm = nnz(B)
     @info "Removed $(oldm - newm) self-loops. The number of edges = $(div(newm, 2))"
-    return B 
+    return B
 end
 
 #for dataset in ["ca-AstroPh", "ca-CondMat", "ca-GrQc", "ca-HepPh", "ca-HepTh",
@@ -211,13 +207,18 @@ for (root, dirs, files) in walkdir(homedir()*"/datasets/DIMACS10/")
             A_dummy = sparse(I, J, V, n+1, n+1)
         end
         A_dummy_abs = abs.(A_dummy)
-        matwrite(homedir()*"/datasets/graphs/"*file,
-            Dict("A" => A, "A_abs" => A_abs, "A_dummy" => A_dummy, "A_dummy_abs" => A_dummy_abs)
+        matwrite(
+            homedir()*"/datasets/graphs/"*file,
+            Dict(
+                "A" => A,
+                "A_abs" => A_abs,
+                "A_dummy" => A_dummy,
+                "A_dummy_abs" => A_dummy_abs,
+            ),
         )
         println("$file is processed.")
     end
 end
-
 
 #using MAT    
 #

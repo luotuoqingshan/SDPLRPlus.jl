@@ -18,7 +18,7 @@ end
 """
 History of L-BFGS vectors
 """
-struct LBFGSHistory{Ti <: Integer, Tv}
+struct LBFGSHistory{Ti<:Integer,Tv}
     # number of l-bfgs vectors
     m::Ti
     vecs::Vector{LBFGSVector{Tv}}
@@ -27,47 +27,36 @@ struct LBFGSHistory{Ti <: Integer, Tv}
     latest::Base.RefValue{Ti}
 end
 
-
 Base.:length(lbfgshis::LBFGSHistory) = lbfgshis.m
-
 
 """
 Initialization of L-BFGS history
 """
 function lbfgs_init(
-    R::AbstractArray{Tv},
-    numlbfgsvecs::Ti,
-) where {Ti <: Integer, Tv}
+    R::AbstractArray{Tv}, numlbfgsvecs::Ti
+) where {Ti<:Integer,Tv}
     lbfgsvecs = LBFGSVector{Tv}[]
-    for _ = 1:numlbfgsvecs
-        push!(lbfgsvecs, 
-            LBFGSVector(zero(R),
-                        zero(R),
-                        Ref(zero(Tv)), 
-                        Ref(zero(Tv)),
-                        ))
+    for _ in 1:numlbfgsvecs
+        push!(
+            lbfgsvecs,
+            LBFGSVector(zero(R), zero(R), Ref(zero(Tv)), Ref(zero(Tv))),
+        )
     end
-    lbfgshis = LBFGSHistory{Ti, Tv}(
-        numlbfgsvecs,
-        lbfgsvecs,
-        Ref(numlbfgsvecs))
+    lbfgshis = LBFGSHistory{Ti,Tv}(numlbfgsvecs, lbfgsvecs, Ref(numlbfgsvecs))
     return lbfgshis
 end
 
 """
 Clear L-BFGS history
 """
-function lbfgs_clear!(
-    lbfgshis::LBFGSHistory{Ti, Tv}
-) where {Ti <: Integer, Tv}
-    for i = 1:lbfgshis.m
+function lbfgs_clear!(lbfgshis::LBFGSHistory{Ti,Tv}) where {Ti<:Integer,Tv}
+    for i in 1:lbfgshis.m
         lbfgshis.vecs[i].s .= zero(Tv)
         lbfgshis.vecs[i].y .= zero(Tv)
         lbfgshis.vecs[i].ρ[] = zero(Tv)
         lbfgshis.vecs[i].a[] = zero(Tv)
     end
 end
-
 
 """
 L-BFGS two-loop recursion
@@ -87,10 +76,10 @@ end
 """
 function lbfgs_dir!(
     dir::AbstractArray{Tv},
-    lbfgshis::LBFGSHistory{Ti, Tv},
+    lbfgshis::LBFGSHistory{Ti,Tv},
     grad::AbstractArray{Tv};
     negate::Bool=true,
-) where{Ti <: Integer, Tv}
+) where {Ti<:Integer,Tv}
     # we store l-bfgs vectors as a cyclic array
     copyto!(dir, grad)
     m = lbfgshis.m
@@ -98,11 +87,11 @@ function lbfgs_dir!(
 
     # if m = 0, LBFGS degenerates to gradient descent 
     if m == 0
-        return
+        return nothing
     end
     # pay attention here, dir, s and y are all matrices
     j = lst
-    for _ = 1:m 
+    for _ in 1:m
         α = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].s, dir)
         axpy!(-α, lbfgshis.vecs[j].y, dir)
         lbfgshis.vecs[j].a[] = α
@@ -113,7 +102,7 @@ function lbfgs_dir!(
     end
 
     j = mod(lst, m) + 1
-    for _ = 1:m 
+    for _ in 1:m
         β = lbfgshis.vecs[j].ρ[] * dot(lbfgshis.vecs[j].y, dir)
         γ = lbfgshis.vecs[j].a[] - β
         axpy!(γ, lbfgshis.vecs[j].s, dir)
@@ -124,29 +113,28 @@ function lbfgs_dir!(
     end
 
     # we need to pick -dir as search direction
-    if negate 
+    if negate
         BLAS.scal!(-one(Tv), dir)
     end
 
     # partial update of lbfgs history 
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
     copyto!(lbfgshis.vecs[j].y, grad)
-    BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
+    return BLAS.scal!(-one(Tv), lbfgshis.vecs[j].y)
 end
-
 
 """
 Postprocessing step of L-BFGS.
 """
 function lbfgs_update!(
     dir::AbstractArray{Tv},
-    lbfgshis::LBFGSHistory{Ti, Tv},
+    lbfgshis::LBFGSHistory{Ti,Tv},
     grad::AbstractArray{Tv},
     stepsize::Tv,
-)where {Ti<:Integer, Tv}
+) where {Ti<:Integer,Tv}
     # if m = 0, LBFGS degenerates to gradient descent
     if lbfgshis.m == 0
-        return
+        return nothing
     end
     # update lbfgs history
     j = mod(lbfgshis.latest[], lbfgshis.m) + 1
@@ -157,5 +145,5 @@ function lbfgs_update!(
     axpy!(one(Tv), grad, lbfgshis.vecs[j].y)
     lbfgshis.vecs[j].ρ[] = 1 / dot(lbfgshis.vecs[j].y, lbfgshis.vecs[j].s)
 
-    lbfgshis.latest[] = j
+    return lbfgshis.latest[] = j
 end
