@@ -158,6 +158,8 @@ function _sdplr(
     cur_gtol = 1.0 / var.σ[]     # stationarity tolerance
     cur_ptol = 1.0 / var.σ[]^0.1   # primal violation tolerance
 
+    cur_ptol = max(cur_ptol, config.ptol)
+    cur_gtol = max(cur_gtol, config.gtol)
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
     #nn = size(A, 1)
     v = @view var.primal_vio[1:m]
@@ -368,6 +370,8 @@ function _sdplr(
             lbfgs_clear!(lbfgshis)
         end
 
+        cur_ptol = max(cur_ptol, config.ptol)
+        cur_gtol = max(cur_gtol, config.gtol)
         𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
 
         if majoriter == config.maxmajoriter

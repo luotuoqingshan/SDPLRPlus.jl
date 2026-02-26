@@ -1,5 +1,6 @@
 @with_kw mutable struct BurerMonteiroConfig{Ti<:Integer,Tv}
     ptol::Tv = 1e-2                    # primal infeasibility tolerance 
+    gtol::Tv = 0.0                     # stationarity tolerance
     objtol::Tv = 1e-2                  # suboptimality tolerance
     σ_0::Tv = 2.0                      # initial penalty parameter
     σfac::Tv = 2.0                     # factor for increasing σ
