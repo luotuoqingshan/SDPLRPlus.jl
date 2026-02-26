@@ -1,21 +1,33 @@
 """
-    f!(data, aux, res)
+    f!(data, var, aux)
 
-Update the objective value, primal violence and compute 
-the augmented Lagrangian value, 
-    ℒ(R, λ, σ) = Tr(C RRᵀ) - λᵀ(𝒜(RRᵀ) - b) + σ/2 ||𝒜(RRᵀ) - b||^2
+Update objective value, primal violation, and augmented Lagrangian value.
+Unified formula covering equality and inequality constraints via λ_ub:
+    ℒ(R, λ, σ) = Tr(C RRᵀ) + Σᵢ (λ̃ᵢ² - λᵢ²) / (2σ)
+where λ̃ᵢ = min(λ_ub[i], λᵢ - σvᵢ).
+Equality   (λ_ub=Inf): λ̃ᵢ = λᵢ - σvᵢ, reduces to -λᵀv + σ/2‖v‖².
+Inequality (λ_ub=0):   λ̃ᵢ = min(0, λᵢ - σvᵢ), sharp augmented Lagrangian.
 """
 function f!(data, var::SolverVars, aux)
     m = length(var.λ) # number of constraints
 
     # apply the operator 𝒜 to RRᵀ and compute the objective value
-    𝒜!(var.primal_vio, aux, var.Rt)
-    var.obj[] = var.primal_vio[m+1]
+    𝒜!(var.primal_vio_raw, aux, var.Rt)
+    var.obj[] = var.primal_vio_raw[m+1]
 
-    v = @view var.primal_vio[1:m]
+    v = @view var.primal_vio_raw[1:m]
     b = b_vector(data)
     @. v -= b
-    return (var.obj[] - dot(var.λ, v) + var.σ[] * dot(v, v) / 2)
+
+    @inbounds @. var.primal_vio = max(v, var.primal_vio_lb)
+
+    σ = var.σ[]
+    ℒ = var.obj[]
+    @inbounds for i in 1:m
+        yi = min(var.λ_ub[i], var.λ[i] - σ * v[i])
+        ℒ += (yi * yi - var.λ[i] * var.λ[i]) / (2σ)
+    end
+    return ℒ
 end
 
 """
@@ -215,9 +227,10 @@ function 𝒜t_preprocess_sparse!(
 end
 
 function copy2y_λ_sub_pvio!(var::SolverVars{Ti,Tv}) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio) - 1
+    m = length(var.primal_vio_raw) - 1
+    σ = var.σ[]
     @inbounds @simd for i in 1:m
-        var.y[i] = -(var.λ[i] - var.σ[] * var.primal_vio[i])
+        var.y[i] = -min(var.λ_ub[i], var.λ[i] - σ * var.primal_vio_raw[i])
     end
     return var.y[m+1] = one(Tv)
 end
@@ -225,7 +238,7 @@ end
 function copy2y_λ!(
     var::SolverVars{Ti,Tv}, aux::SolverAuxiliary{Ti,Tv}
 ) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio) - 1
+    m = length(var.primal_vio_raw) - 1
     @inbounds @simd for i in 1:m
         var.y[i] = -var.λ[i]
     end
@@ -318,14 +331,14 @@ function fg!(
         g!(var, aux)
     end
     @debug "f dt, g dt" f_dt, g_dt
-    # grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-    @show normC
-    grad_norm = norm(var.Gt, Inf)
+    grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+    # grad_norm = norm(var.Gt, Inf)
 
-    v = @view var.primal_vio[1:m]
-    #primal_vio_norm = norm(v, 2) / (1.0 + normb)
-    #primal_vio_norm = maximum(abs.(v) ./ (1.0 .+ abs.(data.b)))
-    primal_vio_norm = norm(v, Inf)
+    @inbounds for i in 1:m
+        var.primal_vio[i] = max(var.primal_vio_raw[i], var.primal_vio_lb[i])
+    end
+    #primal_vio_norm = norm(var.primal_vio, Inf)
+    primal_vio_norm = norm(var.primal_vio, 2) / (1 + normb)
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
 
@@ -358,16 +371,11 @@ function surrogate_duality_gap(
     data,
     var::SolverVars{Ti,Tv},
     aux,
-    config::BurerMonteiroConfig{Ti,Tv},
     trace_bound::Tv,
     iter::Ti;
     highprecision::Bool=false,
 ) where {Ti<:Integer,Tv}
     copy2y_λ_sub_pvio!(var)
-    m = length(b_vector(data))
-    n = Int(m / 2 - 1)
-
-    @. var.y[n+3:m] = max.(zero(Tv), -var.y[3:n+2])
     𝒜t_preprocess!(var, aux)
 
     lanczos_dt = @elapsed begin
@@ -396,17 +404,8 @@ function surrogate_duality_gap(
     m = length(b_vector(data))
 
     dual_value = -dot(var.y[1:m], b) + trace_bound * min(res[1], 0.0)
-    duality_gap = (var.obj[] - dual_value)
-    rel_duality_gap = duality_gap / minimum(abs.([dual_value, var.obj[]]))
-    @show duality_gap, rel_duality_gap, dual_value
 
-    return lanczos_dt,
-    lanczos_eigenval,
-    GenericArpack_dt,
-    res[1],
-    duality_gap,
-    rel_duality_gap,
-    dual_value
+    return lanczos_dt, lanczos_eigenval, GenericArpack_dt, res[1], dual_value
 end
 
 """
@@ -422,7 +421,7 @@ function DIMACS_errors(
     data::SDPData{Ti,Tv,TC}, var::SolverVars{Ti,Tv}, aux::SolverAuxiliary{Ti,Tv}
 ) where {Ti<:Integer,Tv,TC<:AbstractMatrix{Tv}}
     n = size(aux.sparse_S, 1)
-    v = @view var.primal_vio[1:data.m]
+    v = @view var.primal_vio_raw[1:data.m]
     err1 = norm(v, 2) / (1.0 + norm(data.b, 2))
     err2 = 0.0
     err3 = 0.0 # err2, err3 are zero as X = YY^T, Z = C - 𝒜^*(y)

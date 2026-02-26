@@ -4,7 +4,7 @@ Exact line search for minimizing the augmented Lagrangian
 function linesearch!(
     var::SolverVars{Ti,Tv}, aux, Dt::AbstractArray{Tv}; α_max=one(Tv)
 ) where {Ti<:Integer,Tv}
-    m = length(var.primal_vio)-1
+    m = length(var.primal_vio_raw) - 1
     # evaluate 𝓐(RDᵀ + DRᵀ)
     RD_dt = @elapsed begin
         𝒜!(var.A_RD, aux, var.Rt, Dt)
@@ -23,7 +23,7 @@ function linesearch!(
     # p0 = ⟨ C, RRᵀ⟩           = var.obj[] 
     # p1 = ⟨ C, (RDᵀ + DRᵀ)⟩   = C_RD
     # p2 = ⟨ C, DDᵀ⟩           = C_DD
-    # (-q0) = 𝓐(RRᵀ) - b      = var.primal_vio
+    # (-q0) = 𝓐(RRᵀ) - b      = var.primal_vio_raw
     # q1 = 𝓐(RDᵀ + DRᵀ)       = 𝓐_RD
     # q2 = 𝓐(DDᵀ)             = 𝓐_DD
 
@@ -36,7 +36,7 @@ function linesearch!(
     p0 = var.obj[]
     p1 = var.A_RD[m+1]
     p2 = var.A_DD[m+1]
-    neg_q0 = @view var.primal_vio[1:m]
+    neg_q0 = @view var.primal_vio_raw[1:m]
     q1 = @view var.A_RD[1:m]
     q2 = @view var.A_DD[1:m]
     σ = var.σ[]
@@ -112,11 +112,80 @@ function linesearch!(
     end
 
     # update the primal violation and function value
-    # notice that 
-    # 𝓐((R + αD)(R + αD)ᵀ) =   
+    # notice that
+    # 𝓐((R + αD)(R + αD)ᵀ) =
     # 𝓐(RRᵀ) + α 𝓐(RDᵀ + DRᵀ) + α² 𝓐(DDᵀ)
-    @. var.primal_vio += α_star * (α_star * var.A_DD + var.A_RD)
-    var.obj[] = var.primal_vio[m+1]
+    @. var.primal_vio_raw += α_star * (α_star * var.A_DD + var.A_RD)
+    var.obj[] = var.primal_vio_raw[m+1]
+
+    # keep primal_vio in sync: primal_vio[i] = max(primal_vio_raw[i], lb[i])
+    @inbounds for i in 1:m
+        var.primal_vio[i] = max(var.primal_vio_raw[i], var.primal_vio_lb[i])
+    end
 
     return α_star, f_star
+end
+
+"""
+Armijo backtracking line search for the sharp augmented Lagrangian with inequality constraints.
+
+The exact quartic linesearch is only valid when all constraints are equalities (the AL is then
+a degree-4 polynomial in α). For inequality constraints the AL involves `min(λ_ub, λ - σg)`
+which creates a piecewise structure. This function evaluates the **true** sharp AL cheaply at
+each candidate step using the pre-computed quadratic updates
+    gᵢ(α) = primal_vio_raw[i] + α·A_RD[i] + α²·A_DD[i]
+and backtracks with the Armijo sufficient-decrease condition.
+"""
+function linesearch_armijo!(
+    var::SolverVars{Ti,Tv}, aux, Dt::AbstractArray{Tv}; α_max=one(Tv)
+) where {Ti<:Integer,Tv}
+    m = length(var.primal_vio_raw) - 1
+
+    # compute 𝒜(RDᵀ + DRᵀ) and 𝒜(DDᵀ) — same first steps as linesearch!
+    RD_dt = @elapsed begin
+        𝒜!(var.A_RD, aux, var.Rt, Dt)
+    end
+    var.A_RD .*= 2
+    DD_dt = @elapsed begin
+        𝒜!(var.A_DD, aux, Dt, Dt)
+    end
+    @debug "RD_dt, DD_dt" RD_dt, DD_dt
+
+    σ = var.σ[]
+
+    # Evaluate the true sharp AL at step α using O(m) arithmetic (no matrix ops).
+    function eval_AL(α::Tv)
+        ℒ = var.obj[] + α * var.A_RD[m+1] + α^2 * var.A_DD[m+1]
+        @inbounds for i in 1:m
+            g_i = var.primal_vio_raw[i] + α * var.A_RD[i] + α^2 * var.A_DD[i]
+            λ̃ = min(var.λ_ub[i], var.λ[i] - σ * g_i)
+            ℒ += (λ̃^2 - var.λ[i]^2) / (2σ)
+        end
+        return ℒ
+    end
+
+    ℒ_0 = eval_AL(zero(Tv))
+
+    # Directional derivative at α=0:  dℒ/dα|₀ = A_RD[m+1] + dot(y[1:m], A_RD[1:m])
+    # var.y[i] = -min(λ_ub[i], λ[i] - σ·primal_vio_raw[i]) was set by the preceding g! call.
+    slope = var.A_RD[m+1] + dot(@view(var.y[1:m]), @view(var.A_RD[1:m]))
+
+    c = Tv(1e-4)    # standard Armijo constant
+    α = α_max
+    ℒ_α = eval_AL(α)
+
+    for _ in 1:50     # at most 50 halvings (α_min ≈ 10^{-15} α_max)
+        ℒ_α ≤ ℒ_0 + c * α * slope && break
+        α /= 2
+        ℒ_α = eval_AL(α)
+    end
+
+    # commit the accepted step: update primal_vio_raw, obj, primal_vio
+    @. var.primal_vio_raw += α * (α * var.A_DD + var.A_RD)
+    var.obj[] = var.primal_vio_raw[m+1]
+    @inbounds for i in 1:m
+        var.primal_vio[i] = max(var.primal_vio_raw[i], var.primal_vio_lb[i])
+    end
+
+    return α, ℒ_α
 end

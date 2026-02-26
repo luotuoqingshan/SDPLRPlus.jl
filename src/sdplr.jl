@@ -80,8 +80,7 @@ function sdplr(
     As::Vector,
     b::Vector{Tv},
     r::Ti;
-    #A::AbstractMatrix{Tv},
-    #mu::Tv;
+    constraint_types::Union{Nothing,AbstractVector{Bool}}=nothing,
     config::BurerMonteiroConfig{Ti,Tv}=BurerMonteiroConfig{Ti,Tv}(),
     kwargs...,
 ) where {Ti<:Integer,Tv}
@@ -100,7 +99,11 @@ function sdplr(
     end
 
     preprocess_dt = @elapsed begin
-        data = SDPData(C, As, b)
+        data = if constraint_types === nothing
+            SDPData(C, As, b)
+        else
+            SDPData(C, As, b, constraint_types)
+        end
         var = SolverVars(data, r, config)
         aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
@@ -127,18 +130,9 @@ function _sdplr(
     aux,
     stats::SolverStats{Tv},
     config::BurerMonteiroConfig{Ti,Tv},
-    #A::AbstractMatrix{Tv},
-    #mu::Tv,
 ) where {Ti<:Integer,Tv}
     n = side_dimension(aux)
     m = length(var.λ) # number of constraints
-
-    #d = sum(A, dims=2)[:, 1]
-    #D = Diagonal(d)
-    #L = sparse(D - A)
-    #volG = sum(d)
-    #ub = (1 - mu) / (mu * volG)
-    #lb = mu / ((1 - mu) * volG)
 
     stats.starttime[] = time()
 
@@ -161,14 +155,12 @@ function _sdplr(
     cur_ptol = max(cur_ptol, config.ptol)
     cur_gtol = max(cur_gtol, config.gtol)
     𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
-    #nn = size(A, 1)
-    v = @view var.primal_vio[1:m]
-    #my_primal_vio = primal_vio(var.Rt, d, mu)
-    #@show norm(my_primal_vio - v, Inf)
+
     iter = 0 # total number of iterations
 
     dirt = similar(var.Rt) # t means transpose
     majoriter = 0
+    use_armijo = data.has_inequalities  # branch once; avoids scanning constraint_types per step
 
     rankupd_tol_cnt = config.rankupd_tol
 
@@ -203,7 +195,11 @@ function _sdplr(
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α, 𝓛_val = linesearch!(var, aux, dirt; α_max=1.0)
+                if use_armijo
+                    α, 𝓛_val = linesearch_armijo!(var, aux, dirt; α_max=1.0)
+                else
+                    α, 𝓛_val = linesearch!(var, aux, dirt; α_max=1.0)
+                end
             end
             @debug "line search time" linesearch_dt
 
@@ -213,13 +209,11 @@ function _sdplr(
                 g!(var, aux)
             end
             @debug "g time" g_dt
-            # grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-            grad_norm = norm(var.Gt, Inf)
+            grad_norm = norm(var.Gt, 2) / (1.0 + normC)
+            # grad_norm = norm(var.Gt, Inf)
 
-            v = @view var.primal_vio[1:m]
-            #my_primal_vio = primal_vio(var.Rt, d, mu)
-            #@assert norm(my_primal_vio - v, Inf) < 1e-12
-            primal_vio_norm = norm(v, Inf)
+            primal_vio_norm = norm(var.primal_vio, 2) / (1.0 + normb)
+            # primal_vio_norm = norm(var.primal_vio, Inf)
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
@@ -300,11 +294,10 @@ function _sdplr(
 
             # when highprecision=true, then GenericArpack will be used
             # otherwise Lanczos with random start will be used
-            lanczos_dt, _, GenericArpack_dt, _, duality_bound, rel_duality_bound, dual_value = surrogate_duality_gap(
+            lanczos_dt, _, GenericArpack_dt, _, dual_value = surrogate_duality_gap(
                 data,
                 var,
                 aux,
-                config,
                 config.prior_trace_bound,
                 eig_iter;
                 highprecision=false,
@@ -313,15 +306,18 @@ function _sdplr(
                 best_λ = -deepcopy(var.y)
                 max_dual_value = dual_value
             end
+            duality_gap = var.obj[] - max_dual_value
+            rel_duality_bound =
+                duality_gap / minimum(abs.([var.obj[], max_dual_value]))
             stats.dual_lanczos_time[] += lanczos_dt
             stats.dual_GenericArpack_time[] += GenericArpack_dt
+            @show var.obj[] max_dual_value rel_duality_bound
             if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
                 if config.objtol == Inf
                     @debug "`objtol` is `Inf`, skipping duality gap check"
                     break
                 end
-
                 if rel_duality_bound <= config.objtol
                     @debug "Duality gap and primal violence are small enough."
                     @debug primal_vio_norm rel_duality_bound grad_norm
@@ -344,8 +340,11 @@ function _sdplr(
                     #last_rel_duality_bound = rel_duality_bound
                 end
             end
-            v = @view var.primal_vio[1:m]
-            axpy!(-var.σ[], v, var.λ)
+            @inbounds for i in 1:m
+                var.λ[i] = min(
+                    var.λ_ub[i], var.λ[i] - var.σ[] * var.primal_vio_raw[i]
+                )
+            end
             cur_ptol = cur_ptol / var.σ[]^0.9
             cur_gtol = cur_gtol / var.σ[]
         else

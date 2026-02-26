@@ -153,9 +153,31 @@ struct SDPData{Ti<:Integer,Tv,TC<:AbstractMatrix{Tv},TA}
     C::TC                               # cost matrix
     As::Vector{TA}                      # set of constraint matrices
     b::Vector{Tv}                       # right-hand side b
+    # constraint type: false = equality (𝒜ᵢ(X) = bᵢ)
+    #                  true  = inequality (𝒜ᵢ(X) ≤ bᵢ)
+    constraint_types::Vector{Bool}
+    has_inequalities::Bool              # true iff any(constraint_types)
 end
 
-SDPData(C, As, b) = SDPData(size(C, 1), length(As), C, As, b)
+# backward-compat: all equality
+function SDPData(C, As, b)
+    return SDPData(
+        size(C, 1), length(As), C, As, b, fill(false, length(As)), false
+    )
+end
+
+# with explicit constraint types
+function SDPData(C, As, b, constraint_types)
+    return SDPData(
+        size(C, 1),
+        length(As),
+        C,
+        As,
+        b,
+        constraint_types,
+        any(constraint_types),
+    )
+end
 
 b_vector(model) = model.b
 C_matrix(model) = model.C
@@ -173,48 +195,76 @@ struct SolverVars{Ti<:Integer,Tv,TR<:AbstractArray{Tv}}
     Rt::TR              # primal variables X = RR^T
     Gt::TR              # gradient w.r.t. R
     λ::Vector{Tv}               # dual variables
+    # upper bound for dual variables
+    # 0 for dual variables for inequalities 
+    # and Inf for dual variables for equalities
+    λ_ub::Vector{Tv}
 
     r::Base.RefValue{Ti}        # predetermined rank of R, i.e. R ∈ ℝⁿˣʳ
     σ::Base.RefValue{Tv}        # penalty parameter
     obj::Base.RefValue{Tv}      # objective
 
-    # auxiliary variable y = -λ + σ * primal_vio
+    # auxiliary variable y = -λ + σ * primal_vio_raw
     y::Vector{Tv}
-    # violation of constraints, for convenience, we store
-    # a length (m+1) vector where 
+    # raw violation of constraints, for convenience, we store
+    # a length (m+1) vector where
     # the first m entries correspond to the primal violation
-    # and the last entry corresponds to the objective 
+    # and the last entry corresponds to the objective
+    primal_vio_raw::Vector{Tv}
+    # lower bound for capping primal violations (length m):
+    #   equality:   -Inf  (vᵢ uncapped — both signs count)
+    #   inequality:  0.0  (only positive violations count)
+    primal_vio_lb::Vector{Tv}
+    # capped violation: primal_vio[i] = max(primal_vio_raw[i], primal_vio_lb[i])
+    # norm(primal_vio, p) gives the correct feasibility measure for any p
     primal_vio::Vector{Tv}
     A_RD::Vector{Tv}
     A_DD::Vector{Tv}
 end
 
-function SolverVars(data::SDPData, r, config::BurerMonteiroConfig)
+function SolverVars(
+    data::SDPData{Ti,Tv}, r, config::BurerMonteiroConfig
+) where {Ti,Tv}
+    # derive λ upper bounds from constraint types:
+    # equality → Inf (unrestricted), inequality ≤ → 0 (λ ≤ 0)
+    λ_ub = [ct ? zero(Tv) : Tv(Inf) for ct in data.constraint_types]
     if config.init_func !== nothing
         Rt0, λ0 = config.init_func(data, r, config.init_args...)
-        return SolverVars(Rt0, λ0, r, config.σ_0)
+        @. λ0 = min(λ0, λ_ub)
+        return SolverVars(Rt0, λ0, λ_ub, r, config.σ_0)
     else
-        # randomly initialize primal and dual variables
         Rt0 = 2 .* rand(r, data.n) .- 1
-        λ0 = randn(data.m)
-        return SolverVars(Rt0, λ0, r, config.σ_0)
+        λ0 = zeros(Tv, data.m)
+        return SolverVars(Rt0, λ0, λ_ub, r, config.σ_0)
     end
 end
 
-function SolverVars(Rt0, λ0::Vector{Tv}, r, σ_0::Tv=2.0) where {Tv}
+function SolverVars(
+    Rt0, λ0::Vector{Tv}, λ_ub::Vector{Tv}, r, σ_0::Tv=2.0
+) where {Tv}
     m = length(λ0)
+    # equality (λ_ub=Inf): lb=-Inf; inequality (λ_ub=0): lb=0
+    primal_vio_lb = [isinf(ub) ? Tv(-Inf) : zero(Tv) for ub in λ_ub]
     return SolverVars(
         Rt0,
         zeros(Tv, size(Rt0)),
         λ0,
+        λ_ub,
         Ref(r),
-        Ref(σ_0), # initial σ
+        Ref(σ_0),
         Ref(zero(Tv)),
-        zeros(Tv, m + 1), # y, auxiliary variable for 𝒜t 
-        zeros(Tv, m + 1), # primal_vio
-        zeros(Tv, m + 1),
-        zeros(Tv, m + 1), # A_RD, A_DD
+        zeros(Tv, m + 1), # y
+        zeros(Tv, m + 1), # primal_vio_raw
+        primal_vio_lb,
+        zeros(Tv, m),     # primal_vio
+        zeros(Tv, m + 1), # A_RD
+        zeros(Tv, m + 1), # A_DD
     )
+end
+
+# backward-compat: all-equality (λ_ub = Inf everywhere)
+function SolverVars(Rt0, λ0::Vector{Tv}, r, σ_0::Tv=2.0) where {Tv}
+    return SolverVars(Rt0, λ0, fill(Tv(Inf), length(λ0)), r, σ_0)
 end
 
 """
