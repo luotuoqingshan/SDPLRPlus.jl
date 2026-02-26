@@ -1,7 +1,7 @@
 name = "SDPLRPlus"
 uuid = "9040bce9-cc75-4a86-9224-0257f72befc6"
 authors = ["luotuoqingshan <2019hyf@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 GenericArpack = "408c25d7-97fa-4992-8bd9-ce15f1a09fe9"
