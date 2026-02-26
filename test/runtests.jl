@@ -1,5 +1,14 @@
 # Run tests from package root with: julia --project -e 'using Pkg; Pkg.test()'
 # That uses the local SDPLRPlus source (no need to add the package from the registry).
+#
+# Test organization (roughly unit → integration):
+#   symlowrank.jl   — SymLowRankMatrix type (norms)
+#   problem.jl      — SDP problem constructors (shared helpers, no @testset)
+#   maxcut.jl       — end-to-end Max-Cut solver
+#   minimumbisection.jl — end-to-end Minimum Bisection solver
+#   lovasztheta.jl  — end-to-end Lovász Theta solver (placeholder)
+#   cutnorm.jl      — end-to-end Cut Norm solver (placeholder)
+#   coreop.jl       — unit tests for f!, g!, linesearch!, 𝒜t!
 using SDPLRPlus:
     sdplr,
     linesearch!,

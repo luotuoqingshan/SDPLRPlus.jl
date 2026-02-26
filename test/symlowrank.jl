@@ -1,4 +1,6 @@
+# Unit tests for SymLowRankMatrix (BDBᵀ custom matrix type).
 @testset "SymLowRankMatrix tests" begin
+    # Verify norm(A,2) and norm(A,Inf) match the dense BDBᵀ expansion.
     @testset "test norm computation" begin
         ntests = 100
         for i in 1:ntests

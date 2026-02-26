@@ -1,3 +1,10 @@
+# Unit tests for the three core operations used inside the solver loop:
+#   f!          — evaluates the augmented Lagrangian and primal violations
+#   g!          — computes the gradient of the augmented Lagrangian w.r.t. R
+#   linesearch! — exact quartic line search along a descent direction
+#   𝒜t!         — adjoint operator S = Σᵢ yᵢ Aᵢ + y_{m+1} C, applied to R
+
+# Dense reference for primal violations: [⟨Aᵢ, RRᵀ⟩ - bᵢ; ⟨C, RRᵀ⟩]
 function primal_vio(C, As, bs, Rt)
     m = length(bs)
     primal_vio = zeros(Float64, m + 1)
@@ -8,11 +15,13 @@ function primal_vio(C, As, bs, Rt)
     return primal_vio
 end
 
+# Checks analytic gradient from g! against finite differences; passes if rel-err < 1e-8.
 function test_gradient_fd!(data, var, aux)
     r, n = size(var.Rt)
     rt_vec = vec(copy(var.Rt))
-    ℒ_scalar(x::Vector) =
-        (copyto!(var.Rt, reshape(x, r, n)); f!(data, var, aux))
+    function ℒ_scalar(x::Vector)
+        return (copyto!(var.Rt, reshape(x, r, n)); f!(data, var, aux))
+    end
     grad_num = FiniteDiff.finite_difference_gradient(ℒ_scalar, copy(rt_vec))
     copyto!(var.Rt, reshape(rt_vec, r, n))
     f!(data, var, aux)
@@ -22,13 +31,16 @@ function test_gradient_fd!(data, var, aux)
     @test rel_err < 1e-8
 end
 
-# 4 problem types × 12 (n,p,r) combos × 3 @test calls ≈ 144 tests
+# 7 problem types × 12 (n,p,r) combos × 3 @test calls ≈ 252 tests
 @testset "f!, g! and linesearch!" begin
     for (label, prob_fn) in [
         ("MaxCut", maxcut),
         ("Lovász Theta", lovasz_theta),
         ("Min. Bisection", minimum_bisection),
         ("Cut Norm", cutnorm),
+        ("μ-Conductance μ=0.01", A -> mu_conductance(A, 0.01)),
+        ("μ-Conductance μ=0.05", A -> mu_conductance(A, 0.05)),
+        ("μ-Conductance μ=0.1", A -> mu_conductance(A, 0.1)),
     ]
         @testset "$label" begin
             for (seed, (n, p, r)) in
@@ -39,7 +51,7 @@ end
                     C, As, bs = prob_fn(A)
 
                     data = SDPData(C, As, bs)
-                    config = BurerMonteiroConfig(σ_0=2.0)
+                    config = BurerMonteiroConfig(; σ_0=2.0)
                     var = SolverVars(data, r, config)
                     aux = SolverAuxiliary(data)
 
@@ -52,7 +64,7 @@ end
 
                     g!(var, aux)
                     dirt = -1.0 * copy(var.Gt)
-                    α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
+                    α, 𝓛_val = linesearch!(var, aux, dirt; α_max=1.0)
                     axpy!(α, dirt, var.Rt)
 
                     @test norm(
@@ -72,12 +84,15 @@ function At_reference(C, As, var)
     return S
 end
 
-# 3 problem types × 12 (n,p,r) combos × 2 @test calls = 72 tests
+# 6 problem types × 12 (n,p,r) combos × 2 @test calls = 144 tests
 @testset "𝒜t! operator" begin
     for (label, prob_fn) in [
         ("MaxCut (sparse only)", maxcut),
         ("Lovász Theta (low-rank C)", lovasz_theta),
         ("Min. Bisection (low-rank As)", minimum_bisection),
+        ("μ-Conductance μ=0.01 (mixed formats)", A -> mu_conductance(A, 0.01)),
+        ("μ-Conductance μ=0.05 (mixed formats)", A -> mu_conductance(A, 0.05)),
+        ("μ-Conductance μ=0.1 (mixed formats)", A -> mu_conductance(A, 0.1)),
     ]
         @testset "$label" begin
             for (seed, (n, p, r)) in
@@ -86,9 +101,11 @@ end
                     Random.seed!(seed)
                     A = make_random_graph(n, p)
                     C, As, bs = prob_fn(A)
+                    # Rebind n to the SDP dimension (mu_conductance pads to 3n).
+                    n = size(C, 1)
 
                     data = SDPData(C, As, bs)
-                    config = BurerMonteiroConfig(σ_0=2.0)
+                    config = BurerMonteiroConfig(; σ_0=2.0)
                     var = SolverVars(data, r, config)
                     aux = SolverAuxiliary(data)
 
