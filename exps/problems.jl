@@ -278,3 +278,64 @@ function mu_conductance_reformulated(
     end
     return Tv.(padded_L), As, bs
 end
+
+"""
+μ-Conductance SDP (native inequality formulation, n×n):
+
+minimize  ⟨L, X⟩
+
+s.t.      ⟨D, X⟩ = 1
+          ⟨ddᵀ, X⟩ = 0
+          X[i,i] ≤ ub    (represented as ⟨eᵢeᵢᵀ, X⟩ ≤ ub,   constraint_type = true)
+          X[i,i] ≥ lb    (flipped to    ⟨-eᵢeᵢᵀ, X⟩ ≤ -lb,  constraint_type = true)
+          X ≽ 0
+
+Returns (C, As, bs, constraint_types) for use with sdplr(...; constraint_types=ct).
+"""
+function mu_conductance_native(A::SparseMatrixCSC, mu; Tv=Float64, Ti=Int64)
+    @assert A == A' "Only undirected graphs supported now."
+    n = size(A, 1)
+    d = sum(A; dims=2)[:, 1]
+    D = sparse(Diagonal(d))
+    volG = sum(d)
+    L = sparse(Diagonal(d) - A)
+
+    As = []
+    bs = Tv[]
+    ct = Bool[]
+
+    D_norm = norm(D, 2)
+    d_max = maximum(d)
+    dd_norm = norm(d, 2)^2
+
+    # Equality 1: ⟨D, X⟩ = 1
+    push!(As, D)
+    push!(bs, one(Tv))
+    push!(ct, false)
+
+    # Equality 2: ⟨ddᵀ, X⟩ = 0  (rank-1 low-rank matrix)
+    push!(
+        As, SymLowRankMatrix(Diagonal([Tv(D_norm / dd_norm)]), reshape(d, :, 1))
+    )
+    push!(bs, zero(Tv))
+    push!(ct, false)
+
+    ub = mu_conductance_ub(volG, mu)
+    lb = mu_conductance_lb(volG, mu)
+
+    # Inequality ≤ ub: X[i,i] ≤ ub  →  ⟨eᵢeᵢᵀ, X⟩ ≤ ub
+    for i in 1:n
+        push!(As, super_sparse(Ti[i], Ti[i], [Tv(D_norm)], n, n))
+        push!(bs, Tv(ub * D_norm))
+        push!(ct, true)
+    end
+
+    # Inequality ≥ lb: X[i,i] ≥ lb  →  flip: ⟨-eᵢeᵢᵀ, X⟩ ≤ -lb
+    for i in 1:n
+        push!(As, super_sparse(Ti[i], Ti[i], [-Tv(D_norm)], n, n))
+        push!(bs, Tv(-lb * D_norm))
+        push!(ct, true)
+    end
+
+    return Tv.(L), As, bs, ct
+end
