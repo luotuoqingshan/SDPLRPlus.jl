@@ -321,7 +321,7 @@ Function for computing Lagrangian value, stationary condition
 and primal feasibility.
 """
 function fg!(
-    data, var::SolverVars{Ti,Tv}, aux, normC::Tv, normb::Tv
+    data, var::SolverVars{Ti,Tv}, aux, normC::Tv, normb::Tv, config
 ) where {Ti<:Integer,Tv}
     m = length(var.λ)
     f_dt = @elapsed begin
@@ -331,14 +331,20 @@ function fg!(
         g!(var, aux)
     end
     @debug "f dt, g dt" f_dt, g_dt
-    grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-    # grad_norm = norm(var.Gt, Inf)
+    grad_norm = if config.gtol_mode == :relative
+        norm(var.Gt, 2) / normC
+    else
+        norm(var.Gt, 2)
+    end
 
     @inbounds for i in 1:m
         var.primal_vio[i] = max(var.primal_vio_raw[i], var.primal_vio_lb[i])
     end
-    #primal_vio_norm = norm(var.primal_vio, Inf)
-    primal_vio_norm = norm(var.primal_vio, 2) / (1 + normb)
+    primal_vio_norm = if config.ptol_mode == :relative
+        norm(var.primal_vio, 2) / normb
+    else
+        norm(var.primal_vio, 2)
+    end
     return (𝓛_val, grad_norm, primal_vio_norm)
 end
 

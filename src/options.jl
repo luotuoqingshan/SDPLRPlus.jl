@@ -18,4 +18,7 @@
     eigval_highprecision = false       # GenericArpack (true) / Lanczos with random start (false)
     init_func::Union{Nothing,Function} = nothing  # custom init; used in rank_update! too
     init_args::Tuple = ()              # extra args for init_func
+    gtol_mode::Symbol = :relative      # gradient norm mode: :relative (÷ normC) or :absolute
+    ptol_mode::Symbol = :relative      # primal vio mode: :relative (÷ normb) or :absolute
+    objtol_mode::Symbol = :relative    # obj gap mode: :relative (÷ min|obj,dual|) or :absolute
 end

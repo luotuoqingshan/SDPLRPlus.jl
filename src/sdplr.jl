@@ -154,7 +154,7 @@ function _sdplr(
 
     cur_ptol = max(cur_ptol, config.ptol)
     cur_gtol = max(cur_gtol, config.gtol)
-    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
 
     iter = 0 # total number of iterations
 
@@ -165,8 +165,7 @@ function _sdplr(
     rankupd_tol_cnt = config.rankupd_tol
 
     duality_gap = 1e20
-    rel_duality_gap = 1e20
-    min_rel_duality_gap = 1e20
+    min_duality_gap = 1e20
     max_dual_value = -1e20
     best_λ = deepcopy(var.λ)
 
@@ -209,11 +208,17 @@ function _sdplr(
                 g!(var, aux)
             end
             @debug "g time" g_dt
-            grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-            # grad_norm = norm(var.Gt, Inf)
+            grad_norm = if config.gtol_mode == :relative
+                norm(var.Gt, 2) / normC
+            else
+                norm(var.Gt, 2)
+            end
 
-            primal_vio_norm = norm(var.primal_vio, 2) / (1.0 + normb)
-            # primal_vio_norm = norm(var.primal_vio, Inf)
+            primal_vio_norm = if config.ptol_mode == :relative
+                norm(var.primal_vio, 2) / normb
+            else
+                norm(var.primal_vio, 2)
+            end
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
@@ -244,7 +249,7 @@ function _sdplr(
                         cur_ptol,
                         grad_norm,
                         primal_vio_norm,
-                        min_rel_duality_gap,
+                        min_duality_gap,
                         max_dual_value,
                     )
                 end
@@ -272,7 +277,7 @@ function _sdplr(
             cur_ptol,
             grad_norm,
             primal_vio_norm,
-            min_rel_duality_gap,
+            min_duality_gap,
             max_dual_value,
         )
         lastprint = current_time
@@ -307,37 +312,34 @@ function _sdplr(
                 best_λ = -deepcopy(var.y)
                 max_dual_value = dual_value
             end
-            duality_gap = var.obj[] - max_dual_value
-            rel_duality_gap =
-                duality_gap / minimum(abs.([var.obj[], max_dual_value]))
+            duality_gap = if config.objtol_mode == :relative
+                (var.obj[] - max_dual_value) / minimum(abs.([var.obj[], max_dual_value]))
+            else
+                var.obj[] - max_dual_value
+            end
             stats.dual_time[] += dual_dt
-            @show var.obj[] max_dual_value rel_duality_gap
+            @show var.obj[] max_dual_value duality_gap
             if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
                 if config.objtol == Inf
                     @debug "`objtol` is `Inf`, skipping duality gap check"
                     break
                 end
-                if rel_duality_gap <= config.objtol
+                if duality_gap <= config.objtol
                     @debug "Duality gap and primal violence are small enough."
-                    @debug primal_vio_norm rel_duality_gap grad_norm
-                    min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_gap
-                    )
+                    @debug primal_vio_norm duality_gap grad_norm
+                    min_duality_gap = min(min_duality_gap, duality_gap)
                     break
                 else
-                    if min_rel_duality_gap - rel_duality_gap < config.objtol
+                    if min_duality_gap - duality_gap < config.objtol
                         rankupd_tol_cnt -= 1
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
-                    min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_gap
-                    )
+                    min_duality_gap = min(min_duality_gap, duality_gap)
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
-                    #last_rel_duality_gap = rel_duality_gap
                 end
             end
             @inbounds for i in 1:m
@@ -361,7 +363,7 @@ function _sdplr(
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
             dirt = similar(var.Rt)
-            min_rel_duality_gap = 1e20
+            min_duality_gap = 1e20
             max_dual_value = -1e20
             rankupd_tol_cnt = config.rankupd_tol
             @info "rank doubled, newrank is $(var.r[])."
@@ -371,14 +373,14 @@ function _sdplr(
 
         cur_ptol = max(cur_ptol, config.ptol)
         cur_gtol = max(cur_gtol, config.gtol)
-        𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+        𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
 
         if majoriter == config.maxmajoriter
             @warn "Major iteration limit exceeded. Stop optimizing."
         end
     end
 
-    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
 
     printintermediate(
         config.dataset,
@@ -392,7 +394,7 @@ function _sdplr(
         cur_ptol,
         grad_norm,
         primal_vio_norm,
-        min_rel_duality_gap,
+        min_duality_gap,
         max_dual_value,
     )
 
@@ -417,10 +419,8 @@ function _sdplr(
         "grad_norm" => grad_norm,
         "primal_vio" => primal_vio_norm,
         "obj" => var.obj[],
-        "duality_gap" => duality_gap,
         "max_dual_value" => max_dual_value,
-        "rel_duality_gap" => rel_duality_gap,
-        "min_rel_duality_gap" => min_rel_duality_gap,
+        "min_duality_gap" => min_duality_gap,
         "totaltime" => totaltime,
         "dual_time" => stats.dual_time[],
         "primaltime" => stats.primal_time[],
