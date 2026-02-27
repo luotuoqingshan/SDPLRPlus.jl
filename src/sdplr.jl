@@ -6,73 +6,86 @@ These functions tackle the following semidefinite program
 ```math
 \begin{aligned}
     \text{minimize}_{X \succeq 0} \quad    &\langle C , X \rangle \\
-    \text{subject to}\quad  &\langle A_i, X \rangle = b_i, \quad \forall i \in [m]\\
+    \text{subject to}\quad  &\langle A_i, X \rangle = b_i, \quad \forall i \in [m_{\text{eq}}]\\
+                            &\langle A_i, X \rangle \leq b_i, \quad \forall i \in [m_{\text{ineq}}]\\
                 &   X \in \mathbb{R}^{n \times n}
 \end{aligned}
 ```
-by factorizing the solution matrix ``X`` as ``YY^T`` and solve the following  
+by factorizing the solution matrix ``X`` as ``YY^T`` and solve the following
 nonlinear program instead.
 ```math
 \begin{aligned}
     \text{minimize}\quad    &\langle C , YY^T \rangle \\
-    \text{subject to}\quad  &\langle A_i, YY^T \rangle = b_i, \quad \forall i \in [m]\\
+    \text{subject to}\quad  &\langle A_i, YY^T \rangle = b_i, \quad \forall i \in [m_{\text{eq}}]\\
+                            &\langle A_i, YY^T \rangle \leq b_i, \quad \forall i \in [m_{\text{ineq}}]\\
                 &   Y \in \mathbb{R}^{n \times r}
 \end{aligned}
 ```
+Inequality constraints are handled via Armijo line search instead of the exact
+quartic line search used for equality-only problems.
 
 Arguments
 ---------
-- `As` is a vector of ``m`` constraint matrices ``A_i`` of size ``n \times n``. There are four types of constraint matrices supported:  
+- `As` is a vector of ``m`` constraint matrices ``A_i`` of size ``n \times n``. There are four types of constraint matrices supported:
     * `SparseMatrixCSC` for sparse constraints with nnz ``\Theta (n)``.
     * `SparseMatrixCOO` for super sparse constraints with nnz ``o(n)``.
-    * `SymLowRankMatrix` for low-rank constraints with form ``BDB^T``. 
+    * `SymLowRankMatrix` for low-rank constraints with form ``BDB^T``.
     * `Diagonal` for diagonal constraints. Consider using `SparseMatrixCOO` instead if the diagonal matrix is super sparse.
 - `C` is the cost matrix ``C`` of size ``n \times n``. Currently we support four types mentioned above.
 - `b` is a vector of m right-hand side values ``b_i``.
 - `r` is the initial rank of the solution matrix ``Y``.
+- `constraint_types`: Optional `AbstractVector{Bool}` of length ``m`` indicating
+    whether each constraint is an inequality (``\leq``). `true` means ``\leq``,
+    `false` means ``=``. If not provided, all constraints are treated as equalities.
 
 Optional arguments
 ------------------
-- `ptol`: Tolerance for relative primal infeasibility, i.e.
-```math
-\|\mathcal{A}(YY^T) - b\| / (1 + \|b\|_2).
-```
-The default value is ``10^{-2}``. 
-- `objtol`: Tolerance for relative suboptimality, i.e. 
-```math
-\langle C, YY^T \rangle - \langle C, X^* \rangle / (1 + |\langle C, YY^T \rangle|).
-```
-The default value is ``10^{-2}``. 
-- `numberlbfgsvecs`: Number of L-BFGS vectors. The default value is ``4``.
-- `fprec`: Break one major iteration if the relative change of the 
-    Lagrangian value is smaller than `fprec * eps()`. The default value 
-    is ``10^8``, which is for moderate-accuracy solutions (ptol = objtol = ``10^{-2}``). 
-- `prior_trace_bound`: A trace bound priorly known or estimated. 
+- `ptol`: Primal infeasibility tolerance. Interpretation depends on `ptol_mode`.
+    The default value is ``10^{-2}``.
+- `ptol_mode`: Controls how primal infeasibility is measured.
+    * `:relative` (default): ``\|\mathcal{A}(YY^T) - b\|_2 / \|b\|_2``.
+    * `:absolute`: ``\|\mathcal{A}(YY^T) - b\|_2``.
+- `objtol`: Duality gap tolerance. Interpretation depends on `objtol_mode`.
+    The default value is ``10^{-2}``. Set to `Inf` to skip the duality gap check.
+- `objtol_mode`: Controls how the duality gap is measured.
+    * `:relative` (default): ``(\langle C, YY^T\rangle - d^*) / \min(|\langle C, YY^T\rangle|, |d^*|)``,
+      where ``d^*`` is the best dual bound found.
+    * `:absolute`: ``\langle C, YY^T\rangle - d^*``.
+- `gtol`: Stationarity (gradient norm) tolerance. Interpretation depends on
+    `gtol_mode`. The default value is ``0.0`` (not used as a stopping criterion).
+- `gtol_mode`: Controls how the gradient norm is measured.
+    * `:relative` (default): ``\|\nabla_Y \mathcal{L}\|_2 / \|C\|_2``.
+    * `:absolute`: ``\|\nabla_Y \mathcal{L}\|_2``.
+- `numlbfgsvecs`: Number of L-BFGS vectors. The default value is ``4``.
+- `fprec`: Break one major iteration if the relative change of the
+    Lagrangian value is smaller than `fprec * eps()`. The default value
+    is ``10^8``, which is for moderate-accuracy solutions (ptol = objtol = ``10^{-2}``).
+- `prior_trace_bound`: A trace bound priorly known or estimated.
     For example, it is ``n`` for max cut. The default value is ``10^{18}``.
-- `σfac`: Factor for increasing the smoothing factor ``\sigma`` 
+- `σfac`: Factor for increasing the smoothing factor ``\sigma``
    in the augmented Lagrangian. The default value is ``2.0``.
-- `rankupd_tol`: Rank update tolerance. After primal infeasibility 
-    reaches `ptol` and `objtol` is not reached for `rankupd_tol` 
+- `rankupd_tol`: Rank update tolerance. After primal infeasibility
+    reaches `ptol` and `objtol` is not reached for `rankupd_tol`
     major iterations, the rank of the solution matrix ``Y`` is doubled.
     The default value is ``4``.
-- `maxtime`: Maximum time in seconds for the optimization. The default 
-    value is ``3600.0``. There may be some postprocessing overhead so 
-    the program will not stop exactly at `maxtime`. If you want to 
+- `maxtime`: Maximum time in seconds for the optimization. The default
+    value is ``3600.0``. There may be some postprocessing overhead so
+    the program will not stop exactly at `maxtime`. If you want to
     achieve a hard time limit, use terminal tools.
 - `printlevel`: Print level. The default value is ``1``.
 - `printfreq`: How often to print in seconds. The default value is ``60.0``.
-- `maxmajoriter`: Maximum number of major iterations. The default value 
+- `maxmajoriter`: Maximum number of major iterations. The default value
     is ``10^5``.
 - `maxiter`: Maximum number of total iterations. The default value is ``10^7``.
-- `dataset`: Dataset name for better tracking progress, 
+- `dataset`: Dataset name for better tracking progress,
     especially when executed parallely. The default value is "".
-- `eval_DIMACS_errs`: Whether to evaluate DIMACS errors. The default value 
+- `eval_DIMACS_errs`: Whether to evaluate DIMACS errors. The default value
     is false.
-- `init_func`: Optional custom initialization function. Called as 
-    `init_func(data, r, init_args...)` and must return `(Rt0, λ0)` where 
-    `Rt0` is `r×n` and `λ0` is length-`m`. Used for initial setup and when 
+- `init_func`: Optional custom initialization function. Called as
+    `init_func(data, r, init_args...)` and must return `(Rt0, λ0)` where
+    `Rt0` is `r×n` and `λ0` is length-`m`. Used for initial setup and when
     rank is doubled in `rank_update!`. If not provided, random init is used.
-- `init_args`: Tuple of extra arguments passed to `init_func` after `(data, r)`. 
+- `init_args`: Tuple of extra arguments passed to `init_func` after `(data, r)`.
     Default is `()`.
 """
 function sdplr(
@@ -80,6 +93,7 @@ function sdplr(
     As::Vector,
     b::Vector{Tv},
     r::Ti;
+    constraint_types::Union{Nothing,AbstractVector{Bool}}=nothing,
     config::BurerMonteiroConfig{Ti,Tv}=BurerMonteiroConfig{Ti,Tv}(),
     kwargs...,
 ) where {Ti<:Integer,Tv}
@@ -98,7 +112,11 @@ function sdplr(
     end
 
     preprocess_dt = @elapsed begin
-        data = SDPData(C, As, b)
+        data = if constraint_types === nothing
+            SDPData(C, As, b)
+        else
+            SDPData(C, As, b, constraint_types)
+        end
         var = SolverVars(data, r, config)
         aux = SolverAuxiliary(data)
         stats = SolverStats{Tv}()
@@ -134,6 +152,7 @@ function _sdplr(
     lastprint = stats.starttime[] # timestamp of last print
 
     Rt0 = deepcopy(var.Rt)
+    Rt0 = deepcopy(var.Rt)
     λ0 = deepcopy(var.λ)
 
     # set up algorithm parameters
@@ -146,18 +165,22 @@ function _sdplr(
     cur_gtol = 1.0 / var.σ[]     # stationarity tolerance
     cur_ptol = 1.0 / var.σ[]^0.1   # primal violation tolerance
 
-    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+    cur_ptol = max(cur_ptol, config.ptol)
+    cur_gtol = max(cur_gtol, config.gtol)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
+
     iter = 0 # total number of iterations
 
     dirt = similar(var.Rt) # t means transpose
     majoriter = 0
+    use_armijo = data.has_inequalities  # branch once; avoids scanning constraint_types per step
 
     rankupd_tol_cnt = config.rankupd_tol
 
-    duality_bound = 1e20
-    rel_duality_bound = 1e20
-    min_rel_duality_gap = 1e20
+    duality_gap = 1e20
+    min_duality_gap = 1e20
     max_dual_value = -1e20
+    best_λ = deepcopy(var.λ)
 
     for _ in 1:config.maxmajoriter
         majoriter += 1
@@ -171,7 +194,7 @@ function _sdplr(
             # find the lbfgs direction
             # the return direction has been negated
             lbfgs_dir_dt = @elapsed begin
-                lbfgs_dir!(dirt, lbfgshis, var.Gt, negate=true)
+                lbfgs_dir!(dirt, lbfgshis, var.Gt; negate=true)
             end
             @debug "lbfgs dir dt" lbfgs_dir_dt
 
@@ -184,7 +207,11 @@ function _sdplr(
             lastval = 𝓛_val # record last Lagrangian value
             # line search the best step size
             linesearch_dt = @elapsed begin
-                α, 𝓛_val = linesearch!(var, aux, dirt, α_max=1.0)
+                if use_armijo
+                    α, 𝓛_val = linesearch_armijo!(var, aux, dirt; α_max=1.0)
+                else
+                    α, 𝓛_val = linesearch!(var, aux, dirt; α_max=1.0)
+                end
             end
             @debug "line search time" linesearch_dt
 
@@ -194,9 +221,17 @@ function _sdplr(
                 g!(var, aux)
             end
             @debug "g time" g_dt
-            grad_norm = norm(var.Gt, 2) / (1.0 + normC)
-            v = @view var.primal_vio[1:m]
-            primal_vio_norm = norm(v, 2) / (1.0 + normb)
+            grad_norm = if config.gtol_mode == :relative
+                norm(var.Gt, 2) / normC
+            else
+                norm(var.Gt, 2)
+            end
+
+            primal_vio_norm = if config.ptol_mode == :relative
+                norm(var.primal_vio, 2) / normb
+            else
+                norm(var.primal_vio, 2)
+            end
 
             # if change of the Lagrangian value is small enough
             # then we terminate the current major iteration
@@ -227,7 +262,7 @@ function _sdplr(
                         cur_ptol,
                         grad_norm,
                         primal_vio_norm,
-                        min_rel_duality_gap,
+                        min_duality_gap,
                         max_dual_value,
                     )
                 end
@@ -255,7 +290,7 @@ function _sdplr(
             cur_ptol,
             grad_norm,
             primal_vio_norm,
-            min_rel_duality_gap,
+            min_duality_gap,
             max_dual_value,
         )
         lastprint = current_time
@@ -273,57 +308,64 @@ function _sdplr(
         rank_double = false
 
         if primal_vio_norm <= cur_ptol
+            # when highprecision=true, then GenericArpack will be used
+            # otherwise Lanczos with random start will be used
+            dual_dt = @elapsed begin
+                dual_value, _ = dual_obj(
+                    data,
+                    var,
+                    aux,
+                    config.prior_trace_bound,
+                    iter;
+                    highprecision=config.eigval_highprecision,
+                )
+            end
+
+            if dual_value > max_dual_value
+                best_λ = -deepcopy(var.y)
+                max_dual_value = dual_value
+            end
+            duality_gap = if config.objtol_mode == :relative
+                (var.obj[] - max_dual_value) / minimum(abs.([var.obj[], max_dual_value]))
+            else
+                var.obj[] - max_dual_value
+            end
+            stats.dual_time[] += dual_dt
+            @show var.obj[] max_dual_value duality_gap
             if primal_vio_norm <= config.ptol
                 @debug "primal vio is small enough, checking duality bound."
                 if config.objtol == Inf
                     @debug "`objtol` is `Inf`, skipping duality gap check"
                     break
                 end
-                eig_iter = Ti(2*ceil(max(iter, 100)^0.5*log(n)))
-
-                # when highprecision=true, then GenericArpack will be used
-                # otherwise Lanczos with random start will be used
-                lanczos_dt, _, GenericArpack_dt, _, duality_bound, rel_duality_bound, dual_value = surrogate_duality_gap(
-                    data,
-                    var,
-                    aux,
-                    config.prior_trace_bound,
-                    eig_iter;
-                    highprecision=false,
-                )
-                max_dual_value = max(max_dual_value, dual_value)
-                stats.dual_lanczos_time[] += lanczos_dt
-                stats.dual_GenericArpack_time[] += GenericArpack_dt
-
-                if rel_duality_bound <= config.objtol
+                if duality_gap <= config.objtol
                     @debug "Duality gap and primal violence are small enough."
-                    @debug primal_vio_norm rel_duality_bound grad_norm
-                    min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_bound
-                    )
+                    @debug primal_vio_norm duality_gap grad_norm
+                    min_duality_gap = min(min_duality_gap, duality_gap)
                     break
                 else
-                    if min_rel_duality_gap - rel_duality_bound < config.objtol
+                    if min_duality_gap - duality_gap < config.objtol
                         rankupd_tol_cnt -= 1
                     else
                         rankupd_tol_cnt = config.rankupd_tol
                     end
-                    min_rel_duality_gap = min(
-                        min_rel_duality_gap, rel_duality_bound
-                    )
+                    min_duality_gap = min(min_duality_gap, duality_gap)
                     if rankupd_tol_cnt == 0
                         rank_double = true
                     end
-                    #last_rel_duality_bound = rel_duality_bound
                 end
             end
-            v = @view var.primal_vio[1:m]
-            axpy!(-var.σ[], v, var.λ)
+            @inbounds for i in 1:m
+                var.λ[i] = min(
+                    var.λ_ub[i], var.λ[i] - var.σ[] * var.primal_vio_raw[i]
+                )
+            end
             cur_ptol = cur_ptol / var.σ[]^0.9
             cur_gtol = cur_gtol / var.σ[]
         else
             var.σ[] *= config.σfac
             cur_ptol = 1 / var.σ[]^0.1
+            cur_gtol = 1 / var.σ[]
             cur_gtol = 1 / var.σ[]
         end
 
@@ -334,7 +376,7 @@ function _sdplr(
             cur_gtol = 1 / var.σ[]
             lbfgshis = lbfgs_init(var.Rt, config.numlbfgsvecs)
             dirt = similar(var.Rt)
-            min_rel_duality_gap = 1e20
+            min_duality_gap = 1e20
             max_dual_value = -1e20
             rankupd_tol_cnt = config.rankupd_tol
             @info "rank doubled, newrank is $(var.r[])."
@@ -342,14 +384,16 @@ function _sdplr(
             lbfgs_clear!(lbfgshis)
         end
 
-        𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+        cur_ptol = max(cur_ptol, config.ptol)
+        cur_gtol = max(cur_gtol, config.gtol)
+        𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
 
         if majoriter == config.maxmajoriter
             @warn "Major iteration limit exceeded. Stop optimizing."
         end
     end
 
-    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb)
+    𝓛_val, grad_norm, primal_vio_norm = fg!(data, var, aux, normC, normb, config)
 
     printintermediate(
         config.dataset,
@@ -363,7 +407,7 @@ function _sdplr(
         cur_ptol,
         grad_norm,
         primal_vio_norm,
-        min_rel_duality_gap,
+        min_duality_gap,
         max_dual_value,
     )
 
@@ -371,9 +415,7 @@ function _sdplr(
 
     totaltime = stats.endtime[] - stats.starttime[]
 
-    stats.primal_time[] = (
-        totaltime - stats.dual_lanczos_time[] - stats.dual_GenericArpack_time[]
-    )
+    stats.primal_time[] = (totaltime - stats.dual_time[])
     stats.DIMACS_time[] = @elapsed begin
         if config.eval_DIMACS_errs
             DIMACS_errs = DIMACS_errors(data, var, aux)
@@ -383,20 +425,17 @@ function _sdplr(
     end
     return Dict([
         "Rt" => var.Rt,
-        "lambda" => var.λ,
+        "lambda" => best_λ,
         "Rt0" => Rt0,
         "lambda0" => λ0,
         "sigma" => var.σ[],
         "grad_norm" => grad_norm,
         "primal_vio" => primal_vio_norm,
         "obj" => var.obj[],
-        "duality_bound" => duality_bound,
         "max_dual_value" => max_dual_value,
-        "rel_duality_bound" => rel_duality_bound,
-        "min_rel_duality_gap" => min_rel_duality_gap,
+        "min_duality_gap" => min_duality_gap,
         "totaltime" => totaltime,
-        "dual_lanczos_time" => stats.dual_lanczos_time[],
-        "dual_GenericArpack_time" => stats.dual_GenericArpack_time[],
+        "dual_time" => stats.dual_time[],
         "primaltime" => stats.primal_time[],
         "iter" => iter,
         "majoriter" => majoriter,

@@ -12,6 +12,7 @@ function Makie_performance_profile_plot!(
     labels,
     title,
     logscale;
+    custom_xtickformat=nothing,
     kwargs...,
 )
     axis.xlabel = xlabel
@@ -31,6 +32,10 @@ function Makie_performance_profile_plot!(
                 color=colors[i],
             ),
         )  # add to initial plot
+    end
+    if custom_xtickformat !== nothing
+        axis.xtickformat = custom_xtickformat
+        return plots
     end
     # currently only support logscale for x-axis
     if logscale

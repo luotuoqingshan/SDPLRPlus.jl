@@ -54,11 +54,11 @@ function nthread_check()
         @show LinearAlgebra.BLAS.get_config()
     end
     @show LinearAlgebra.BLAS.get_num_threads()
-    @show get(()->"", ENV, "OPENBLAS_NUM_THREADS")
-    @show get(()->"", ENV, "GOTO_NUM_THREADS")
-    @show get(()->"", ENV, "OMP_NUM_THREADS")
-    @show get(()->"", ENV, "MKL_NUM_THREADS")
-    @show get(()->"", ENV, "OPENBLAS_BLOCK_FACTOR")
+    @show get(() -> "", ENV, "OPENBLAS_NUM_THREADS")
+    @show get(() -> "", ENV, "GOTO_NUM_THREADS")
+    @show get(() -> "", ENV, "OMP_NUM_THREADS")
+    @show get(() -> "", ENV, "MKL_NUM_THREADS")
+    @show get(() -> "", ENV, "OPENBLAS_BLOCK_FACTOR")
     @show Threads.nthreads()
 end
 
@@ -97,7 +97,7 @@ function minimumbisection_rounding(A, Rt)
         perm = sortperm(z)
         n = length(perm)
         part = zeros(n)
-        part[perm] .= [i*2 <= n for i in 1:n]*2 .- 1
+        part[perm] .= [i * 2 <= n for i in 1:n] * 2 .- 1
         @assert sum(part) == 0
         best_cut = min(best_cut, eval_cut(L, part))
     end
@@ -131,13 +131,13 @@ function batch_eval(
     )
     callback_res = callback(A, res["Rt"])
     res["callback_res"] = callback_res
-    @show graph, res["totaltime"], res["primaltime"], res["rel_duality_bound"]
+    @show graph, res["totaltime"], res["primaltime"], res["rel_duality_gap"]
 
     short_res_keys = [
         "grad_norm",
         "primal_vio",
         "obj",
-        "rel_duality_bound",
+        "rel_duality_gap",
         "totaltime",
         "dual_lanczos_time",
         "dual_GenericArpack_time",
@@ -153,9 +153,9 @@ function batch_eval(
     ]
     short_res = Dict(k => res[k] for k in short_res_keys)
 
-    output_folder = homedir()*"/SDPLRPlus.jl/exps/output/$problem/"
-    mkpath(output_folder*"$graph/")
-    open(output_folder*"$graph/"*filename*".json", "w") do f
+    output_folder = homedir() * "/SDPLRPlus.jl/exps/output/$problem/"
+    mkpath(output_folder * "$graph/")
+    open(output_folder * "$graph/" * filename * ".json", "w") do f
         #short_res["git commit"] = strip(read(`git rev-parse --short HEAD`, String))
         JSON.print(f, short_res, 4)
     end
@@ -187,6 +187,8 @@ batch_eval(
     trace_bounds[ind],
     args["rank"];
     maxtime=36000.0,
+    objtol=1.0,
+    ptol=1.0,
 )
 
 A = matread("/p/mnt/data/yufan/datasets/graphs/$problem/$graph.mat")["A"]
