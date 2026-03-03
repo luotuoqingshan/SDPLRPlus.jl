@@ -38,6 +38,9 @@ include("preprocess.jl")
 # utils 
 include("utils.jl")
 
+# complex Hermitian SDP support via real embedding
+include("complex_embed.jl")
+
 # main function
 include("sdplr.jl")
 

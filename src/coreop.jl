@@ -361,11 +361,11 @@ function SDP_S_eigval(
     n = size(aux.sparse_S, 1)
     GenericArpack_dt = @elapsed begin
         op = ArpackSimpleFunctionOp((y, x) -> begin
-                𝒜t!(y, aux, x, var)
-                # shift the matrix by I
-                y .+= x
-                return y
-            end, n)
+            𝒜t!(y, aux, x, var)
+            # shift the matrix by I
+            y .+= x
+            return y
+        end, n)
         GenericArpack_eigvals, _ = symeigs(op, nevs; kwargs...)
     end
     GenericArpack_eigvals = real.(GenericArpack_eigvals)
@@ -507,7 +507,7 @@ function approx_mineigval_lanczos(
         return alpha[1] - 1
     else
         min_eigval, _ = symeigs(
-            B, 1; which=:SA, ncv=minimum([100, q, n]), maxiter=1000000, tol=1e-4
+            B, 1; which=:SA, ncv=min(100, size(B, 1)), maxiter=1000000, tol=1e-4
         )
     end
     return real.(min_eigval)[1] - 1 # cancel the shift

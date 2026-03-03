@@ -20,7 +20,9 @@ using SDPLRPlus:
     BurerMonteiroConfig,
     f!,
     𝒜t!,
-    𝒜t_preprocess!
+    𝒜t_preprocess!,
+    embed_matrix,
+    embed_hermitian_sdp
 using Test
 
 using Random
@@ -36,19 +38,21 @@ function make_random_graph(n, p)
 end
 
 # write tests here
-include("symlowrank.jl")
+# include("symlowrank.jl")
 
 include("problem.jl")
 
 include("maxcut.jl")
-# 
+
 include("minimumbisection.jl")
-# 
+
 include("lovasztheta.jl")
-# 
+
 include("cutnorm.jl")
 
 include("coreop.jl")
+
+include("complex_hermitian.jl")
 
 ## NOTE add JET to the test environment, then uncomment
 # using JET

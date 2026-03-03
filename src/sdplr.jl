@@ -137,6 +137,47 @@ function sdplr(
     return ans
 end
 
+"""
+    sdplr(C, As, b, r)  [complex Hermitian variant]
+
+Solve a complex Hermitian SDP by embedding it into an equivalent real symmetric
+SDP of doubled dimension (2n×2n) and calling the real solver.
+
+The embedding is:
+
+    phi(A) = [ Re(A)   -Im(A) ]   (2n×2n real symmetric)
+              [ Im(A)    Re(A) ]
+
+with tr(phi(A)/2 * phi(X)) = Re(tr(A*X)), so the inner products are preserved
+exactly.  All kwargs are forwarded to the underlying real solver unchanged.
+
+The returned Dict contains:
+- "Rt"  — complex primal factor of shape (r_final, n), where X ≈ Rt' * Rt
+- "Rt0" — initial complex factor (same shape)
+- all other fields have the same meaning as for real SDPs
+
+The starting rank `r` is internally doubled to `2r` to match the degrees of
+freedom of a complex rank-r factor.
+"""
+function sdplr(
+    C::AbstractMatrix{Tv},
+    As::Vector,
+    b::AbstractVector,
+    r::Ti;
+    constraint_types::Union{Nothing,AbstractVector{Bool}}=nothing,
+    kwargs...,
+) where {Ti<:Integer,Tv<:Complex}
+    n_orig = size(C, 1)
+    C_real, As_real, b_real = embed_hermitian_sdp(C, As, b)
+    result = sdplr(
+        C_real, As_real, b_real, Ti(2 * r);
+        constraint_types=constraint_types,
+        kwargs...,
+    )
+    extract_complex_result!(result, n_orig)
+    return result
+end
+
 function _sdplr(
     data,
     var::SolverVars{Ti,Tv},
